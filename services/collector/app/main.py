@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from app.collectors import collect_form_business_data, collect_mock_api, collect_public_page
+from app.governance import govern_records
 
 app = FastAPI(title="BizSage Collector", version="0.1.0")
 
@@ -26,6 +27,10 @@ class PublicPageRequest(BaseModel):
 
 class MockApiRequest(BaseModel):
     items: list[dict] = Field(default_factory=list)
+
+
+class GovernRequest(BaseModel):
+    records: list[dict] = Field(default_factory=list)
 
 
 @app.get("/health")
@@ -54,3 +59,8 @@ def collect_page(request: PublicPageRequest) -> dict:
 @app.post("/collect/mock-api")
 def collect_api(request: MockApiRequest) -> dict:
     return {"records": collect_mock_api(request.items)}
+
+
+@app.post("/govern")
+def govern(request: GovernRequest) -> dict:
+    return {"records": govern_records(request.records)}
