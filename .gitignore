@@ -1,0 +1,17 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+target/
+node_modules/
+.next/
+dist/
+build/
+coverage/
+.idea/
+.vscode/
+*.log
+tmp/
+uploads/
+raw-docs/
