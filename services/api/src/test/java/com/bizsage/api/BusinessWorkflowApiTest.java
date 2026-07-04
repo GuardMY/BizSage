@@ -26,20 +26,25 @@ class BusinessWorkflowApiTest {
   void userCanCreateAndArchiveConversation() throws Exception {
     String token = login("user");
 
-    mvc.perform(post("/api/conversations")
+    String response = mvc.perform(post("/api/conversations")
         .header("Authorization", "Bearer " + token)
         .contentType(MediaType.APPLICATION_JSON)
         .content("{\"title\":\"门店现金流诊断\"}"))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.code").value("OK"))
       .andExpect(jsonPath("$.data.title").value("门店现金流诊断"))
-      .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+      .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+      .andReturn()
+      .getResponse()
+      .getContentAsString();
+
+    long conversationId = objectMapper.readTree(response).at("/data/id").asLong();
 
     mvc.perform(get("/api/conversations").header("Authorization", "Bearer " + token))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data[0].title").value("门店现金流诊断"));
+      .andExpect(jsonPath("$.data[?(@.title == '门店现金流诊断')]").isNotEmpty());
 
-    mvc.perform(post("/api/conversations/1/archive").header("Authorization", "Bearer " + token))
+    mvc.perform(post("/api/conversations/" + conversationId + "/archive").header("Authorization", "Bearer " + token))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.status").value("ARCHIVED"));
   }
@@ -48,13 +53,13 @@ class BusinessWorkflowApiTest {
   void operatorCanCreateAndApproveIntelligence() throws Exception {
     String token = login("operator");
 
-    mvc.perform(post("/api/intelligence")
+    String response = mvc.perform(post("/api/intelligence")
         .header("Authorization", "Bearer " + token)
         .contentType(MediaType.APPLICATION_JSON)
         .content("""
           {
             "title":"本地餐饮平台佣金调整",
-            "content":"本地餐饮平台佣金出现调整，需结合商圈与订单结构评估。",
+            "content":"本地餐饮平台佣金出现调整，需要结合商圈与客单结构评估。",
             "url":"https://example.com/news/1",
             "industryId":"general",
             "regionId":"cn-default",
@@ -63,15 +68,20 @@ class BusinessWorkflowApiTest {
           }
           """))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.status").value("PENDING"));
+      .andExpect(jsonPath("$.data.status").value("PENDING"))
+      .andReturn()
+      .getResponse()
+      .getContentAsString();
 
-    mvc.perform(post("/api/intelligence/1/approve").header("Authorization", "Bearer " + token))
+    long id = objectMapper.readTree(response).at("/data/id").asLong();
+
+    mvc.perform(post("/api/intelligence/" + id + "/approve").header("Authorization", "Bearer " + token))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.status").value("APPROVED"));
 
     mvc.perform(get("/api/intelligence").header("Authorization", "Bearer " + token))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data[0].title").value("本地餐饮平台佣金调整"));
+      .andExpect(jsonPath("$.data[?(@.title == '本地餐饮平台佣金调整')]").isNotEmpty());
   }
 
   @Test

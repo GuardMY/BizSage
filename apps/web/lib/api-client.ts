@@ -24,6 +24,14 @@ export type Diagnosis = {
   disclaimer: string;
 };
 
+export type Conversation = {
+  id: number;
+  title: string;
+  status: string;
+  regionId: string;
+  industryId: string;
+};
+
 export type LoginProfile = {
   token: string;
   username: string;
@@ -99,7 +107,33 @@ export async function createConversation(token: string, title: string) {
     body: JSON.stringify({ title })
   });
   if (!response.ok) throw new Error("Create conversation failed");
-  return response.json();
+  const envelope = (await response.json()) as ApiEnvelope<Conversation>;
+  return envelope.data;
+}
+
+export function parseDiagnosisEvent(raw: string): Diagnosis {
+  const dataLine = raw
+    .split(/\r?\n/)
+    .find((line) => line.startsWith("data: "));
+  if (!dataLine) throw new Error("Diagnosis stream did not contain a data event");
+  const payload = JSON.parse(dataLine.slice("data: ".length)) as Diagnosis;
+  return {
+    ...payload,
+    sources: normalizeSources(payload.sources)
+  };
+}
+
+export async function streamDiagnosis(token: string, conversationId: number, question: string) {
+  const response = await fetch(`${API_BASE}/conversations/${conversationId}/messages/stream`, {
+    method: "POST",
+    headers: {
+      ...authHeaders(token),
+      Accept: "text/event-stream"
+    },
+    body: JSON.stringify({ question })
+  });
+  if (!response.ok) throw new Error("Stream diagnosis failed");
+  return parseDiagnosisEvent(await response.text());
 }
 
 export async function fetchPaidIntelligence(token: string) {

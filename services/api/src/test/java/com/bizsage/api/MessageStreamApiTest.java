@@ -24,13 +24,17 @@ class MessageStreamApiTest {
   @Test
   void conversationMessageStreamReturnsSseDiagnosis() throws Exception {
     String token = login("user");
-    mvc.perform(post("/api/conversations")
+    String created = mvc.perform(post("/api/conversations")
         .header("Authorization", "Bearer " + token)
         .contentType(MediaType.APPLICATION_JSON)
         .content("{\"title\":\"诊断\"}"))
-      .andExpect(status().isOk());
+      .andExpect(status().isOk())
+      .andReturn()
+      .getResponse()
+      .getContentAsString();
+    long conversationId = objectMapper.readTree(created).at("/data/id").asLong();
 
-    String body = mvc.perform(post("/api/conversations/1/messages/stream")
+    String body = mvc.perform(post("/api/conversations/" + conversationId + "/messages/stream")
         .header("Authorization", "Bearer " + token)
         .contentType(MediaType.APPLICATION_JSON)
         .content("{\"question\":\"餐饮门店现金流怎么诊断\"}"))
@@ -41,7 +45,8 @@ class MessageStreamApiTest {
 
     assertThat(body).contains("event: diagnosis");
     assertThat(body).contains("餐饮门店现金流怎么诊断");
-    assertThat(body).contains("sources");
+    assertThat(body).contains("餐饮门店现金流基础诊断");
+    assertThat(body).contains("免责声明");
   }
 
   private String login(String username) throws Exception {

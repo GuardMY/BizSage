@@ -85,4 +85,4 @@ def test_diagnosis_self_check_blocks_conflicting_unsupported_answer():
 
     assert result["selfCheckStatus"] == "NEEDS_REVIEW"
     assert result["confidence"] == "LOW"
-    assert "unsupported" in result["answer"].lower()
+    assert "缺少权威支撑" in result["answer"]

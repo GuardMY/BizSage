@@ -2,6 +2,43 @@
 
 ## 2026-07-04
 
+### 本地完整栈一键启动脚本
+
+- 变更类型：功能开发。
+- 影响模块：`infra`、本地部署文档和变更日志。
+- 主要变更：
+  - 新增 `infra/scripts/start-all.ps1`，用于通过一个命令启动 Docker 基础设施、API、AI worker、collector 和 Web。
+  - 增加隐藏后台进程启动，并将日志和 PID 文件写入 `logs/local/`。
+  - 增加跳过基础设施、跳过依赖安装和打开 Web 地址的参数。
+  - 同步更新英中文本地部署文档的一键启动路径。
+- 验证结果：
+  - `infra/scripts/start-all.ps1` PowerShell 解析检查返回：`START_ALL_SYNTAX_OK`。
+- 未完成事项：
+  - 未执行完整运行时启动，因为它依赖本地 Docker 和长时间运行服务。
+
+## 2026-07-04
+
+### V1/V2 实装收敛
+
+- 变更类型：功能开发。
+- 影响模块：`services/api`、`services/ai-worker`、`apps/web`、`infra` 和 `docs`。
+- 主要变更：
+  - 将用户、会话、情报、付费情报和知识等核心 API 内存 store 替换为 JDBC 持久化仓库，并增加 H2 测试 schema。
+  - 修复 API、AI worker、Web 控制台和数据库 seed 修正路径中的用户可见诊断/知识乱码。
+  - 将 Web 控制台接入真实 API-client 调用，覆盖登录、会话创建、SSE 诊断、诊断报告元数据、付费情报和运维指标。
+  - 将 V2 运维复核、告警和审计 API 改为查询持久化表，不再只返回硬编码列表。
+  - 同步更新英中文 V1/V2 验证记录和 V2 里程碑状态。
+- 验证结果：
+  - 在 `services/api` 运行 `mvn test`：12 个测试通过。
+  - 在 `services/collector` 运行 `python -m pytest`：11 个测试通过。
+  - 在 `services/ai-worker` 运行 `python -m pytest`：6 个测试通过。
+  - 在 `apps/web` 运行 `npm test`：3 个测试通过。
+  - 在 `apps/web` 运行 `npm run build`：生产构建成功完成。
+- 未完成事项：
+  - Docker 启动、备份恢复演练、50 并发压测、V1 4 小时稳定性观察、真正 PDF 二进制导出和 V2 7 天灰度稳定性仍待执行。
+
+## 2026-07-04
+
 ### V2 灰度工程骨架
 
 - 变更类型：功能开发。

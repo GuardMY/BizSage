@@ -5,13 +5,13 @@
 ## 已通过
 
 - API 测试：在 `services/api` 运行 `mvn test`
-  - 结果：8 个测试通过，0 失败。
+  - 结果：12 个测试通过，0 失败。
 - Collector 测试：在 `services/collector` 运行 `python -m pytest`
-  - 结果：7 个测试通过，0 失败。
+  - 结果：11 个测试通过，0 失败。
 - AI worker 测试：在 `services/ai-worker` 运行 `python -m pytest`
-  - 结果：3 个测试通过，0 失败。
+  - 结果：6 个测试通过，0 失败。
 - Web 测试：在 `apps/web` 运行 `npm test`
-  - 结果：1 个测试通过，0 失败。
+  - 结果：3 个测试通过，0 失败。
 - Web 生产构建：在 `apps/web` 运行 `npm run build`
   - 结果：Next.js 生产构建成功完成。
 
@@ -29,6 +29,8 @@
 - 会话创建、列表和归档流程可用。
 - 情报创建、列表和审核流程可用。
 - 知识导入流程可用。
+- 核心 API 运行时存储已改为 JDBC 持久化路径，不再依赖内存 store。
+- Web 诊断流程已通过 API client helper 连接登录、会话创建、SSE 诊断、报告、付费情报和运维指标。
 
 ## 当前环境未执行
 

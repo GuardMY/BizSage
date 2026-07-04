@@ -153,7 +153,7 @@ If Docker, load testing, recovery drill, or 7-day stability verification cannot 
 - Status: active.
 - M0 decision: approved for internal operators plus seed paid users.
 - Paid/free boundary: paid intelligence uses independent `paid_intelligence` storage and API filtering; V3 billing, invoices, and member center remain out of scope.
-- Completed items: V2 gray-release skeleton now includes seed paid login profile fields, paid intelligence API isolation, diagnosis report export metadata, operations metrics/review/audit APIs, collector retry/circuit/dead-letter helpers, AI retrieval entitlement filters, and reasoning self-check status.
+- Completed items: V2 gray-release skeleton now includes seed paid login profile fields, paid intelligence API isolation, diagnosis report export metadata, operations metrics/review/audit APIs, collector retry/circuit/dead-letter helpers, AI retrieval entitlement filters, reasoning self-check status, JDBC-backed core API repositories, readable UTF-8 diagnosis text, real Web API-client diagnosis flow, and persisted ops review/alert/audit queries.
 - Blockers: Docker startup, 50-concurrent load test, 4-hour V1 stability observation, backup restore drill, failure drills, and 7-day gray stability still require a Docker-capable or long-running environment.
 - Verification results: record current command results in `docs/en/milestones/v2-verification-results.md`.
-- Next steps: replace in-memory V2 stores with persistent repositories, run recovery drills on Docker-capable infrastructure, and continue M1-M8 hardening.
+- Next steps: run recovery drills on Docker-capable infrastructure, add true PDF binary export, expand V2 monitoring/cache/failure-drill coverage, and continue M1-M8 hardening.

@@ -1,5 +1,18 @@
 ﻿# 本地部署
 
+## 一键启动完整本地栈
+
+```powershell
+infra\scripts\start-all.ps1
+```
+
+该一键脚本会启动 Docker 基础设施，以及 API、AI Worker、Collector 和 Web 应用后台进程。日志和 PID 文件写入 `logs/local/`。
+
+常用参数：
+
+- `-SkipInfrastructure`：不启动 Docker；适用于 MySQL、Redis 和 Qdrant 已经运行的场景。
+- `-SkipDependencyInstall`：如果 Python 虚拟环境或 `node_modules` 缺失则快速失败。
+- `-OpenBrowser`：请求启动后打开 `http://localhost:3000`。
 ## 启动基础设施
 
 ```powershell
@@ -73,3 +86,4 @@ V1 基线迁移会创建三个开发账号。它们使用相同的本地测试�
 - `user`
 
 应用级认证会在 API 模块中定义本地可接受的实际密码。
+

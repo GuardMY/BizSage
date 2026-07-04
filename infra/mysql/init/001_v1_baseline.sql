@@ -253,3 +253,15 @@ VALUES
   ('餐饮门店现金流基础诊断', '餐饮门店诊断应优先核对客单价、翻台率、食材损耗率、平台佣金、租金占营收比例和现金回款周期。若缺少经营数据，应提示信息不足并引导补充。', 'seed://v1/restaurant-cashflow', 0.9, 'sales-payment', 'cn-default', 'general', 'seed-baseline', 1.0),
   ('实体供应链库存风险', '库存周转天数、呆滞库存占比和上游账期会共同影响现金流风险。库存积压会压占资金，并倒逼渠道低价清货。', 'seed://v1/inventory-risk', 0.85, 'warehouse', 'cn-default', 'general', 'seed-baseline', 0.85)
 ON DUPLICATE KEY UPDATE title = VALUES(title);
+
+UPDATE knowledge_items
+SET
+  title = '餐饮门店现金流基础诊断',
+  content = '餐饮门店诊断应优先核对客单价、翻台率、食材损耗率、平台佣金、租金占营收比例和现金回款周期。若缺少经营数据，应提示信息不足并引导补充。'
+WHERE source_url = 'seed://v1/restaurant-cashflow';
+
+UPDATE knowledge_items
+SET
+  title = '实体供应链库存风险',
+  content = '库存周转天数、滞销库存占比和上游账期会共同影响现金流风险。库存积压会压占资金，并倒逼渠道低价清货。'
+WHERE source_url = 'seed://v1/inventory-risk';

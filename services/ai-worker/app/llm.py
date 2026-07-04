@@ -12,7 +12,7 @@ def generate_answer(question: str, context: str) -> str:
 
 def mock_answer(question: str, context: str) -> str:
     return (
-        f"针对「{question}」，V1 诊断建议先围绕已检索依据核对关键经营变量。"
-        f"依据显示：{context[:180]}。"
+        f"针对「{question}」，V1 诊断建议先围绕已检索证据核对关键经营变量。"
+        f"证据显示：{context[:180]}。"
         "建议补充近期营收、成本、库存、渠道和回款数据后再做更细判断。"
     )

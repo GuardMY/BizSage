@@ -23,7 +23,7 @@ SEED_KNOWLEDGE = [
     KnowledgeItem(
         id="seed-inventory-risk",
         title="实体供应链库存风险",
-        content="库存周转天数、呆滞库存占比和上游账期会共同影响现金流风险。",
+        content="库存周转天数、滞销库存占比和上游账期会共同影响现金流风险。",
         source_url="seed://v1/inventory-risk",
         source_id="seed-baseline",
         weight=0.85,

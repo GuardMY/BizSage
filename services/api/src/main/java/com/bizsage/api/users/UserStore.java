@@ -4,31 +4,37 @@ import com.bizsage.api.auth.Role;
 import com.bizsage.api.privacy.PrivacyService;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 
 @Service
 public class UserStore {
   private final PrivacyService privacyService;
-  private final List<UserAccount> users = List.of(
-      new UserAccount(1, "admin", "password", Role.SUPER_ADMIN, "13812345678", "110101199003071234",
-          "cn-default", "general", "INTERNAL", "operations"),
-      new UserAccount(2, "operator", "password", Role.OPERATOR, "13912345678", "110101199003071235",
-          "cn-default", "general", "INTERNAL", "review,alerts"),
-      new UserAccount(3, "user", "password", Role.USER, "13712345678", "110101199003071236",
-          "cn-default", "general", "FREE", "cashflow"),
-      new UserAccount(4, "seed_paid", "password", Role.USER, "13612345678", "110101199003071237",
-          "cn-default", "general", "SEED_PAID", "cashflow,inventory"));
+  private final JdbcTemplate jdbcTemplate;
 
-  public UserStore(PrivacyService privacyService) {
+  public UserStore(PrivacyService privacyService, JdbcTemplate jdbcTemplate) {
     this.privacyService = privacyService;
+    this.jdbcTemplate = jdbcTemplate;
   }
 
   public Optional<UserAccount> findByUsername(String username) {
-    return users.stream().filter(user -> user.username().equals(username)).findFirst();
+    List<UserAccount> matches = jdbcTemplate.query("""
+        select id, username, password_hash, role, phone_encrypted, identity_encrypted,
+               region_id, industry_id, membership_level, consultation_preferences
+          from users
+         where username = ?
+        """, mapper(), username);
+    return matches.stream().findFirst();
   }
 
   public List<UserView> listViews() {
-    return users.stream().map(this::toView).toList();
+    return jdbcTemplate.query("""
+        select id, username, password_hash, role, phone_encrypted, identity_encrypted,
+               region_id, industry_id, membership_level, consultation_preferences
+          from users
+         order by id
+        """, mapper()).stream().map(this::toView).toList();
   }
 
   public UserView toView(UserAccount account) {
@@ -42,5 +48,19 @@ public class UserStore {
         account.industryId(),
         account.membershipLevel(),
         account.consultationPreferences());
+  }
+
+  private RowMapper<UserAccount> mapper() {
+    return (rs, rowNum) -> new UserAccount(
+        rs.getLong("id"),
+        rs.getString("username"),
+        rs.getString("password_hash"),
+        Role.valueOf(rs.getString("role")),
+        rs.getString("phone_encrypted"),
+        rs.getString("identity_encrypted"),
+        rs.getString("region_id"),
+        rs.getString("industry_id"),
+        rs.getString("membership_level"),
+        rs.getString("consultation_preferences"));
   }
 }

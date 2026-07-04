@@ -50,5 +50,5 @@ def test_diagnosis_includes_sources_timeliness_confidence_and_disclaimer():
     assert "餐饮门店现金流怎么诊断" in result["answer"]
     assert result["sources"][0]["id"] == "k1"
     assert result["confidence"] == "MEDIUM"
-    assert result["timeliness"] == "基于V1静态基线知识和已入库情报生成"
+    assert result["timeliness"] == "基于V1静态基线知识和已入库情报生成。"
     assert "不构成投资" in result["disclaimer"]

@@ -11,7 +11,7 @@ Verification date: 2026-07-04
 - AI worker full test suite: `python -m pytest` in `services/ai-worker`
   - Result: 6 tests passed, 0 failures.
 - Web API-client tests: `npm test` in `apps/web`
-  - Result: 2 tests passed, 0 failures.
+  - Result: 3 tests passed, 0 failures.
 - Web production build: `npm run build` in `apps/web`
   - Result: Next.js production build completed successfully.
 
@@ -23,6 +23,10 @@ Verification date: 2026-07-04
 - Diagnosis report export metadata includes sources, timeliness, confidence, self-check status, and disclaimer.
 - Free-user diagnosis reports exclude paid evidence; seed paid users receive approved paid evidence.
 - Operator-only operations APIs expose metrics, review work orders, alerts, and audit logs.
+- Operations review, alert, and audit surfaces now query persisted V2 tables instead of returning only hard-coded data.
+- API stores for users, conversations, intelligence, paid intelligence, and knowledge use JDBC-backed repositories.
+- User-visible diagnosis and seed knowledge text is readable UTF-8 Chinese in API, AI worker, Web, and corrected database seed paths.
+- Web login, diagnosis submission, report metadata, paid intelligence, and ops metrics use real API-client calls.
 - Collector resilience helpers cover incremental fingerprinting, retry exhaustion, circuit opening, dead-letter classification, and recent snapshot fallback.
 - AI retrieval filters by region, industry, and entitlement; self-check blocks suspicious conflicts with controlled output.
 

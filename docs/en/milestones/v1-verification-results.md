@@ -5,13 +5,13 @@ Verification date: 2026-07-04
 ## Passed
 
 - API tests: `mvn test` in `services/api`
-  - Result: 8 tests passed, 0 failures.
+  - Result: 12 tests passed, 0 failures.
 - Collector tests: `python -m pytest` in `services/collector`
-  - Result: 7 tests passed, 0 failures.
+  - Result: 11 tests passed, 0 failures.
 - AI worker tests: `python -m pytest` in `services/ai-worker`
-  - Result: 3 tests passed, 0 failures.
+  - Result: 6 tests passed, 0 failures.
 - Web tests: `npm test` in `apps/web`
-  - Result: 1 test passed, 0 failures.
+  - Result: 3 tests passed, 0 failures.
 - Web production build: `npm run build` in `apps/web`
   - Result: Next.js production build completed successfully.
 
@@ -29,6 +29,8 @@ Verification date: 2026-07-04
 - Conversation create/list/archive flow works.
 - Intelligence create/list/approve flow works.
 - Knowledge import flow works.
+- Core API runtime stores now use JDBC-backed persistence instead of in-memory stores.
+- Web diagnosis now calls API-client helpers for login, conversation creation, SSE diagnosis, reports, paid intelligence, and ops metrics.
 
 ## Not Executed In This Environment
 

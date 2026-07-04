@@ -1,5 +1,20 @@
 ﻿# Local Deployment
 
+## Start The Full Local Stack
+
+```powershell
+infra\scripts\start-all.ps1
+```
+
+This one-command launcher starts Docker infrastructure and the API, AI worker,
+collector, and Web app as background processes. Logs and PID files are written
+under `logs/local/`.
+
+Useful options:
+
+- `-SkipInfrastructure`: do not start Docker; use when MySQL, Redis, and Qdrant are already running.
+- `-SkipDependencyInstall`: fail fast if Python virtual environments or `node_modules` are missing.
+- `-OpenBrowser`: open `http://localhost:3000` after startup is requested.
 ## Start Infrastructure
 
 ```powershell
@@ -77,3 +92,4 @@ development password hash intended for local testing only:
 
 Application-level authentication defines the actual accepted local password in
 the API module.
+

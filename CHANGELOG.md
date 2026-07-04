@@ -2,6 +2,43 @@
 
 ## 2026-07-04
 
+### Local Full-Stack Startup Script
+
+- Change type: functional development.
+- Affected modules: `infra`, local deployment documentation, and change log.
+- Main changes:
+  - Added `infra/scripts/start-all.ps1` to start Docker infrastructure, API, AI worker, collector, and Web from one command.
+  - Added hidden background process startup with logs and PID files under `logs/local/`.
+  - Added options for skipping infrastructure, skipping dependency installation, and opening the Web URL.
+  - Updated English and Chinese local deployment docs with the one-command path.
+- Verification results:
+  - PowerShell parser check for `infra/scripts/start-all.ps1`: `START_ALL_SYNTAX_OK`.
+- Unfinished items:
+  - Full runtime startup was not executed because it depends on local Docker and long-running services.
+
+## 2026-07-04
+
+### V1/V2 Implementation Closure
+
+- Change type: functional development.
+- Affected modules: `services/api`, `services/ai-worker`, `apps/web`, `infra`, and `docs`.
+- Main changes:
+  - Replaced core API in-memory stores for users, conversations, intelligence, paid intelligence, and knowledge with JDBC-backed repositories and H2-backed test schema.
+  - Fixed user-visible garbled diagnosis and seed knowledge text in the API, AI worker, Web console, and database seed correction path.
+  - Connected the Web console to real API-client calls for login, conversation creation, SSE diagnosis, diagnosis report metadata, paid intelligence, and ops metrics.
+  - Changed V2 ops review, alert, and audit APIs to query persisted tables instead of hard-coded lists.
+  - Updated V1/V2 verification records and V2 milestone status in English and Chinese.
+- Verification results:
+  - `mvn test` in `services/api`: 12 tests passed.
+  - `python -m pytest` in `services/collector`: 11 tests passed.
+  - `python -m pytest` in `services/ai-worker`: 6 tests passed.
+  - `npm test` in `apps/web`: 3 tests passed.
+  - `npm run build` in `apps/web`: production build completed successfully.
+- Unfinished items:
+  - Docker startup, backup restore drill, 50-concurrent load test, 4-hour V1 stability observation, true PDF binary export, and 7-day V2 gray stability remain pending.
+
+## 2026-07-04
+
 ### V2 Gray-Release Engineering Skeleton
 
 - Change type: functional development.
