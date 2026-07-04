@@ -2,6 +2,22 @@
 
 ## 2026-07-04
 
+### Product Milestone Roadmap
+
+- Change type: documentation maintenance.
+- Affected modules: milestone documentation and product planning.
+- Main changes:
+  - Added the cross-version product milestone roadmap in `docs/milestones/product-milestones.md`.
+  - Added the matching Chinese version in `docs/milestones/product-milestones-zh-CN.md`.
+  - Defined V1 as the active implementation version and V2/V3/V4 as planning targets only.
+- Verification results:
+  - Markdown bilingual pair check returned `NO_MISSING_PAIRS`.
+  - Old naming and stale reference scan returned no matches.
+- Unfinished items:
+  - Detailed V2/V3/V4 milestone documents are not created yet and must be approved before implementation starts.
+
+## 2026-07-04
+
 ### Bilingual Documentation Backfill
 
 - Change type: documentation maintenance.

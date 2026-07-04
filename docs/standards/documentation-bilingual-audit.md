@@ -32,6 +32,7 @@ Examples:
 - `docs/milestones/v1-acceptance.md` / `docs/milestones/v1-acceptance-zh-CN.md`
 - `docs/milestones/v1-mvp-milestones.md` / `docs/milestones/v1-mvp-milestones-zh-CN.md`
 - `docs/milestones/v1-verification-results.md` / `docs/milestones/v1-verification-results-zh-CN.md`
+- `docs/milestones/product-milestones.md` / `docs/milestones/product-milestones-zh-CN.md`
 - `docs/standards/agent-development.md` / `docs/standards/agent-development-zh-CN.md`
 - `docs/standards/api-response.md` / `docs/standards/api-response-zh-CN.md`
 - `docs/standards/database-convention.md` / `docs/standards/database-convention-zh-CN.md`

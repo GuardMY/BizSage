@@ -1,4 +1,20 @@
-# Change Log
+# 变更日志
+
+## 2026-07-04
+
+### 产品全版本里程碑路线图
+
+- 变更类型：文档维护。
+- 影响模块：里程碑文档和产品规划。
+- 主要变更：
+  - 新增跨版本产品里程碑路线图 `docs/milestones/product-milestones.md`。
+  - 新增对应中文版本 `docs/milestones/product-milestones-zh-CN.md`。
+  - 明确 V1 是当前生效实施版本，V2/V3/V4 仅作为规划目标。
+- 验证结果：
+  - Markdown 双语配对检查返回 `NO_MISSING_PAIRS`。
+  - 旧命名和过期引用扫描无匹配结果。
+- 未完成事项：
+  - V2/V3/V4 详细里程碑文档尚未创建，开始实施前必须先完成并批准。
 
 ## 2026-07-04
 
@@ -11,7 +27,7 @@
   - 将已有双语文件迁移到新命名，包括 `AGENTS.md`、`AGENTS-zh-CN.md`、`CHANGELOG.md` 和 `CHANGELOG-zh-CN.md`。
   - 为历史单语文档补齐中文版本。
   - 在 Agent 开发规范和根目录 `AGENTS.md` 中同步新命名规则。
-  - 更新双语文档审计报告，确认当前范围内 Markdown 文档无剩余缺口，依赖/构建/缓存文件除外。
+  - 更新双语文档审计报告，确认当前范围内 Markdown 文档无剩余缺口，依赖、构建和缓存文件除外。
 - 验证结果：
   - 已检查依赖、构建和缓存目录之外的 Markdown 文档。
   - 已确认需要维护双语的英文 `*.md` 文档都有对应 `*-zh-CN.md` 文件。
@@ -32,6 +48,6 @@
   - 新增文档双语维护审计报告。
 - 验证结果：
   - 已检查双语关键规则在中文与英文规范中存在。
-  - 已生成当前缺少双语维护的文档清单。
+  - 已生成当时缺少双语维护的文档清单。
 - 未完成事项：
-  - 已由本次双语文档补齐变更关闭。详见 `docs/standards/documentation-bilingual-audit-zh-CN.md`。
+  - 已由双语文档补齐变更关闭。详见 `docs/standards/documentation-bilingual-audit-zh-CN.md`。
