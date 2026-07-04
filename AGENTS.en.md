@@ -1,16 +1,16 @@
-# Agent Development Standards
+# BizSage Agent Development Standards
 
-This document defines the development standards for AI coding agents, automated development agents, and human collaborators working on BizSage.
+This file is the root-level agent behavior standard for the repository. AI coding agents, automated development agents, and human collaborators must follow it when working on this project.
 
 ## 1. Core Principles
 
-- Understand the project documents, existing code structure, and current git state before making changes.
+- Before making changes, read the relevant project documents, existing code structure, and current git state.
 - Prefer existing repository patterns. When no pattern exists, choose the smallest clear and testable implementation.
-- Do not implement V2/V3 scope unless the milestone documents have been updated.
-- Do not revert or overwrite existing work from others. If related changes conflict, understand them before acting.
-- Keep module directories isolated: Web, Android, API, AI worker, collector, infra, and docs must preserve their boundaries.
+- Do not implement functionality outside the current milestone unless the milestone documents are updated at the same time.
+- Do not revert, overwrite, or delete existing work from others. If related changes conflict, understand them before acting.
+- Keep module directories isolated: `apps/web`, `apps/android`, `services/api`, `services/ai-worker`, `services/collector`, `infra`, and `docs` must preserve their boundaries.
 
-## 2. Documentation Rules
+## 2. Bilingual Documentation Maintenance
 
 - All project documentation must be maintained in both Chinese and English.
 - When adding or modifying documentation, add or update the corresponding Chinese and English versions in the same change.
@@ -40,9 +40,9 @@ This document defines the development standards for AI coding agents, automated 
 
 - Read the relevant milestone, API, database, and deployment documents before starting.
 - For new behavior, prefer writing tests before implementation.
-- Progress milestones in M0 to M8 order. Cross-milestone changes must explain why they are necessary.
+- Progress milestones in planned order. Cross-milestone changes must explain why they are necessary.
 - After each independent milestone, run the relevant verification command and commit the result clearly.
-- If verification cannot be executed, record the reason, attempted command, and follow-up remediation in the acceptance or verification results document.
+- If verification cannot be executed, record it as not executed instead of claiming it passed.
 
 ## 6. Code Rules
 
