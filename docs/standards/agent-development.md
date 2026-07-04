@@ -14,7 +14,8 @@ This document defines the development standards for AI coding agents, automated 
 
 - All project documentation must be maintained in both Chinese and English.
 - When adding or modifying documentation, add or update the corresponding Chinese and English versions in the same change.
-- If a naming pattern already exists, follow it. For example, use `*.zh-CN.md` for Chinese and `*.en.md` or `*.md` for English.
+- English documentation uses the default `*.md` filename.
+- Chinese documentation uses the matching `*-zh-CN.md` filename.
 - If the corresponding language version does not exist yet, create it before finishing the change.
 - Both language versions must express the same facts, scope, and acceptance criteria. Neither version may become an outdated summary.
 - For documentation changes involving APIs, databases, deployment, milestones, acceptance, or development standards, always check the matching language version.
@@ -22,8 +23,8 @@ This document defines the development standards for AI coding agents, automated 
 ## 3. Change Log Maintenance
 
 - Every functional change must be recorded in the change log.
-- The Chinese change log is `CHANGELOG.zh-CN.md`.
-- The English change log is `CHANGELOG.en.md`.
+- The English change log is `CHANGELOG.md`.
+- The Chinese change log is `CHANGELOG-zh-CN.md`.
 - The same functional change must update both change log files.
 - Each entry must include at least the date, change type, affected modules, main changes, verification results, and unfinished items.
 - Documentation-only changes must also be recorded unless they are spelling-only fixes that do not change meaning.
