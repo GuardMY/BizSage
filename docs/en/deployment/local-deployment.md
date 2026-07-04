@@ -23,9 +23,9 @@ infra\scripts\start-local.ps1
 
 This starts:
 
-- MySQL on `localhost:3306`
-- Redis on `localhost:6379`
-- Qdrant on `http://localhost:6333`
+- MySQL on `localhost:13306`
+- Redis on `localhost:16379`
+- Qdrant on `http://localhost:16333`
 
 ## Health Check
 

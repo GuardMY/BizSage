@@ -135,9 +135,9 @@ if (-not $SkipInfrastructure) {
   }
   Write-Host "Starting BizSage infrastructure..."
   & "$PSScriptRoot\start-local.ps1"
-  Wait-Port -Name "MySQL" -HostName "localhost" -Port 3306 -TimeoutSeconds 90 | Out-Null
-  Wait-Port -Name "Redis" -HostName "localhost" -Port 6379 -TimeoutSeconds 60 | Out-Null
-  Wait-Port -Name "Qdrant" -HostName "localhost" -Port 6333 -TimeoutSeconds 60 | Out-Null
+  Wait-Port -Name "MySQL" -HostName "localhost" -Port 13306 -TimeoutSeconds 90 | Out-Null
+  Wait-Port -Name "Redis" -HostName "localhost" -Port 16379 -TimeoutSeconds 60 | Out-Null
+  Wait-Port -Name "Qdrant" -HostName "localhost" -Port 16333 -TimeoutSeconds 60 | Out-Null
 }
 
 $ApiDir = Join-Path $Root "services\api"

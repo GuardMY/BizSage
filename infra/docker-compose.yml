@@ -1,6 +1,9 @@
+name: bizsage
+
+# ── Infrastructure ─────────────────────────────────────────
 services:
   mysql:
-    image: mysql:8.4
+    image: mysql:8.0.45-bookworm
     container_name: bizsage-mysql
     environment:
       MYSQL_ROOT_PASSWORD: root
@@ -8,7 +11,7 @@ services:
       MYSQL_USER: bizsage
       MYSQL_PASSWORD: bizsage
     ports:
-      - "3306:3306"
+      - "13306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./mysql/init:/docker-entrypoint-initdb.d:ro
@@ -17,24 +20,26 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
 
   redis:
-    image: redis:7.2-alpine
+    image: redis:7.2.12-alpine
     container_name: bizsage-redis
     ports:
-      - "6379:6379"
+      - "16379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
 
   qdrant:
-    image: qdrant/qdrant:v1.12.1
+    image: qdrant/qdrant:v1.18
     container_name: bizsage-qdrant
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "16333:6333"
+      - "16334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
@@ -42,7 +47,83 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
 
+# ── Application Services ───────────────────────────────────
+  api:
+    build:
+      context: ../services/api
+      dockerfile: Dockerfile
+    container_name: bizsage-api
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/bizsage?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+      DB_USERNAME: bizsage
+      DB_PASSWORD: bizsage
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: change-me-v1-dev-secret-change-me
+      DATA_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
+      AI_WORKER_URL: http://ai-worker:8100
+      BIZSAGE_PROFILE: dev
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ai-worker:
+    build:
+      context: ../services/ai-worker
+      dockerfile: Dockerfile
+    container_name: bizsage-ai-worker
+    ports:
+      - "8100:8100"
+    environment:
+      LLM_PROVIDER: mock
+      QDRANT_URL: http://qdrant:6333
+    volumes:
+      - ../services/ai-worker/app:/app/app
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    restart: unless-stopped
+
+  collector:
+    build:
+      context: ../services/collector
+      dockerfile: Dockerfile
+    container_name: bizsage-collector
+    ports:
+      - "8200:8200"
+    environment:
+      API_URL: http://api:8080
+    volumes:
+      - ../services/collector/app:/app/app
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../apps/web
+      dockerfile: Dockerfile
+    container_name: bizsage-web
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8080/api
+    volumes:
+      - ../apps/web:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - api
+    restart: unless-stopped
+
+# ── Named Volumes ──────────────────────────────────────────
 volumes:
   mysql_data:
   qdrant_data:

@@ -21,9 +21,9 @@ infra\scripts\start-local.ps1
 
 该脚本启动：
 
-- MySQL：`localhost:3306`
-- Redis：`localhost:6379`
-- Qdrant：`http://localhost:6333`
+- MySQL：`localhost:13306`
+- Redis：`localhost:16379`
+- Qdrant：`http://localhost:16333`
 
 ## 健康检查
 
