@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS conversations (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   user_id BIGINT NOT NULL,
+  owner_username VARCHAR(64) NOT NULL,
   title VARCHAR(255) NOT NULL,
   status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
   region_id VARCHAR(64) NOT NULL,
@@ -233,10 +234,10 @@ CREATE TABLE IF NOT EXISTS raw_records (
 
 INSERT INTO users (username, password_hash, role, region_id, industry_id)
 VALUES
-  ('admin', '$2a$10$bPVyGfZme24.IV2BnCeU1uLTb.OlJBw6RaYuF4.31PZ5tYDhe9OvC', 'SUPER_ADMIN', 'cn-default', 'general'),
-  ('operator', '$2a$10$bPVyGfZme24.IV2BnCeU1uLTb.OlJBw6RaYuF4.31PZ5tYDhe9OvC', 'OPERATOR', 'cn-default', 'general'),
-  ('user', '$2a$10$bPVyGfZme24.IV2BnCeU1uLTb.OlJBw6RaYuF4.31PZ5tYDhe9OvC', 'USER', 'cn-default', 'general'),
-  ('seed_paid', '$2a$10$bPVyGfZme24.IV2BnCeU1uLTb.OlJBw6RaYuF4.31PZ5tYDhe9OvC', 'USER', 'cn-default', 'general')
+  ('admin', '$2b$10$lM/MgLN.Bm0JQShxjN1Pz.FLsdpdHEGkLpAOXUFnWa1M2lvBRBwpW', 'SUPER_ADMIN', 'cn-default', 'general'),
+  ('operator', '$2b$10$lM/MgLN.Bm0JQShxjN1Pz.FLsdpdHEGkLpAOXUFnWa1M2lvBRBwpW', 'OPERATOR', 'cn-default', 'general'),
+  ('user', '$2b$10$lM/MgLN.Bm0JQShxjN1Pz.FLsdpdHEGkLpAOXUFnWa1M2lvBRBwpW', 'USER', 'cn-default', 'general'),
+  ('seed_paid', '$2b$10$lM/MgLN.Bm0JQShxjN1Pz.FLsdpdHEGkLpAOXUFnWa1M2lvBRBwpW', 'USER', 'cn-default', 'general')
 ON DUPLICATE KEY UPDATE username = VALUES(username);
 
 UPDATE users SET membership_level = 'INTERNAL', consultation_preferences = 'operations'

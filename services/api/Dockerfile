@@ -1,27 +1,36 @@
 # ── Build stage ──────────────────────────────────────────
 FROM maven:3.9-eclipse-temurin-21-alpine AS build
 WORKDIR /build
+
+# 国内镜像加速
+COPY settings.xml /root/.m2/settings.xml
+
+# 分层缓存依赖（BuildKit cache mount 跨构建复用 ~/.m2）
 COPY pom.xml .
-# cache dependencies before copying source
-RUN mvn dependency:go-offline -q
+RUN --mount=type=cache,target=/root/.m2/repository \
+    mvn dependency:resolve -B -Dmaven.artifact.threads=10
+
 COPY src/ src/
-RUN mvn package -DskipTests -q
+RUN --mount=type=cache,target=/root/.m2/repository \
+    mvn package -DskipTests -B -Dmaven.artifact.threads=10
 
 # ── Runtime stage ────────────────────────────────────────
 FROM eclipse-temurin:21-jre-alpine
+
+# curl 用于健康检查
+RUN apk add --no-cache curl
+
+# 安全：非 root 运行
+RUN addgroup -S app && adduser -S app -G app
+
 WORKDIR /app
-COPY --from=build /build/target/*.jar app.jar
+COPY --from=build --chown=app:app /build/target/*.jar app.jar
+USER app
 
 EXPOSE 8080
 
-ENV BIZSAGE_PROFILE=dev
-ENV DB_URL=jdbc:mysql://mysql:3306/bizsage?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
-ENV DB_USERNAME=bizsage
-ENV DB_PASSWORD=bizsage
-ENV REDIS_HOST=redis
-ENV REDIS_PORT=6379
-ENV JWT_SECRET=change-me-v1-dev-secret-change-me
-ENV DATA_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef
-ENV AI_WORKER_URL=http://ai-worker:8100
+# 健康检查：只确认端口可达即可（Spring Security 返回 401 也算存活）
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/ | grep -qE '200|301|401|403|404' || exit 1
 
 ENTRYPOINT ["java", "-jar", "app.jar"]
