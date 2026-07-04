@@ -302,6 +302,32 @@ small {
   display: grid;
 }
 
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--line);
+}
+
+.metric {
+  min-height: 78px;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  padding: 12px;
+  background: var(--panel);
+}
+
+.metric span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.metric strong {
+  font-size: 15px;
+  color: var(--focus);
+}
+
 .row {
   display: grid;
   grid-template-columns: 1fr auto;

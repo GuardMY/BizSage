@@ -28,7 +28,14 @@ public class AuthController {
         .filter(candidate -> candidate.password().equals(request.password()))
         .orElseThrow(() -> new IllegalArgumentException("invalid username or password"));
     return ApiResponse.ok(
-        new LoginResponse(jwtService.issue(user), user.username(), user.role(), user.regionId(), user.industryId()),
+        new LoginResponse(
+            jwtService.issue(user),
+            user.username(),
+            user.role(),
+            user.regionId(),
+            user.industryId(),
+            user.membershipLevel(),
+            user.consultationPreferences()),
         requestId(httpRequest));
   }
 
@@ -39,6 +46,13 @@ public class AuthController {
   record LoginRequest(@NotBlank String username, @NotBlank String password) {
   }
 
-  record LoginResponse(String token, String username, Role role, String regionId, String industryId) {
+  record LoginResponse(
+      String token,
+      String username,
+      Role role,
+      String regionId,
+      String industryId,
+      String membershipLevel,
+      String consultationPreferences) {
   }
 }

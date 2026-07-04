@@ -1,20 +1,153 @@
-# 变更日志
+﻿# 变更日志
 
 ## 2026-07-04
+
+### V2 灰度工程骨架
+
+- 变更类型：功能开发。
+- 影响模块：`services/api`、`services/collector`、`services/ai-worker`、`apps/web`、`infra`、`docs` 和数据库基线。
+- 主要变更：
+  - 在 M0 范围锁定后将 V2 设为实施中，灰度对象为内部运营人员和种子付费用户。
+  - 增加 V2 登录画像字段、种子付费用户、独立付费情报 API、免费/付费权限过滤、诊断报告元数据，以及运营指标/复核/审计 API。
+  - 增加 collector 韧性辅助能力：增量指纹、重试耗尽、熔断状态、死信分类和近期快照兜底。
+  - 增加 AI worker 权益感知检索过滤，以及针对存疑冲突和依据不足的推理自检状态。
+  - 增加 Web V2 灰度指标、付费情报、复核和审计面板。
+  - 增加 MySQL/Qdrant 备份恢复脚本、V2 schema 目标、API/数据库/部署文档和 V2 验证记录。
+- 验证结果：
+  - 在 `services/api` 运行 `mvn test`：12 个测试通过。
+  - 在 `services/collector` 运行 `python -m pytest`：11 个测试通过。
+  - 在 `services/ai-worker` 运行 `python -m pytest`：6 个测试通过。
+  - 在 `apps/web` 运行 `npm test`：2 个测试通过。
+  - 在 `apps/web` 运行 `npm run build`：生产构建成功完成。
+- 未完成事项：
+  - Docker 启动、备份恢复演练、50 并发压测、V1 4 小时稳定性观察和 V2 7 天灰度稳定性在当前环境未执行，已记录到 V2 验证文档。
+
+## 2026-07-04
+
+### 本地服务启动命令
+
+- 变更类型：文档维护。
+- 影响模块：本地部署文档和变更日志。
+- 主要变更：
+  - 在 `docs/zh-CN/deployment/local-deployment-zh-CN.md` 中补充 API 服务、AI Worker、Collector 和 Web 应用的本地启动命令。
+  - 记录默认本地端口：API `8080`、AI Worker `8100`、Collector `8200`、Web 应用 `3000`。
+  - 保持 Web 服务边界说明：Web 应用只能直接调用 API 服务。
+- 验证结果：
+  - 仅文档变更，无需运行服务测试套件。
+  - 已确认对应英文部署文档在同一变更中同步更新。
+- 未完成事项：
+  - 无。
+
+## 2026-07-04
+
+### 里程碑详细规划补齐与 docs 语言目录重组
+
+- 变更类型：文档维护。
+- 影响模块：`docs/`、里程碑文档、根目录 Agent 规范、双语审计和变更日志。
+- 主要变更：
+  - 补齐 V2 生产高可用工程版详细里程碑文档：
+    - `docs/en/milestones/v2-production-high-availability-milestones.md`
+    - `docs/zh-CN/milestones/v2-production-high-availability-milestones-zh-CN.md`
+  - 补齐 V3 全域商业化封顶终版详细里程碑文档：
+    - `docs/en/milestones/v3-full-domain-commercial-final-milestones.md`
+    - `docs/zh-CN/milestones/v3-full-domain-commercial-final-milestones-zh-CN.md`
+  - 将 `docs/` 重组为语言目录：英文文档归档到 `docs/en/`，中文文档归档到 `docs/zh-CN/`。
+  - 更新产品里程碑路线图、根目录 Agent 规范和双语审计文档中的新路径。
+- 验证结果：
+  - 文档语言配对检查返回 `NO_MISSING_DOCS_LANGUAGE_PAIRS`。
+  - 针对 `docs/api`、`docs/database`、`docs/deployment`、`docs/milestones`、`docs/standards` 和旧顶层治理文档路径的旧引用扫描无匹配结果。
+  - 已确认 `docs/` 当前仅包含 `docs/en/` 和 `docs/zh-CN/` 两个目录，两个语言目录各有 19 份 Markdown 文档。
+- 未完成事项：
+  - V2 和 V3 仍为规划阶段；实施前必须满足并批准各自进入标准。
+
+## 2026-07-04
+
+### 治理文档双语闭环
+
+- 变更类型：文档维护。
+- 影响模块：治理文档和变更日志。
+- 主要变更：
+  - 为 5 份合并中文治理文档补齐英文对应版本：
+    - `docs/en/data-collection-and-intelligence-perception.md`
+    - `docs/en/development-implementation-guide.md`
+    - `docs/en/product-strategy-and-design.md`
+    - `docs/en/risk-management-and-compliance.md`
+    - `docs/en/system-architecture-and-framework.md`
+  - 保持产品战略、系统架构、开发实现、数据采集与情报感知、风险合规五个治理范围的英文文档覆盖。
+  - 关闭此前记录的 5 份治理文档英文版缺失问题。
+- 验证结果：
+  - 排除生成/缓存目录后，Markdown 双语配对检查返回 `NO_MISSING_PAIRS`。
+  - 已确认 5 份英文治理文档均存在对应的 `*-zh-CN.md` 中文版本。
+- 未完成事项：
+  - 已由上方“里程碑详细规划补齐与 docs 语言目录重组”条目关闭。
+
+## 2026-07-04
+
+### 里程碑阶段重对齐
+
+- 变更类型：文档维护。
+- 影响模块：产品里程碑文档和变更日志。
+- 主要变更：
+  - 按源 PDF 阶段模型重排跨版本路线图：V1 MVP 最小可用版、V2 生产高可用工程版、V3 全域商业化封顶终版。
+  - 删除原先单独拆出的 V4 规模化与生态阶段，因为源 PDF 只定义三次迭代。
+  - 将高可用、灾备、多模型路由、完整 RBAC 和基础付费用户灰度归入 V2。
+  - 将动态信源权重、完整数据血缘、完整商业会员、完整安全、H5 移动端、审计后台、运营报表和 99.9% SLA 能力归入 V3。
+- 验证结果：
+  - 已通过 `raw-docs/txt/` 下的抽取文本核对 `raw-docs/行业智能创业Agent平台全域完整架构设计文档（V4.0_全域封顶终版）配套分阶段落地开发规划说明书.pdf`。
+  - 确认旧路线图包含 V4，因此与源文档阶段数量不一致。
+- 未完成事项：
+  - 已由上方“里程碑详细规划补齐与 docs 语言目录重组”条目关闭。
+  - 5 份合并中文治理文档的英文对应版本已在上方“双语闭环”条目中补齐。
+
+## 2026-07-04
+
+### 治理规范对齐检查
+
+- 变更类型：文档维护。
+- 影响模块：根目录 Agent 规范和里程碑文档。
+- 主要变更：
+  - 将 5 份产品、架构、实现、数据采集和风险合规治理文档加入根目录 Agent 规范。
+  - 在跨版本产品里程碑路线图中新增规范覆盖矩阵。
+  - 明确 V1 仅实现治理文档中的 MVP/P0 子集，后续能力必须先补充详细双语里程碑后才能实施。
+- 验证结果：
+  - 已用 5 份治理文档检查当前 V1 里程碑和跨版本路线图。
+  - 初始 Markdown 双语配对检查曾报告 5 份新增中文治理文档缺少英文对应版本；已在上方“双语闭环”条目中补齐。
+- 未完成事项：
+  - 已由上方“里程碑详细规划补齐与 docs 语言目录重组”条目关闭。
+
+## 2026-07-04
+
+### raw-docs 文档合并（15 → 5）
+
+- 变更类型：文档维护。
+- 影响模块：`docs/` 下新增 5 份合并文档，`raw-docs/` 源 PDF 保留本地归档。
+- 主要变更：
+  - 将 `raw-docs/` 下 15 个 PDF 产品/技术文档去重合并为 5 个结构化 Markdown 文档。
+  - 新增 `docs/zh-CN/product-strategy-and-design-zh-CN.md` — 产品战略与产品设计蓝图（合并 PDF 1/2/3/5/6）。
+  - 新增 `docs/zh-CN/system-architecture-and-framework-zh-CN.md` — 系统架构与技术框架（合并 PDF 4/11/12/10）。
+  - 新增 `docs/zh-CN/development-implementation-guide-zh-CN.md` — 全系统开发实现指南（合并 PDF 13/14）。
+  - 新增 `docs/zh-CN/data-collection-and-intelligence-perception-zh-CN.md` — 数据采集系统与情报感知引擎（合并 PDF 8/15/17）。
+  - 新增 `docs/zh-CN/risk-management-and-compliance-zh-CN.md` — 风险管理与合规体系（合并 PDF 7 + 补充）。
+  - 删除 2 个重复 PDF（V4.0 架构下划线版、数据收集 V1.0 旧版）。
+- 验证结果：
+  - 关键数字指标（8大Agent/17模块/9架构层/7层情报/六层闭环/22项风险/10张数据表）均在合并文档中完整保留。
+  - `raw-docs/` 已在 `.gitignore` 中排除。
+- 未完成事项：
+  - 5 份合并文档的英文版已在上方“双语闭环”条目中补齐。
 
 ### 产品全版本里程碑路线图
 
 - 变更类型：文档维护。
 - 影响模块：里程碑文档和产品规划。
 - 主要变更：
-  - 新增跨版本产品里程碑路线图 `docs/milestones/product-milestones.md`。
-  - 新增对应中文版本 `docs/milestones/product-milestones-zh-CN.md`。
-  - 明确 V1 是当前生效实施版本，V2/V3/V4 仅作为规划目标。
+  - 新增跨版本产品里程碑路线图 `docs/en/milestones/product-milestones.md`。
+  - 新增对应中文版本 `docs/zh-CN/milestones/product-milestones-zh-CN.md`。
+  - 最初明确 V1 是当前生效实施版本，V2/V3/V4 仅作为规划目标；该表述已被上方“里程碑阶段重对齐”取代。
 - 验证结果：
   - Markdown 双语配对检查返回 `NO_MISSING_PAIRS`。
   - 旧命名和过期引用扫描无匹配结果。
 - 未完成事项：
-  - V2/V3/V4 详细里程碑文档尚未创建，开始实施前必须先完成并批准。
+  - 已被上方阶段重对齐取代；当前延后详细里程碑为 V2 和 V3。
 
 ## 2026-07-04
 
@@ -50,4 +183,4 @@
   - 已检查双语关键规则在中文与英文规范中存在。
   - 已生成当时缺少双语维护的文档清单。
 - 未完成事项：
-  - 已由双语文档补齐变更关闭。详见 `docs/standards/documentation-bilingual-audit-zh-CN.md`。
+  - 已由双语文档补齐变更关闭。详见 `docs/zh-CN/standards/documentation-bilingual-audit-zh-CN.md`。

@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, Bot, CheckCircle2, Database, Eye, FilePlus2, LogIn, Search, Send, ShieldCheck, UserRound } from "lucide-react";
+import { Archive, Bot, CheckCircle2, Database, Eye, FilePlus2, FileText, Gauge, LogIn, LockKeyhole, Search, Send, ShieldCheck, UserRound } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { Diagnosis, Source } from "../lib/api-client";
 
@@ -33,7 +33,25 @@ const intelligenceRows = [
 const users = [
   { username: "admin", role: "SUPER_ADMIN", region: "cn-default", industry: "general" },
   { username: "operator", role: "OPERATOR", region: "cn-default", industry: "general" },
-  { username: "user", role: "USER", region: "cn-default", industry: "general" }
+  { username: "user", role: "USER", region: "cn-default", industry: "general" },
+  { username: "seed_paid", role: "USER", region: "cn-default", industry: "general", membership: "SEED_PAID" }
+];
+
+const v2Metrics = [
+  { label: "Gray cohort", value: "internal + seed paid" },
+  { label: "API cache target", value: "70%" },
+  { label: "Crawler RTO target", value: "< 10 min" },
+  { label: "DB recovery target", value: "<= 6 h" }
+];
+
+const paidRows = [
+  { title: "Paid margin warning", status: "APPROVED", entitlement: "PAID" },
+  { title: "Seed paid rent benchmark", status: "APPROVED", entitlement: "PAID" }
+];
+
+const reviewRows = [
+  { title: "review-v2-001", status: "PENDING_REVIEW", reason: "SUSPICIOUS_CONFLICT" },
+  { title: "audit-v2-m0", status: "APPROVED", reason: "V2_M0_SCOPE_LOCK" }
 ];
 
 export default function Home() {
@@ -87,7 +105,7 @@ export default function Home() {
             <h1>经营诊断工作台</h1>
             <p>{status} / 行业 general / 地域 cn-default</p>
           </div>
-          <div className="health"><CheckCircle2 size={18} />P0 chain ready</div>
+          <div className="health"><CheckCircle2 size={18} />V2 M0 locked</div>
         </header>
 
         <div className="grid">
@@ -123,6 +141,41 @@ export default function Home() {
           </section>
 
           <aside className="ops">
+            <section className="opsBlock">
+              <div className="sectionHead compact"><h2><Gauge size={16} /> V2 Gray Metrics</h2></div>
+              <div className="metricGrid">
+                {v2Metrics.map((metric) => (
+                  <div className="metric" key={metric.label}>
+                    <span>{metric.label}</span>
+                    <strong>{metric.value}</strong>
+                  </div>
+                ))}
+              </div>
+            </section>
+            <section className="opsBlock">
+              <div className="sectionHead compact"><h2><LockKeyhole size={16} /> Paid Intelligence</h2></div>
+              <div className="table">
+                {paidRows.map((row) => (
+                  <div className="row" key={row.title}>
+                    <strong>{row.title}</strong>
+                    <span>{row.status}</span>
+                    <small>{row.entitlement} only / hidden from FREE users</small>
+                  </div>
+                ))}
+              </div>
+            </section>
+            <section className="opsBlock">
+              <div className="sectionHead compact"><h2><FileText size={16} /> Review & Audit</h2></div>
+              <div className="table">
+                {reviewRows.map((row) => (
+                  <div className="row" key={row.title}>
+                    <strong>{row.title}</strong>
+                    <span>{row.status}</span>
+                    <small>{row.reason}</small>
+                  </div>
+                ))}
+              </div>
+            </section>
             <section className="opsBlock">
               <div className="sectionHead compact"><h2>情报队列</h2><button className="ghost">录入</button></div>
               <div className="table">

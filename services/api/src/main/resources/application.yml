@@ -4,9 +4,44 @@ server:
 spring:
   application:
     name: bizsage-api
+  profiles:
+    active: ${BIZSAGE_PROFILE:dev}
 
 bizsage:
   jwt:
     secret: ${JWT_SECRET:change-me-v1-dev-secret-change-me}
   privacy:
     key: ${DATA_ENCRYPTION_KEY:0123456789abcdef0123456789abcdef}
+  gray-release:
+    cohort: ${GRAY_RELEASE_COHORT:internal-operators-and-seed-paid-users}
+    support-window: ${GRAY_RELEASE_SUPPORT_WINDOW:09:00-21:00 Asia/Shanghai}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: test
+
+bizsage:
+  gray-release:
+    cohort: test-internal
+
+---
+spring:
+  config:
+    activate:
+      on-profile: staging
+
+bizsage:
+  gray-release:
+    cohort: staging-internal-and-seed-paid
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod-gray
+
+bizsage:
+  gray-release:
+    cohort: internal-operators-and-seed-paid-users

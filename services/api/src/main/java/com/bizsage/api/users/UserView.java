@@ -9,5 +9,7 @@ public record UserView(
     String phoneMasked,
     String identityMasked,
     String regionId,
-    String industryId) {
+    String industryId,
+    String membershipLevel,
+    String consultationPreferences) {
 }

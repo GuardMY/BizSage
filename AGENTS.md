@@ -1,10 +1,16 @@
-# BizSage Agent Development Standards
+﻿# BizSage Agent Development Standards
 
 This file is the root-level agent behavior standard for the repository. AI coding agents, automated development agents, and human collaborators must follow it when working on this project.
 
 ## 1. Core Principles
 
 - Before making changes, read the relevant project documents, existing code structure, and current git state.
+- For all functional development, also read and follow the governing product, architecture, implementation, data-collection, and risk/compliance documents:
+  - `docs/en/product-strategy-and-design.md` / `docs/zh-CN/product-strategy-and-design-zh-CN.md`
+  - `docs/en/system-architecture-and-framework.md` / `docs/zh-CN/system-architecture-and-framework-zh-CN.md`
+  - `docs/en/development-implementation-guide.md` / `docs/zh-CN/development-implementation-guide-zh-CN.md`
+  - `docs/en/data-collection-and-intelligence-perception.md` / `docs/zh-CN/data-collection-and-intelligence-perception-zh-CN.md`
+  - `docs/en/risk-management-and-compliance.md` / `docs/zh-CN/risk-management-and-compliance-zh-CN.md`
 - Prefer existing repository patterns. When no pattern exists, choose the smallest clear and testable implementation.
 - Do not implement functionality outside the current milestone unless the milestone documents are updated at the same time.
 - Do not revert, overwrite, or delete existing work from others. If related changes conflict, understand them before acting.
@@ -16,6 +22,7 @@ This file is the root-level agent behavior standard for the repository. AI codin
 - When adding or modifying documentation, add or update the corresponding Chinese and English versions in the same change.
 - English documentation uses the default `*.md` filename.
 - Chinese documentation uses the matching `*-zh-CN.md` filename.
+- Documentation under `docs/` is organized by language: English files live under `docs/en/`, and Chinese files live under `docs/zh-CN/`.
 - If a corresponding language version does not exist yet, create it before finishing the change.
 - Both language versions must express the same facts, scope, and acceptance criteria. Neither version may become an outdated summary.
 - For documentation changes involving APIs, databases, deployment, milestones, acceptance, or development standards, always check the matching language version.

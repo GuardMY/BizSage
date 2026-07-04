@@ -16,6 +16,9 @@ class KnowledgeItem:
     confidence: float
     industry_id: str
     region_id: str
+    entitlement: str = "FREE"
+    review_confidence: float = 0.85
+    historical_quality: float = 0.85
 
 
 @dataclass(frozen=True)
@@ -28,16 +31,36 @@ class SearchResult:
     weight: float
     confidence: float
     score: float
+    entitlement: str = "FREE"
 
 
-def search_knowledge(query: str, knowledge: list[KnowledgeItem], limit: int = 5) -> list[SearchResult]:
+def search_knowledge(
+    query: str,
+    knowledge: list[KnowledgeItem],
+    limit: int = 5,
+    region_id: str | None = None,
+    industry_id: str | None = None,
+    membership_level: str = "FREE",
+) -> list[SearchResult]:
     query_tokens = tokenize(query)
     results: list[SearchResult] = []
     for item in knowledge:
+        if region_id and item.region_id != region_id:
+            continue
+        if industry_id and item.industry_id != industry_id:
+            continue
+        if item.entitlement == "PAID" and membership_level not in {"SEED_PAID", "INTERNAL"}:
+            continue
         text = f"{item.title} {item.content}"
         keyword_score = keyword_overlap(query_tokens, tokenize(text))
         vector_score = cosine(bag(query_tokens), bag(tokenize(text)))
-        score = (keyword_score * 0.65 + vector_score * 0.35) * item.weight
+        quality = (
+            item.weight * 0.35
+            + item.confidence * 0.2
+            + item.review_confidence * 0.25
+            + item.historical_quality * 0.2
+        )
+        score = (keyword_score * 0.65 + vector_score * 0.35) * quality
         if score > 0:
             results.append(
                 SearchResult(
@@ -49,6 +72,7 @@ def search_knowledge(query: str, knowledge: list[KnowledgeItem], limit: int = 5)
                     weight=item.weight,
                     confidence=item.confidence,
                     score=round(score, 6),
+                    entitlement=item.entitlement,
                 )
             )
     return sorted(results, key=lambda result: result.score, reverse=True)[:limit]

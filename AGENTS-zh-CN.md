@@ -1,10 +1,16 @@
-# BizSage Agent 开发规范
+﻿# BizSage Agent 开发规范
 
 本文件是仓库根目录的 Agent 行为规范。AI 编码 Agent、自动化开发 Agent 和人工协作者在本项目中工作时必须遵循本文件。
 
 ## 1. 基本原则
 
 - 开始修改前，先阅读相关项目文档、现有代码结构和当前 git 状态。
+- 后续所有功能开发还必须阅读并遵循以下产品、架构、实现、数据采集和风险合规治理文档：
+  - `docs/en/product-strategy-and-design.md` / `docs/zh-CN/product-strategy-and-design-zh-CN.md`
+  - `docs/en/system-architecture-and-framework.md` / `docs/zh-CN/system-architecture-and-framework-zh-CN.md`
+  - `docs/en/development-implementation-guide.md` / `docs/zh-CN/development-implementation-guide-zh-CN.md`
+  - `docs/en/data-collection-and-intelligence-perception.md` / `docs/zh-CN/data-collection-and-intelligence-perception-zh-CN.md`
+  - `docs/en/risk-management-and-compliance.md` / `docs/zh-CN/risk-management-and-compliance-zh-CN.md`
 - 优先沿用仓库已有模式；没有模式时，选择最小、清晰、可测试的实现。
 - 不实现当前里程碑以外的功能，除非里程碑文档已经同步更新。
 - 不回滚、覆盖或删除他人已有改动；遇到相关冲突时先理解再处理。
@@ -15,6 +21,7 @@
 - 所有项目文档都必须维护中文和英文两个版本。
 - 英文文档默认使用 `*.md` 文件名。
 - 中文文档使用对应的 `*-zh-CN.md` 文件名。
+- `docs/` 下文档按语言归档：英文位于 `docs/en/`，中文位于 `docs/zh-CN/`。
 - 新增或修改文档时，必须在同一次改动中新增或更新对应的中文和英文版本。
 - 如果对应语言版本还不存在，完成前必须创建。
 - 两个语言版本必须表达同一事实、同一范围、同一验收标准；不得让其中一个版本成为过期摘要。

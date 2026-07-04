@@ -10,5 +10,7 @@ public record UserAccount(
     String phone,
     String identity,
     String regionId,
-    String industryId) {
+    String industryId,
+    String membershipLevel,
+    String consultationPreferences) {
 }

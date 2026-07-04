@@ -37,11 +37,18 @@ SEED_KNOWLEDGE = [
 class SearchRequest(BaseModel):
     query: str
     knowledge: list[dict] = Field(default_factory=list)
+    region_id: str | None = None
+    industry_id: str | None = None
+    membership_level: str = "FREE"
 
 
 class DiagnoseRequest(BaseModel):
     question: str
     knowledge: list[dict] = Field(default_factory=list)
+    region_id: str | None = None
+    industry_id: str | None = None
+    membership_level: str = "FREE"
+    conflict_labels: list[str] = Field(default_factory=list)
 
 
 @app.get("/health")
@@ -52,13 +59,31 @@ def health() -> dict:
 @app.post("/rag/search")
 def search(request: SearchRequest) -> dict:
     knowledge = parse_knowledge(request.knowledge) or SEED_KNOWLEDGE
-    return {"results": [result.__dict__ for result in search_knowledge(request.query, knowledge)]}
+    return {
+        "results": [
+            result.__dict__
+            for result in search_knowledge(
+                request.query,
+                knowledge,
+                region_id=request.region_id,
+                industry_id=request.industry_id,
+                membership_level=request.membership_level,
+            )
+        ]
+    }
 
 
 @app.post("/agent/diagnose")
 def diagnose_endpoint(request: DiagnoseRequest) -> dict:
     knowledge = parse_knowledge(request.knowledge) or SEED_KNOWLEDGE
-    return diagnose(request.question, knowledge=knowledge)
+    return diagnose(
+        request.question,
+        knowledge=knowledge,
+        region_id=request.region_id,
+        industry_id=request.industry_id,
+        membership_level=request.membership_level,
+        conflict_labels=request.conflict_labels,
+    )
 
 
 def parse_knowledge(items: list[dict]) -> list[KnowledgeItem]:
@@ -73,6 +98,9 @@ def parse_knowledge(items: list[dict]) -> list[KnowledgeItem]:
             confidence=float(item.get("confidence", 0.85)),
             industry_id=item.get("industry_id") or item.get("industryId") or "general",
             region_id=item.get("region_id") or item.get("regionId") or "cn-default",
+            entitlement=item.get("entitlement", "FREE"),
+            review_confidence=float(item.get("review_confidence", item.get("reviewConfidence", 0.85))),
+            historical_quality=float(item.get("historical_quality", item.get("historicalQuality", 0.85))),
         )
         for item in items
     ]
