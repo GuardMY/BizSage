@@ -2,6 +2,21 @@
 
 ## 2026-07-05
 
+### Nginx Authorization Forwarding Fix
+
+- Change type: functional development.
+- Affected modules: `infra/nginx` and change logs.
+- Main changes:
+  - Updated `infra/nginx/nginx.conf` so the reverse proxy explicitly forwards the incoming `Authorization` header to `services/api`.
+  - Fixed the deployment path where login succeeded through nginx but authenticated API routes such as `POST /api/conversations` and `POST /api/conversations/{id}/messages/stream` were rejected with `401 Unauthorized`.
+  - Kept the existing SSE buffering and timeout settings unchanged while narrowing the fix to the authentication handoff at the proxy boundary.
+- Verification results:
+  - Reproduced the bug against `http://192.168.31.91`: `POST /api/auth/login` returned `200 OK`, while authenticated `POST /api/conversations` returned `401 Unauthorized` before the config change.
+  - Verified repository behavior in `services/api/src/test/java/com/bizsage/api/MessageStreamApiTest.java`, which shows the protected conversation and message-stream endpoints succeed when `Authorization` reaches Spring Security.
+  - Did not run a full nginx reload or end-to-end post-change remote verification in this environment.
+- Unfinished items:
+  - The target deployment still needs the updated nginx configuration to be reloaded or redeployed before the live `192.168.31.91` instance will stop returning `401`.
+
 ### Three-Layer Memory Plan Archive
 
 - Change type: documentation maintenance.

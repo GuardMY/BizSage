@@ -2,6 +2,21 @@
 
 ## 2026-07-05
 
+### Nginx Authorization 转发修复
+
+- 变更类型：功能开发。
+- 影响模块：`infra/nginx` 和变更日志。
+- 主要变更：
+  - 更新 `infra/nginx/nginx.conf`，让反向代理显式将进入请求的 `Authorization` 请求头转发给 `services/api`。
+  - 修复经 nginx 登录成功后，`POST /api/conversations` 与 `POST /api/conversations/{id}/messages/stream` 等受保护接口仍被返回 `401 Unauthorized` 的部署链路问题。
+  - 保持现有 SSE 缓冲和超时设置不变，将修复范围限定在代理边界的鉴权传递上。
+- 验证结果：
+  - 已针对 `http://192.168.31.91` 复现问题：`POST /api/auth/login` 返回 `200 OK`，但携带鉴权的 `POST /api/conversations` 在配置修改前返回 `401 Unauthorized`。
+  - 已核对仓库中的 `services/api/src/test/java/com/bizsage/api/MessageStreamApiTest.java`，确认只要 `Authorization` 能到达 Spring Security，conversation 和 message stream 受保护接口会通过。
+  - 当前环境未执行 nginx 热重载或修改后的远程端到端复验。
+- 未完成事项：
+  - 目标部署仍需要重新加载或重新部署更新后的 nginx 配置，`192.168.31.91` 上的在线实例才会停止返回 `401`。
+
 ### 三层记忆实施计划归档
 
 - 变更类型：文档维护。
