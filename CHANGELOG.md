@@ -2,6 +2,21 @@
 
 ## 2026-07-05
 
+### Conversation Schema Compatibility Fix
+
+- Change type: functional development.
+- Affected modules: `services/api` and change logs.
+- Main changes:
+  - Added `ConversationSchemaMigration` in `services/api` to repair legacy conversation-storage schema on startup when an existing MySQL `messages` table is missing newer conversation-memory columns.
+  - Backfilled the runtime compatibility path for `message_type`, message evidence/confidence fields, active-context markers, regional metadata, and the `conversation_summaries` table so the message streaming flow can run against older databases without manual emergency SQL first.
+  - Added `ConversationSchemaMigrationTest` to prove an old `messages` table can be upgraded and then support both message persistence and summary persistence.
+- Verification results:
+  - In `services/api`, `mvn -Dtest=ConversationSchemaMigrationTest test`: 1 test passed.
+  - In `services/api`, `mvn -Dtest=MessageStreamApiTest test`: 3 tests passed.
+  - In `services/api`, `mvn test`: 17 tests passed.
+- Unfinished items:
+  - Existing deployed databases still need one application restart so the startup migration can execute against the live schema.
+
 ### Nginx Authorization Forwarding Fix
 
 - Change type: functional development.

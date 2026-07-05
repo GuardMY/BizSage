@@ -2,6 +2,21 @@
 
 ## 2026-07-05
 
+### 会话库表兼容性修复
+
+- 变更类型：功能开发。
+- 影响模块：`services/api` 和变更日志。
+- 主要变更：
+  - 在 `services/api` 新增 `ConversationSchemaMigration`，用于在应用启动时修补遗留会话存储结构，解决已有 MySQL `messages` 表缺少新版会话记忆字段时的兼容性问题。
+  - 为运行时兼容路径补齐 `message_type`、消息证据与置信度字段、活跃上下文标记、区域元数据，以及 `conversation_summaries` 表，使消息流接口在旧库结构上也能启动后自修复，而不必先手工执行紧急 SQL。
+  - 新增 `ConversationSchemaMigrationTest`，验证旧版 `messages` 表可被升级，并在升级后正常支持消息持久化与摘要持久化。
+- 验证结果：
+  - 在 `services/api` 运行 `mvn -Dtest=ConversationSchemaMigrationTest test`：1 个测试通过。
+  - 在 `services/api` 运行 `mvn -Dtest=MessageStreamApiTest test`：3 个测试通过。
+  - 在 `services/api` 运行 `mvn test`：17 个测试通过。
+- 未完成事项：
+  - 现有部署数据库仍需要重启一次应用，才能让启动期迁移逻辑真正作用到在线库表结构。
+
 ### Nginx Authorization 转发修复
 
 - 变更类型：功能开发。
