@@ -2,6 +2,20 @@
 
 ## 2026-07-05
 
+### LLM 严格闭环实施计划归档
+
+- 变更类型：文档维护。
+- 影响模块：`docs/en`、`docs/zh-CN` 和两份变更日志。
+- 主要变更：
+  - 新增 `docs/en/llm-closure-implementation-plan.md`，作为用户侧 LLM 严格闭环的英文正式实施计划文档。
+  - 新增 `docs/zh-CN/llm-closure-implementation-plan-zh-CN.md`，补齐范围、决策和验收意图一致的中文正式文档。
+  - 归档了已确认的目标链路 `Web -> API -> AI worker -> RAG/Qdrant -> 外部 OpenAI-compatible LLM -> API -> Web`，并明确记录严格失败策略、报告路径闭环和健康可见性要求。
+- 验证结果：
+  - 仅文档变更，无需运行服务测试套件。
+  - 已确认中英文正式文档和两份变更日志在同一次变更中同步更新。
+- 未完成事项：
+  - 该计划现已作为正式实施文档归档；运行时代码中的 API 到 worker 严格闭环仍需后续按计划实施并完成验证。
+
 ### 基础设施宿主机端口暴露
 
 - 变更类型：功能开发。

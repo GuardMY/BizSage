@@ -2,6 +2,20 @@
 
 ## 2026-07-05
 
+### LLM Closure Implementation Plan Archive
+
+- Change type: documentation maintenance.
+- Affected modules: `docs/en`, `docs/zh-CN`, and both change logs.
+- Main changes:
+  - Added `docs/en/llm-closure-implementation-plan.md` as the formal English implementation-plan record for the strict user-facing LLM closure.
+  - Added `docs/zh-CN/llm-closure-implementation-plan-zh-CN.md` as the matching Chinese formal document with the same scope, decisions, and acceptance intent.
+  - Recorded the approved target chain `Web -> API -> AI worker -> RAG/Qdrant -> external OpenAI-compatible LLM -> API -> Web`, including strict-failure behavior, report-path closure, and health visibility requirements.
+- Verification results:
+  - Documentation-only change; no service test suite was required.
+  - Confirmed the English and Chinese formal documents and both change logs were updated together.
+- Unfinished items:
+  - The plan is archived as a formal implementation document; the runtime code path still needs the actual API-to-worker closure work to be implemented and verified.
+
 ### Infrastructure Host Port Exposure
 
 - Change type: functional development.
