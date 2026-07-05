@@ -121,8 +121,9 @@ def fetch_with_vendor_failover(
         except Exception as exception:  # noqa: BLE001 - failover records vendor errors.
             errors.append(str(exception))
     cached = state_store.load_recent_snapshot(snapshot_key) if state_store and snapshot_key else None
+    record = cached if cached is not None else recent_snapshot or {}
     return {
         "source": "recent-snapshot",
-        "record": cached or recent_snapshot or {},
+        "record": record,
         "telemetry": {"job_id": job.id, "queue_depth": job.queue_depth, "errors": errors},
     }

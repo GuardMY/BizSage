@@ -108,14 +108,15 @@ def test_vendor_failover_uses_recent_snapshot_when_all_vendors_fail():
 
 def test_vendor_failover_reads_recent_snapshot_from_store():
     store = RedisStateStore(FakeRedis())
-    store.save_recent_snapshot("vendor-a", {"cached": True}, ttl_seconds=300)
+    store.save_recent_snapshot("vendor-a", {}, ttl_seconds=300)
 
     result = fetch_with_vendor_failover(
         CollectionJob(id="job-1", source="vendor-a"),
         vendors=[lambda: (_ for _ in ()).throw(RuntimeError("timeout"))],
         state_store=store,
         snapshot_key="vendor-a",
+        recent_snapshot={"cached": True},
     )
 
     assert result["source"] == "recent-snapshot"
-    assert result["record"] == {"cached": True}
+    assert result["record"] == {}
