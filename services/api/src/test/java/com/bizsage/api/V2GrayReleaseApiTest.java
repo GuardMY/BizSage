@@ -135,6 +135,31 @@ class V2GrayReleaseApiTest {
       .andExpect(jsonPath("$.data[0].action").value("V2_M0_SCOPE_LOCK"));
   }
 
+  @Test
+  void operatorCanListKnowledgeInGrayReleaseContext() throws Exception {
+    String operatorToken = login("operator");
+
+    mvc.perform(post("/api/knowledge/import")
+        .header("Authorization", "Bearer " + operatorToken)
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("""
+          {
+            "title":"Gray release knowledge baseline",
+            "content":"Knowledge listing stays available during V2 rollout.",
+            "industryId":"general",
+            "regionId":"cn-default",
+            "linkId":"gray-release",
+            "sourceId":"seed-runtime"
+          }
+          """))
+      .andExpect(status().isOk());
+
+    mvc.perform(get("/api/knowledge").header("Authorization", "Bearer " + operatorToken))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.code").value("OK"))
+      .andExpect(jsonPath("$.data[?(@.title == 'Gray release knowledge baseline')]").isNotEmpty());
+  }
+
   private String login(String username) throws Exception {
     String response = mvc.perform(post("/api/auth/login")
         .contentType(MediaType.APPLICATION_JSON)
