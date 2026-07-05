@@ -2,6 +2,23 @@
 
 ## 2026-07-05
 
+### MySQL、Redis、Qdrant 真实接入
+
+- 变更类型：功能开发。
+- 影响模块：`services/api`、`services/collector`、`services/ai-worker` 和 V2 验证文档。
+- 主要变更：
+  - 保持 API 侧基于 `JdbcTemplate` 的 MySQL 持久化路径不变，并新增 `GET /api/knowledge`，用于真实知识列表查询。
+  - 新增 Redis 驱动的 collector 运行时状态适配层，并将指纹去重与近期快照兜底真实接入到路由执行链路。
+  - 新增确定性 embedding 与 Qdrant 向量存储适配层，并将 AI worker 检索切换为 Qdrant 优先，同时保留 Python 侧的地域、行业、权益和质量重排规则。
+  - 加固 AI worker 的请求隔离，避免请求级知识在后续 Qdrant 检索或诊断调用中泄漏到其他请求。
+- 验证结果：
+  - 在 `services/api` 运行 `mvn test`：14 个测试通过。
+  - 在 `services/collector` 运行 `python -m pytest`：22 个测试通过。
+  - 在 `services/ai-worker` 运行 `python -m pytest`：21 个测试通过。
+- 未完成事项：
+  - 当前环境未执行 Docker Compose 启动以及 MySQL、Redis、Qdrant 的在线健康验证。
+  - 备份恢复演练、压测和长时间灰度稳定性观察仍待执行。
+
 ### Web 登录后身份框防回归
 
 - 变更类型：功能维护。

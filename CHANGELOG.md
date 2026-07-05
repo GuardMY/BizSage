@@ -2,6 +2,23 @@
 
 ## 2026-07-05
 
+### MySQL Redis Qdrant Real Integration
+
+- Change type: functional development.
+- Affected modules: `services/api`, `services/collector`, `services/ai-worker`, and V2 verification documentation.
+- Main changes:
+  - Kept the API MySQL persistence path on `JdbcTemplate` and exposed `GET /api/knowledge` for real knowledge listing.
+  - Added a Redis-backed collector runtime state adapter and wired route-level fingerprint deduplication plus recent snapshot fallback into real execution paths.
+  - Added deterministic embeddings and a Qdrant vector-store adapter, then switched AI worker retrieval to Qdrant-first while preserving Python-side region, industry, entitlement, and quality reranking.
+  - Hardened AI worker request isolation so request-scoped knowledge cannot leak into later Qdrant-backed searches or diagnosis calls.
+- Verification results:
+  - `mvn test` in `services/api`: 14 tests passed.
+  - `python -m pytest` in `services/collector`: 22 tests passed.
+  - `python -m pytest` in `services/ai-worker`: 21 tests passed.
+- Unfinished items:
+  - Docker Compose startup and live MySQL, Redis, and Qdrant health validation were not executed in this environment.
+  - Backup and restore drills, load testing, and long-running gray-release stability observation remain pending.
+
 ### Web Authenticated Identity Panel Guard
 
 - Change type: functional maintenance.

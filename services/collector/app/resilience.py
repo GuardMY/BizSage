@@ -48,8 +48,12 @@ def incremental_fingerprint(
     fingerprint = hashlib.sha256(f"{url}|{content_hash}".encode("utf-8")).hexdigest()
     known = existing_fingerprints or set()
     is_duplicate = fingerprint in known
-    if state_store is not None and state_store.has_fingerprint(fingerprint):
-        is_duplicate = True
+    if state_store is not None:
+        try:
+            if state_store.has_fingerprint(fingerprint):
+                is_duplicate = True
+        except Exception:  # noqa: BLE001 - Redis degradation should not block collection.
+            pass
     return FingerprintResult(
         fingerprint=fingerprint,
         content_hash=content_hash,
@@ -112,7 +116,10 @@ def fetch_with_vendor_failover(
         try:
             record = vendor()
             if state_store is not None and snapshot_key is not None:
-                state_store.save_recent_snapshot(snapshot_key, record, ttl_seconds=900)
+                try:
+                    state_store.save_recent_snapshot(snapshot_key, record, ttl_seconds=900)
+                except Exception:  # noqa: BLE001 - Vendor success should survive cache write failure.
+                    pass
             return {
                 "source": "vendor",
                 "record": record,
@@ -120,7 +127,12 @@ def fetch_with_vendor_failover(
             }
         except Exception as exception:  # noqa: BLE001 - failover records vendor errors.
             errors.append(str(exception))
-    cached = state_store.load_recent_snapshot(snapshot_key) if state_store and snapshot_key else None
+    cached = None
+    if state_store is not None and snapshot_key is not None:
+        try:
+            cached = state_store.load_recent_snapshot(snapshot_key)
+        except Exception:  # noqa: BLE001 - Cache read failure should degrade to empty fallback.
+            cached = None
     record = cached if cached is not None else recent_snapshot or {}
     return {
         "source": "recent-snapshot",

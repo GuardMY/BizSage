@@ -15,6 +15,8 @@ def diagnose(
     industry_id: str | None = None,
     membership_level: str = "FREE",
     conflict_labels: list[str] | None = None,
+    vector_store: object | None = None,
+    restrict_to_knowledge_ids: bool = False,
 ) -> dict:
     if conflict_labels:
         return {
@@ -32,6 +34,8 @@ def diagnose(
         region_id=region_id,
         industry_id=industry_id,
         membership_level=membership_level,
+        vector_store=vector_store,
+        restrict_to_knowledge_ids=restrict_to_knowledge_ids,
     )
     if not results:
         return {
