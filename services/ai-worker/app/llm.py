@@ -15,6 +15,9 @@ logger = logging.getLogger(__name__)
 #   OPENAI_COMPATIBLE_API_KEY    – your API key
 #   OPENAI_COMPATIBLE_MODEL      – e.g. deepseek-chat
 #   LLM_PROVIDER                 – logical provider name (deepseek / openai / …)
+#
+# STRICT MODE: 严格模式 — 不配置真实 LLM 或调用失败时必须显式失败，
+# 绝不回退到 mock 回答。
 # ---------------------------------------------------------------------------
 
 SYSTEM_PROMPT = (
@@ -26,12 +29,26 @@ SYSTEM_PROMPT = (
 )
 
 
-def _get_config() -> tuple[str, str, str] | None:
-    """Return (base_url, api_key, model) or None if not configured."""
+class LLMNotConfiguredError(Exception):
+    """Raised when OPENAI_COMPATIBLE_API_KEY is not set."""
+
+
+class LLMCallError(Exception):
+    """Raised when the upstream LLM call fails or returns empty."""
+
+    def __init__(self, message: str, status_code: int | None = None):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def _get_config() -> tuple[str, str, str]:
+    """Return (base_url, api_key, model).
+
+    Raises LLMNotConfiguredError if OPENAI_COMPATIBLE_API_KEY is not set.
+    """
     api_key = os.getenv("OPENAI_COMPATIBLE_API_KEY", "").strip()
     if not api_key:
-        logger.warning("OPENAI_COMPATIBLE_API_KEY not set – falling back to mock")
-        return None
+        raise LLMNotConfiguredError("OPENAI_COMPATIBLE_API_KEY not set – LLM is not configured")
 
     base_url = os.getenv("OPENAI_COMPATIBLE_BASE_URL", "https://api.deepseek.com/v1").strip()
     model = os.getenv("OPENAI_COMPATIBLE_MODEL", "deepseek-chat").strip()
@@ -42,16 +59,12 @@ def generate_answer(question: str, context: str) -> str:
     """Generate a diagnostic answer using the configured LLM provider.
 
     Calls the OpenAI‑compatible /chat/completions endpoint via httpx.
-    Falls back to the mock implementation when no API key is configured
-    or the remote call fails.
+    Raises LLMNotConfiguredError or LLMCallError on failure —
+    no mock fallback in strict mode.
     """
     provider = os.getenv("LLM_PROVIDER", "deepseek").lower()
 
-    config = _get_config()
-    if config is None:
-        return _mock_answer(question, context)
-
-    base_url, api_key, model = config
+    base_url, api_key, model = _get_config()
     url = f"{base_url.rstrip('/')}/chat/completions"
 
     payload = {
@@ -74,29 +87,23 @@ def generate_answer(question: str, context: str) -> str:
         response.raise_for_status()
         body = response.json()
         content = body["choices"][0]["message"]["content"]
-        if content:
-            return content.strip()
-        logger.warning("LLM returned empty response – falling back to mock")
-        return _mock_answer(question, context)
+        if not content:
+            raise LLMCallError(
+                f"LLM returned empty response (provider={provider}, model={model})"
+            )
+        return content.strip()
+
+    except (LLMNotConfiguredError, LLMCallError):
+        raise
 
     except httpx.HTTPStatusError as exc:
-        logger.error(
-            "LLM HTTP %d (provider=%s, model=%s): %s",
-            exc.response.status_code,
-            provider,
-            model,
-            exc.response.text[:500],
-        )
-        return _mock_answer(question, context)
+        raise LLMCallError(
+            f"LLM HTTP {exc.response.status_code} (provider={provider}, model={model}): "
+            f"{exc.response.text[:500]}",
+            status_code=exc.response.status_code,
+        ) from exc
+
     except Exception as exc:
-        logger.error("LLM call failed (provider=%s, model=%s): %s", provider, model, exc)
-        return _mock_answer(question, context)
-
-
-def _mock_answer(question: str, context: str) -> str:
-    """Local mock answer used as fallback when no LLM is available."""
-    return (
-        f"针对「{question}」，V1 诊断建议先围绕已检索证据核对关键经营变量。"
-        f"证据显示：{context[:180]}。"
-        "建议补充近期营收、成本、库存、渠道和回款数据后再做更细判断。"
-    )
+        raise LLMCallError(
+            f"LLM call failed (provider={provider}, model={model}): {exc}"
+        ) from exc

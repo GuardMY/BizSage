@@ -343,6 +343,32 @@ small {
   font-size: 12px;
 }
 
+.meta .flag.needsReview {
+  background: #fef7e6;
+  color: var(--amber);
+  font-weight: 700;
+}
+
+.meta .flag.insufficientEvidence {
+  background: #eef2f5;
+  color: #6b8299;
+}
+
+/* Diagnosis bubble status variants */
+.bubble.agent.status-needs_review {
+  border-left: 4px solid var(--amber);
+}
+
+.bubble.agent.status-insufficient_evidence {
+  border-left: 4px solid #9bafc2;
+}
+
+.bubble.agent.status-llm_not_configured,
+.bubble.agent.status-llm_call_failed {
+  border-left: 4px solid #cc4b37;
+  background: #fef8f7;
+}
+
 .sourceLine button {
   border: 1px solid #b7d7cb;
   background: #f7fbf9;

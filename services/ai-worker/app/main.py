@@ -104,7 +104,7 @@ def diagnose_endpoint(request: DiagnoseRequest) -> dict:
     vector_store = build_vector_store(build_request_collection_name(request_knowledge))
     try:
         vector_store.upsert_knowledge(knowledge)
-        return diagnose(
+        result = diagnose(
             request.question,
             knowledge=knowledge,
             recent_messages=request.recent_messages,
@@ -117,6 +117,30 @@ def diagnose_endpoint(request: DiagnoseRequest) -> dict:
             vector_store=vector_store,
             restrict_to_knowledge_ids=True,
         )
+
+        from app.agent import LLM_NOT_CONFIGURED, LLM_CALL_FAILED
+
+        status = result.get("selfCheckStatus", "")
+        if status == LLM_NOT_CONFIGURED:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "LLM_NOT_CONFIGURED",
+                    "message": "OPENAI_COMPATIBLE_API_KEY is not set. The AI worker cannot generate answers without a configured LLM.",
+                },
+            )
+        if status == LLM_CALL_FAILED:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "LLM_CALL_FAILED",
+                    "message": "The upstream LLM provider returned an error or empty response.",
+                },
+            )
+
+        return result
     finally:
         cleanup_request_collection(vector_store, request_knowledge)
 

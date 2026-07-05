@@ -2,9 +2,13 @@ package com.bizsage.api.messages;
 
 import com.bizsage.api.conversations.ConversationStore;
 import com.bizsage.api.users.UserStore;
+import com.bizsage.api.worker.AiWorkerException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.security.Principal;
+import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,6 +19,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/conversations/{conversationId}/messages")
 public class MessageController {
+
+  private static final Logger log = LoggerFactory.getLogger(MessageController.class);
+
   private final DiagnosisService diagnosisService;
   private final ConversationStore conversationStore;
   private final UserStore userStore;
@@ -35,8 +42,34 @@ public class MessageController {
       Principal principal) {
     var user = userStore.findByUsername(principal.getName()).orElseThrow();
     var conversation = conversationStore.getForOwner(principal.getName(), conversationId);
-    String diagnosis = diagnosisService.diagnose(conversation, user, request.question());
-    return "event: diagnosis\n" + "data: " + diagnosis + "\n\n";
+
+    try {
+      String diagnosis = diagnosisService.diagnose(conversation, user, request.question());
+      return "event: diagnosis\n" + "data: " + diagnosis + "\n\n";
+    } catch (AiWorkerException ex) {
+      log.error("Diagnosis failed — worker error (conversation={}): {}", conversationId, ex.getMessage());
+      String errorPayload = toErrorPayload(ex);
+      return "event: error\n" + "data: " + errorPayload + "\n\n";
+    }
+  }
+
+  private String toErrorPayload(AiWorkerException ex) {
+    String message = ex.getMessage() != null ? ex.getMessage() : "AI worker unavailable";
+    // Determine a machine-readable error code for the frontend
+    String errorCode = "WORKER_ERROR";
+    if (message.contains("not reachable") || message.contains("connection failed")) {
+      errorCode = "WORKER_UNREACHABLE";
+    } else if (message.contains("not configured") || message.contains("LLM_NOT_CONFIGURED")) {
+      errorCode = "LLM_NOT_CONFIGURED";
+    } else if (message.contains("timed out")) {
+      errorCode = "WORKER_TIMEOUT";
+    }
+
+    return "{\"error\":\"" + errorCode + "\",\"message\":\"" + escapeJson(message) + "\"}";
+  }
+
+  private static String escapeJson(String value) {
+    return value.replace("\\", "\\\\").replace("\"", "\\\"");
   }
 
   record MessageRequest(@NotBlank String question) {

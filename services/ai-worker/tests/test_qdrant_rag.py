@@ -394,6 +394,12 @@ def test_diagnose_route_upserts_request_knowledge_before_vector_query(monkeypatc
     )
     monkeypatch.setattr("app.main.build_vector_store", lambda collection_name=None: vector_store)
 
+    # Mock the LLM call so the strict-mode diagnose_endpoint doesn't return 503
+    def fake_generate(question: str, context: str) -> str:
+        return f"基于证据：{context[:80]}。建议：先核对关键经营变量。"
+
+    monkeypatch.setattr("app.agent.generate_answer", fake_generate)
+
     response = diagnose_endpoint(
         DiagnoseRequest(
             question="门店现金流怎么诊断",

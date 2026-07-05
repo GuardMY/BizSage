@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from app.llm import generate_answer
+from app.llm import generate_answer, LLMNotConfiguredError, LLMCallError
 from app.memory import build_memory_context, extract_memory_candidates
 from app.rag import KnowledgeItem, search_knowledge
 
 DISCLAIMER = "免责声明：本诊断仅用于经营分析参考，不构成投资、法律或财务建议。"
 TIMELINESS = "基于V1静态基线知识和已入库情报生成。"
+
+LLM_NOT_CONFIGURED = "LLM_NOT_CONFIGURED"
+LLM_CALL_FAILED = "LLM_CALL_FAILED"
 
 
 def diagnose(
@@ -55,7 +58,28 @@ def diagnose(
     memory_context = build_memory_context(recent_messages, conversation_summary, long_term_memories)
     if memory_context:
         context = f"{memory_context}\n{context}"
-    answer = generate_answer(question, context)
+
+    try:
+        answer = generate_answer(question, context)
+    except LLMNotConfiguredError:
+        return {
+            "answer": "",
+            "sources": [],
+            "confidence": "LOW",
+            "timeliness": TIMELINESS,
+            "selfCheckStatus": LLM_NOT_CONFIGURED,
+            "disclaimer": DISCLAIMER,
+        }
+    except LLMCallError:
+        return {
+            "answer": "",
+            "sources": [],
+            "confidence": "LOW",
+            "timeliness": TIMELINESS,
+            "selfCheckStatus": LLM_CALL_FAILED,
+            "disclaimer": DISCLAIMER,
+        }
+
     return {
         "answer": answer,
         "sources": [

@@ -5,19 +5,26 @@ import com.bizsage.api.memory.UserMemoryEmbeddingStore;
 import com.bizsage.api.memory.UserMemoryProfile;
 import com.bizsage.api.memory.UserMemoryStore;
 import com.bizsage.api.users.UserAccount;
+import com.bizsage.api.worker.AiWorkerClient;
+import com.bizsage.api.worker.AiWorkerException;
+import com.bizsage.api.worker.DiagnoseRequest;
+import com.bizsage.api.worker.DiagnoseResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class DiagnosisService {
-  private static final String TIMELINESS = "基于V1静态基线知识、会话短期记忆和用户长期记忆生成。";
-  private static final String DISCLAIMER = "免责声明：本诊断仅用于经营分析参考，不构成投资、法律或财务建议。";
 
+  private static final Logger log = LoggerFactory.getLogger(DiagnosisService.class);
+
+  private final AiWorkerClient aiWorkerClient;
   private final ObjectMapper objectMapper;
   private final ConversationMessageStore messageStore;
   private final ConversationSummaryStore summaryStore;
@@ -25,11 +32,13 @@ public class DiagnosisService {
   private final UserMemoryEmbeddingStore embeddingStore;
 
   public DiagnosisService(
+      AiWorkerClient aiWorkerClient,
       ObjectMapper objectMapper,
       ConversationMessageStore messageStore,
       ConversationSummaryStore summaryStore,
       UserMemoryStore userMemoryStore,
       UserMemoryEmbeddingStore embeddingStore) {
+    this.aiWorkerClient = aiWorkerClient;
     this.objectMapper = objectMapper;
     this.messageStore = messageStore;
     this.summaryStore = summaryStore;
@@ -37,7 +46,16 @@ public class DiagnosisService {
     this.embeddingStore = embeddingStore;
   }
 
+  /**
+   * Run a diagnosis by delegating to the AI worker.
+   *
+   * <p>Message persistence, memory persistence, and summarization
+   * remain in the API layer.  The worker is the sole inference engine.
+   *
+   * @throws AiWorkerException if the worker is unavailable or LLM is not configured
+   */
   public String diagnose(Conversation conversation, UserAccount user, String question) {
+    // 1. Persist the user message
     long userMessageId = messageStore.append(
         conversation.id(),
         "USER",
@@ -50,80 +68,159 @@ public class DiagnosisService {
         conversation.regionId(),
         conversation.industryId());
 
+    // 2. Load context for the worker
     List<UserMemoryProfile> memories = userMemoryStore.activeMemoriesForUser(user.id());
-    String answer = buildAnswer(question, messageStore.recentActiveMessages(conversation.id(), 6), summaryStore.latestActive(conversation.id()).orElse(null), memories);
-    List<Map<String, Object>> sources = List.of(Map.of(
-        "id", "seed-restaurant-cashflow",
-        "title", "餐饮门店现金流基础诊断",
-        "sourceUrl", "seed://v1/restaurant-cashflow",
-        "sourceId", "seed-baseline",
-        "confidence", 0.9));
+    List<ConversationMessage> recentMessages = messageStore.recentActiveMessages(conversation.id(), 6);
+    ConversationSummary summary = summaryStore.latestActive(conversation.id()).orElse(null);
+
+    // 3. Assemble the worker request
+    DiagnoseRequest request = DiagnoseRequest.builder()
+        .question(question)
+        .recentMessages(toRecentMessageMaps(recentMessages))
+        .conversationSummary(summary != null ? summary.summaryText() : null)
+        .longTermMemories(toMemoryMaps(memories))
+        .regionId(conversation.regionId())
+        .industryId(conversation.industryId())
+        .membershipLevel(user.membershipLevel())
+        .build();
+
+    // 4. Call the AI worker — strict failure on error
+    DiagnoseResponse response;
+    try {
+      response = aiWorkerClient.diagnose(request);
+    } catch (AiWorkerException ex) {
+      log.error("AI worker diagnosis failed for conversation {}: {}", conversation.id(), ex.getMessage());
+      throw ex;
+    }
+
+    if (!response.isSuccessful()) {
+      throw new AiWorkerException(
+          "AI worker returned an unsuccessful diagnosis: selfCheckStatus=" + response.selfCheckStatus());
+    }
+
+    // 5. Build the payload for SSE / persistence
+    List<Map<String, Object>> sources = toSourceMaps(response);
+
     Map<String, Object> payload = new LinkedHashMap<>();
-    payload.put("answer", answer);
+    payload.put("answer", response.answer());
     payload.put("sources", sources);
-    payload.put("confidence", "MEDIUM");
-    payload.put("timeliness", TIMELINESS);
-    payload.put("selfCheckStatus", "PASSED");
-    payload.put("disclaimer", DISCLAIMER);
+    payload.put("confidence", response.confidence());
+    payload.put("timeliness", response.timeliness());
+    payload.put("selfCheckStatus", response.selfCheckStatus());
+    payload.put("disclaimer", response.disclaimer());
 
     String payloadJson = serialize(payload);
+
+    // 6. Persist the assistant message
     long assistantMessageId = messageStore.append(
         conversation.id(),
         "ASSISTANT",
         "ANSWER",
-        answer,
+        response.answer(),
         serialize(sources),
-        "MEDIUM",
-        TIMELINESS,
-        "PASSED",
+        response.confidence(),
+        response.timeliness(),
+        response.selfCheckStatus(),
         conversation.regionId(),
         conversation.industryId());
 
-    persistMemoryCandidates(user, conversation, userMessageId, assistantMessageId, question);
+    // 7. Persist memory candidates from the worker
+    if (response.memoryCandidates() != null) {
+      for (Map<String, Object> candidate : response.memoryCandidates()) {
+        persistCandidate(user, conversation, userMessageId, assistantMessageId, candidate);
+      }
+    }
+
+    // 8. Mark memories as used and maintain summaries
     userMemoryStore.markUsed(memories.stream().map(UserMemoryProfile::id).toList());
     summarizeIfNeeded(conversation.id());
+
     return payloadJson;
   }
 
-  private String buildAnswer(
-      String question,
-      List<ConversationMessage> recentMessages,
-      ConversationSummary summary,
-      List<UserMemoryProfile> memories) {
-    StringBuilder answer = new StringBuilder();
-    appendIfPresent(answer, preferenceValue(memories, "response_style"));
-    answer.append("针对「").append(question).append("」，先围绕现金流、库存周转、平台佣金和回款周期做诊断。");
-    if (summary != null) {
-      answer.append(" 摘要记忆：").append(summary.summaryText()).append("。");
-    }
-    String followUpContext = latestUserContext(recentMessages);
-    if (!followUpContext.isBlank()) {
-      answer.append(" 上轮重点：").append(followUpContext).append("。");
-    }
-    appendIfPresent(answer, memoryValue(memories, "channel_mix"));
-    appendIfPresent(answer, memoryValue(memories, "focus_metric"));
-    answer.append(" 先核对客单价、翻台率、食材损耗率、平台佣金、租金占营收比例和现金回款周期，再根据证据调整动作优先级。");
-    return answer.toString().trim();
+  // ── Context mappers ────────────────────────────────────────────
+
+  private List<Map<String, Object>> toRecentMessageMaps(List<ConversationMessage> messages) {
+    return messages.stream()
+        .map(msg -> {
+          Map<String, Object> map = new LinkedHashMap<>();
+          map.put("role", "USER".equals(msg.sender()) ? "user" : "assistant");
+          map.put("content", msg.content());
+          return map;
+        })
+        .collect(Collectors.toList());
   }
 
-  private void persistMemoryCandidates(UserAccount user, Conversation conversation, long userMessageId, long assistantMessageId, String question) {
-    List<MemoryCandidate> candidates = extractCandidates(question);
-    for (MemoryCandidate candidate : candidates) {
+  private List<Map<String, Object>> toMemoryMaps(List<UserMemoryProfile> memories) {
+    return memories.stream()
+        .map(mem -> {
+          Map<String, Object> map = new LinkedHashMap<>();
+          map.put("category", mem.category());
+          map.put("key", mem.key());
+          map.put("value", mem.value());
+          map.put("confidence", mem.confidence());
+          return map;
+        })
+        .collect(Collectors.toList());
+  }
+
+  // ── Response mappers ────────────────────────────────────────────
+
+  private List<Map<String, Object>> toSourceMaps(DiagnoseResponse response) {
+    if (response.sources() == null) {
+      return List.of();
+    }
+    return response.sources().stream()
+        .map(src -> {
+          Map<String, Object> map = new LinkedHashMap<>();
+          map.put("id", src.id());
+          map.put("title", src.title());
+          map.put("sourceUrl", src.sourceUrl());
+          map.put("sourceId", src.sourceId());
+          map.put("confidence", src.confidence());
+          if (src.score() != null) {
+            map.put("score", src.score());
+          }
+          map.put("entitlement", src.entitlement() != null ? src.entitlement() : "FREE");
+          return map;
+        })
+        .collect(Collectors.toList());
+  }
+
+  // ── Memory persistence ──────────────────────────────────────────
+
+  private void persistCandidate(
+      UserAccount user,
+      Conversation conversation,
+      long userMessageId,
+      long assistantMessageId,
+      Map<String, Object> candidate) {
+    try {
+      String category = stringField(candidate, "category", "PREFERENCE");
+      String key = stringField(candidate, "key", "unknown");
+      String value = stringField(candidate, "value", "");
+      double confidence = doubleField(candidate, "confidence", 0.5);
+      boolean structured = booleanField(candidate, "structured", true);
+
       UserMemoryProfile saved = userMemoryStore.saveOrRefresh(
           user.id(),
-          candidate.category(),
-          candidate.key(),
-          candidate.value(),
+          category,
+          key,
+          value,
           "STRING",
-          candidate.confidence(),
+          confidence,
           conversation.id(),
           userMessageId,
-          candidate.structured());
-      if (!candidate.structured()) {
-        embeddingStore.save(saved.id(), user.id(), candidate.value(), conversation.id(), assistantMessageId);
+          structured);
+      if (!structured) {
+        embeddingStore.save(saved.id(), user.id(), value, conversation.id(), assistantMessageId);
       }
+    } catch (Exception ex) {
+      log.warn("Failed to persist memory candidate for user {}: {}", user.id(), ex.getMessage());
     }
   }
+
+  // ── Summarization ───────────────────────────────────────────────
 
   private void summarizeIfNeeded(long conversationId) {
     List<ConversationMessage> active = messageStore.activeMessages(conversationId);
@@ -147,54 +244,27 @@ public class DiagnosisService {
     messageStore.markInactive(conversationId, summary.coveredMessageEndId(), summary.id());
   }
 
-  private List<MemoryCandidate> extractCandidates(String question) {
-    List<MemoryCandidate> candidates = new ArrayList<>();
-    if (question.contains("先给结论再给证据")) {
-      candidates.add(new MemoryCandidate("PREFERENCE", "response_style", "先给结论再给证据", 0.95, true));
-    }
-    if (question.contains("现金流") || question.contains("库存")) {
-      candidates.add(new MemoryCandidate("PREFERENCE", "focus_metric", "现金流和库存", 0.85, true));
-    }
-    if (question.contains("外卖")) {
-      candidates.add(new MemoryCandidate("BUSINESS_FACT", "channel_mix", "主要依赖外卖平台", 0.90, true));
-    }
-    if (question.contains("两家门店")) {
-      candidates.add(new MemoryCandidate("BUSINESS_FACT", "store_count", "两家门店", 0.88, true));
-    }
-    if (question.contains("堂食波动")) {
-      candidates.add(new MemoryCandidate("BUSINESS_FACT", "narrative_constraint", "堂食波动很大且受平台佣金影响", 0.80, false));
-    }
-    return candidates;
+  // ── Utility ─────────────────────────────────────────────────────
+
+  private static String stringField(Map<String, Object> map, String key, String defaultValue) {
+    Object value = map.get(key);
+    return value instanceof String str ? str : defaultValue;
   }
 
-  private String latestUserContext(List<ConversationMessage> recentMessages) {
-    return recentMessages.stream()
-        .filter(message -> "USER".equals(message.sender()))
-        .map(ConversationMessage::content)
-        .reduce((first, second) -> second)
-        .orElse("");
-  }
-
-  private String preferenceValue(List<UserMemoryProfile> memories, String key) {
-    String value = memoryValue(memories, key);
-    return value.isBlank() ? "" : value + "。";
-  }
-
-  private String memoryValue(List<UserMemoryProfile> memories, String key) {
-    return memories.stream()
-        .filter(memory -> key.equals(memory.key()))
-        .map(UserMemoryProfile::value)
-        .findFirst()
-        .orElse("");
-  }
-
-  private void appendIfPresent(StringBuilder answer, String value) {
-    if (value != null && !value.isBlank()) {
-      answer.append(value);
-      if (!value.endsWith("。")) {
-        answer.append("。");
-      }
+  private static double doubleField(Map<String, Object> map, String key, double defaultValue) {
+    Object value = map.get(key);
+    if (value instanceof Number num) {
+      return num.doubleValue();
     }
+    return defaultValue;
+  }
+
+  private static boolean booleanField(Map<String, Object> map, String key, boolean defaultValue) {
+    Object value = map.get(key);
+    if (value instanceof Boolean bool) {
+      return bool;
+    }
+    return defaultValue;
   }
 
   private String serialize(Object value) {
@@ -203,8 +273,5 @@ public class DiagnosisService {
     } catch (JsonProcessingException exception) {
       throw new IllegalStateException("diagnosis serialization failed", exception);
     }
-  }
-
-  private record MemoryCandidate(String category, String key, String value, double confidence, boolean structured) {
   }
 }

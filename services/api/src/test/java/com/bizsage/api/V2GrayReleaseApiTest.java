@@ -1,15 +1,23 @@
 package com.bizsage.api;
 
+import com.bizsage.api.worker.AiWorkerClient;
+import com.bizsage.api.worker.DiagnoseRequest;
+import com.bizsage.api.worker.DiagnoseResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -23,6 +31,29 @@ class V2GrayReleaseApiTest {
 
   @Autowired
   ObjectMapper objectMapper;
+
+  @MockBean
+  AiWorkerClient aiWorkerClient;
+
+  @BeforeEach
+  void setUpWorkerMock() {
+    when(aiWorkerClient.diagnose(any(DiagnoseRequest.class)))
+        .thenAnswer(invocation -> new DiagnoseResponse(
+            "V2 operating diagnosis report for gray release. Evidence is filtered by user entitlement.",
+            List.of(new DiagnoseResponse.DiagnoseSource(
+                "seed-restaurant-cashflow",
+                "Restaurant cashflow baseline",
+                "seed://v1/restaurant-cashflow",
+                "seed-baseline",
+                0.9,
+                null,
+                "FREE")),
+            "MEDIUM",
+            "Generated from V2 gray-release knowledge and approved intelligence snapshots.",
+            "PASSED",
+            "Disclaimer: This report is for operational analysis only and is not legal, financial, or investment advice.",
+            List.of()));
+  }
 
   @Test
   void loginIncludesV2ProfileFieldsForSeedPaidUser() throws Exception {

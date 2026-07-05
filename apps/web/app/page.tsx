@@ -26,6 +26,7 @@ import {
   fetchPaidIntelligence,
   login,
   streamDiagnosis,
+  WorkerError,
   type Diagnosis,
   type DiagnosisReport,
   type LoginProfile,
@@ -68,6 +69,12 @@ const messages: Record<Locale, {
   diagnosisCreated: string;
   diagnosisFailed: string;
   loginRequired: string;
+  workerUnreachable: string;
+  llmNotConfigured: string;
+  workerTimeout: string;
+  workerError: string;
+  needsReview: string;
+  insufficientEvidence: string;
   metricsTitle: string;
   grayCohort: string;
   apiCacheTarget: string;
@@ -115,6 +122,12 @@ const messages: Record<Locale, {
     diagnosisCreated: "诊断已生成。",
     diagnosisFailed: "诊断失败。",
     loginRequired: "请先登录。",
+    workerUnreachable: "诊断服务暂时不可用，请稍后重试。",
+    llmNotConfigured: "AI 引擎未配置，请联系管理员。",
+    workerTimeout: "诊断服务响应超时，请稍后重试。",
+    workerError: "诊断服务发生错误。",
+    needsReview: "需复核",
+    insufficientEvidence: "证据不足",
     metricsTitle: "V2 灰度指标",
     grayCohort: "灰度批次",
     apiCacheTarget: "API 缓存目标",
@@ -162,6 +175,12 @@ const messages: Record<Locale, {
     diagnosisCreated: "Diagnosis generated.",
     diagnosisFailed: "Diagnosis failed.",
     loginRequired: "Please sign in first.",
+    workerUnreachable: "Diagnosis service is currently unavailable. Please try again later.",
+    llmNotConfigured: "AI engine is not configured. Please contact the administrator.",
+    workerTimeout: "Diagnosis service timed out. Please try again later.",
+    workerError: "Diagnosis service encountered an error.",
+    needsReview: "Needs Review",
+    insufficientEvidence: "Insufficient Evidence",
     metricsTitle: "V2 Gray Metrics",
     grayCohort: "Gray cohort",
     apiCacheTarget: "API cache target",
@@ -286,11 +305,35 @@ export default function Home() {
       setSelectedConversationId(conversationId);
       const nextDiagnosis = await streamDiagnosis(profile.token, conversationId, message);
       setDiagnosis(nextDiagnosis);
-      const nextReport = await fetchDiagnosisReport(profile.token, message);
-      setReport(nextReport);
+      try {
+        const nextReport = await fetchDiagnosisReport(profile.token, message);
+        setReport(nextReport);
+      } catch (reportError) {
+        // Report failure is non-fatal; still show diagnosis
+        if (reportError instanceof WorkerError) {
+          setNotice(reportError.message);
+        }
+      }
       setNotice(t.diagnosisCreated);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : t.diagnosisFailed);
+      if (error instanceof WorkerError) {
+        // Map specific worker error codes to localized messages
+        switch (error.code) {
+          case "WORKER_UNREACHABLE":
+            setNotice(t.workerUnreachable);
+            break;
+          case "LLM_NOT_CONFIGURED":
+            setNotice(t.llmNotConfigured);
+            break;
+          case "WORKER_TIMEOUT":
+            setNotice(t.workerTimeout);
+            break;
+          default:
+            setNotice(error.message || t.workerError);
+        }
+      } else {
+        setNotice(error instanceof Error ? error.message : t.diagnosisFailed);
+      }
     } finally {
       setBusy(false);
     }
@@ -417,18 +460,26 @@ export default function Home() {
                 <div className="bubble user">{message}</div>
                 {busy && <div className="bubble agent muted">{t.busyDiagnosis}</div>}
                 {diagnosis && (
-                  <div className="bubble agent">
+                  <div className={`bubble agent${diagnosis.selfCheckStatus && diagnosis.selfCheckStatus !== "PASSED" ? ` status-${diagnosis.selfCheckStatus.toLowerCase()}` : ""}`}>
                     <p>{diagnosis.answer}</p>
                     <div className="meta">
                       <span>{diagnosis.confidence}</span>
-                      <span>{diagnosis.selfCheckStatus ?? "PASSED"}</span>
+                      <span className={diagnosis.selfCheckStatus === "NEEDS_REVIEW" ? "flag needsReview" : diagnosis.selfCheckStatus === "INSUFFICIENT_EVIDENCE" ? "flag insufficientEvidence" : ""}>
+                        {diagnosis.selfCheckStatus === "NEEDS_REVIEW"
+                          ? `⚠ ${t.needsReview}`
+                          : diagnosis.selfCheckStatus === "INSUFFICIENT_EVIDENCE"
+                          ? `ℹ ${t.insufficientEvidence}`
+                          : diagnosis.selfCheckStatus ?? "PASSED"}
+                      </span>
                       <span>{diagnosis.timeliness}</span>
                     </div>
-                    <div className="sourceLine">
-                      {diagnosis.sources.map((source) => (
-                        <button key={source.id} onClick={() => setSelectedSource(source)}><Eye size={14} />{source.title}</button>
-                      ))}
-                    </div>
+                    {diagnosis.sources.length > 0 && (
+                      <div className="sourceLine">
+                        {diagnosis.sources.map((source) => (
+                          <button key={source.id} onClick={() => setSelectedSource(source)}><Eye size={14} />{source.title}</button>
+                        ))}
+                      </div>
+                    )}
                     <small>{diagnosis.disclaimer}</small>
                   </div>
                 )}
