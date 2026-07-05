@@ -37,17 +37,24 @@ class CollectionJob:
     queue_depth: int = 0
 
 
-def incremental_fingerprint(record: dict, existing_fingerprints: set[str] | None = None) -> FingerprintResult:
+def incremental_fingerprint(
+    record: dict,
+    existing_fingerprints: set[str] | None = None,
+    state_store=None,
+) -> FingerprintResult:
     content = str(record.get("content", ""))
     url = str(record.get("url", ""))
     content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
     fingerprint = hashlib.sha256(f"{url}|{content_hash}".encode("utf-8")).hexdigest()
     known = existing_fingerprints or set()
+    is_duplicate = fingerprint in known
+    if state_store is not None and state_store.has_fingerprint(fingerprint):
+        is_duplicate = True
     return FingerprintResult(
         fingerprint=fingerprint,
         content_hash=content_hash,
         sim_hash=simhash(content),
-        is_duplicate=fingerprint in known,
+        is_duplicate=is_duplicate,
     )
 
 
@@ -97,19 +104,25 @@ def fetch_with_vendor_failover(
     job: CollectionJob,
     vendors: Iterable[Callable[[], dict]],
     recent_snapshot: dict | None = None,
+    state_store=None,
+    snapshot_key: str | None = None,
 ) -> dict:
     errors: list[str] = []
     for vendor in vendors:
         try:
+            record = vendor()
+            if state_store is not None and snapshot_key is not None:
+                state_store.save_recent_snapshot(snapshot_key, record, ttl_seconds=900)
             return {
                 "source": "vendor",
-                "record": vendor(),
+                "record": record,
                 "telemetry": {"job_id": job.id, "queue_depth": job.queue_depth, "errors": errors},
             }
         except Exception as exception:  # noqa: BLE001 - failover records vendor errors.
             errors.append(str(exception))
+    cached = state_store.load_recent_snapshot(snapshot_key) if state_store and snapshot_key else None
     return {
         "source": "recent-snapshot",
-        "record": recent_snapshot or {},
+        "record": cached or recent_snapshot or {},
         "telemetry": {"job_id": job.id, "queue_depth": job.queue_depth, "errors": errors},
     }

@@ -6,6 +6,27 @@ from app.resilience import (
     incremental_fingerprint,
     retry_with_backoff,
 )
+from app.redis_state import RedisStateStore
+
+
+class FakeRedis:
+    def __init__(self):
+        self.data = {}
+
+    def exists(self, key):
+        return 1 if key in self.data else 0
+
+    def set(self, key, value):
+        self.data[key] = value
+
+    def setex(self, key, ttl, value):
+        self.data[key] = value
+
+    def get(self, key):
+        value = self.data.get(key)
+        if isinstance(value, str):
+            return value.encode("utf-8")
+        return value
 
 
 def test_incremental_fingerprint_marks_duplicate_by_url_and_hash():
@@ -29,6 +50,18 @@ def test_incremental_fingerprint_marks_duplicate_by_url_and_hash():
     assert result.is_duplicate is True
     assert result.content_hash
     assert isinstance(result.sim_hash, int)
+
+
+def test_incremental_fingerprint_uses_redis_backed_store():
+    store = RedisStateStore(FakeRedis())
+    record = {"url": "https://example.test/a", "content": "hello world"}
+
+    first = incremental_fingerprint(record, state_store=store)
+    store.save_fingerprint(first.fingerprint)
+    second = incremental_fingerprint(record, state_store=store)
+
+    assert first.is_duplicate is False
+    assert second.is_duplicate is True
 
 
 def test_retry_with_backoff_routes_permanent_failure_to_dead_letter():
@@ -71,3 +104,18 @@ def test_vendor_failover_uses_recent_snapshot_when_all_vendors_fail():
     assert result["source"] == "recent-snapshot"
     assert result["record"]["title"] == "cached snapshot"
     assert result["telemetry"]["queue_depth"] == 8
+
+
+def test_vendor_failover_reads_recent_snapshot_from_store():
+    store = RedisStateStore(FakeRedis())
+    store.save_recent_snapshot("vendor-a", {"cached": True}, ttl_seconds=300)
+
+    result = fetch_with_vendor_failover(
+        CollectionJob(id="job-1", source="vendor-a"),
+        vendors=[lambda: (_ for _ in ()).throw(RuntimeError("timeout"))],
+        state_store=store,
+        snapshot_key="vendor-a",
+    )
+
+    assert result["source"] == "recent-snapshot"
+    assert result["record"] == {"cached": True}

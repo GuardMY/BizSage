@@ -1,12 +1,25 @@
 from __future__ import annotations
 
+import os
+
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
+import redis
 
 from app.collectors import collect_form_business_data, collect_mock_api, collect_public_page
 from app.governance import govern_records
+from app.redis_state import RedisStateStore
 
 app = FastAPI(title="BizSage Collector", version="0.1.0")
+
+
+def build_state_store() -> RedisStateStore:
+    client = redis.Redis(
+        host=os.getenv("REDIS_HOST", "localhost"),
+        port=int(os.getenv("REDIS_PORT", "16379")),
+        decode_responses=False,
+    )
+    return RedisStateStore(client)
 
 
 class FormBusinessDataRequest(BaseModel):
