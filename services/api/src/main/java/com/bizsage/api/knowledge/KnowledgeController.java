@@ -4,7 +4,9 @@ import com.bizsage.api.common.ApiResponse;
 import com.bizsage.api.common.RequestIds;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import java.util.List;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,6 +20,11 @@ public class KnowledgeController {
 
   public KnowledgeController(KnowledgeStore store) {
     this.store = store;
+  }
+
+  @GetMapping
+  ApiResponse<List<KnowledgeItem>> list(HttpServletRequest request) {
+    return ApiResponse.ok(store.list(), request.getAttribute(RequestIds.ATTRIBUTE).toString());
   }
 
   @PostMapping("/import")

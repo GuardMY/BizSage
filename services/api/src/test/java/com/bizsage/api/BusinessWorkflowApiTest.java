@@ -105,6 +105,32 @@ class BusinessWorkflowApiTest {
       .andExpect(jsonPath("$.data.title").value("库存周转诊断"));
   }
 
+  @Test
+  void operatorsCanListImportedKnowledgeItems() throws Exception {
+    String token = login("operator");
+
+    mvc.perform(post("/api/knowledge/import")
+        .header("Authorization", "Bearer " + token)
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("""
+          {
+            "title":"Redis fingerprint baseline",
+            "content":"Collector dedupe records must be queryable for vector sync.",
+            "industryId":"general",
+            "regionId":"cn-default",
+            "linkId":"collector-runtime",
+            "sourceId":"seed-runtime"
+          }
+          """))
+      .andExpect(status().isOk());
+
+    mvc.perform(get("/api/knowledge")
+        .header("Authorization", "Bearer " + token))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.code").value("OK"))
+      .andExpect(jsonPath("$.data[?(@.title == 'Redis fingerprint baseline')]").isNotEmpty());
+  }
+
   private String login(String username) throws Exception {
     String response = mvc.perform(post("/api/auth/login")
         .contentType(MediaType.APPLICATION_JSON)
