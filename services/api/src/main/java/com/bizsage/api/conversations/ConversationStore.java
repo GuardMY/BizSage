@@ -56,6 +56,10 @@ public class ConversationStore {
     return findForOwner(ownerUsername, id);
   }
 
+  public Conversation getForOwner(String ownerUsername, long id) {
+    return findForOwner(ownerUsername, id);
+  }
+
   private Conversation findForOwner(String ownerUsername, long id) {
     return jdbcTemplate.query("""
         select id, owner_username, title, status, region_id, industry_id, source_id, weight

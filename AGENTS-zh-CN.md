@@ -42,7 +42,7 @@ BizSage 按产品边界拆分。`apps/web` 是 Next.js Web 应用，包含 React
 - `docs/en/data-collection-and-intelligence-perception.md` / `docs/zh-CN/data-collection-and-intelligence-perception-zh-CN.md`
 - `docs/en/risk-management-and-compliance.md` / `docs/zh-CN/risk-management-and-compliance-zh-CN.md`
 
-优先沿用仓库既有模式，并选择最小、清晰、可测试的实现。除非同步更新里程碑文档，否则不要实现当前里程碑之外的功能。不要回滚、覆盖或删除他人的工作；遇到相关改动时先理解再处理。
+优先沿用仓库既有模式。除非同步更新里程碑文档，否则不要实现当前里程碑之外的功能。不要回滚、覆盖或删除他人的工作；遇到相关改动时先理解再处理。
 
 ## 双语文档与变更日志
 

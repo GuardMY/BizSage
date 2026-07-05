@@ -50,6 +50,9 @@ class SearchRequest(BaseModel):
 class DiagnoseRequest(BaseModel):
     question: str
     knowledge: list[dict] = Field(default_factory=list)
+    recent_messages: list[dict] = Field(default_factory=list)
+    conversation_summary: str | None = None
+    long_term_memories: list[dict] = Field(default_factory=list)
     region_id: str | None = None
     industry_id: str | None = None
     membership_level: str = "FREE"
@@ -104,6 +107,9 @@ def diagnose_endpoint(request: DiagnoseRequest) -> dict:
         return diagnose(
             request.question,
             knowledge=knowledge,
+            recent_messages=request.recent_messages,
+            conversation_summary=request.conversation_summary,
+            long_term_memories=request.long_term_memories,
             region_id=request.region_id,
             industry_id=request.industry_id,
             membership_level=request.membership_level,

@@ -2,6 +2,55 @@
 
 ## 2026-07-05
 
+### Agent 规范措辞清理
+
+- 变更类型：文档维护。
+- 影响模块：`AGENTS.md`、`AGENTS-zh-CN.md`、`docs/en/standards`、`docs/zh-CN/standards` 和变更日志。
+- 主要变更：
+  - 从英文根级 Agent 指南和英文 Agent 开发规范中移除了 “smallest clear, testable implementation” 相关表述。
+  - 从中文根级 Agent 指南和中文 Agent 开发规范中移除了“最小、清晰、可测试的实现”相关表述。
+  - 保留其余里程碑、双语文档、验证和安全约束不变。
+- 验证结果：
+  - 仅文档变更，无需运行服务测试套件。
+  - 已确认中英文规范文档与中英文变更日志在同一次变更中同步更新。
+- 未完成事项：
+  - 本次措辞调整无额外未完成事项。
+
+### Agent 三层记忆实现
+
+- 变更类型：功能开发。
+- 影响模块：`services/api`、`services/ai-worker`、`apps/web`、`infra/mysql/init` 和变更日志。
+- 主要变更：
+  - 在 API 侧新增短期会话记忆持久化，基于 `messages` 表、活跃上下文过滤和滚动会话摘要实现连续诊断上下文。
+  - 在 MySQL 中新增长期记忆存储，用于保存用户偏好和可复用经营事实，并补充 `user_memory_embeddings` 侧表，为后续将非结构化长期记忆同步到 Qdrant 预留审计与映射信息。
+  - 重构诊断链路，使追问可以复用同一个 conversation，组合最近消息、会话摘要和长期记忆，再同时落库用户消息与 assistant 响应。
+  - 为 AI worker 新增长期记忆提取、摘要上下文组装和是否进入向量记忆的判定辅助逻辑。
+  - 更新 Web 诊断工作流，在用户主动新建前复用当前 conversation id，而不是每次提问都重新建会话。
+- 验证结果：
+  - 在 `services/api` 运行 `mvn test`：16 个测试通过。
+  - 在 `services/ai-worker` 运行 `python -m pytest`：24 个测试通过。
+  - 在 `apps/web` 运行 `npm test -- envelope.test.mjs`：9 个测试通过。
+  - 在 `apps/web` 运行 `npm run build`：Next.js 生产构建成功完成。
+- 未完成事项：
+  - 当前 API 诊断主链已接入新的本地记忆诊断服务；跨服务的 `API -> AI worker` 生产运行时接线已完成数据模型和 worker 辅助逻辑准备，但尚未切为默认执行路径。
+  - Qdrant 同步目前只在 MySQL 中记录为待处理的语义记忆工作项，本次未新增在线后台同步任务。
+  - 当前环境未执行浏览器手工验证和全栈 Docker 启动验证。
+
+### 组件交互与数据流归档
+
+- 变更类型：文档维护。
+- 影响模块：`docs/en`、`docs/zh-CN` 和变更日志。
+- 主要变更：
+  - 新增 `docs/en/component-interactions-and-data-flows.md`，作为当前实现版和目标架构版交互图的英文归档文档。
+  - 新增 `docs/zh-CN/component-interactions-and-data-flows-zh-CN.md`，补齐对应中文版本。
+  - 归档了当前实现图、目标架构图、诊断请求时序图、采集入库时序图的 Mermaid 与 ASCII 两种表达。
+  - 记录了当前仓库实际运行链路与目标架构闭环之间尚未完全打通的部分。
+- 验证结果：
+  - 仅文档变更，无需运行服务测试套件。
+  - 已确认英文与中文文档成对新增，并且中英文变更日志在同一变更中同步更新。
+- 未完成事项：
+  - 本次归档反映的是 `2026-07-05` 审阅时的仓库状态；当 `API -> AI worker` 主诊断链路或 `collector -> 存储` 自动化闭环发生变化时，需要同步刷新本文档。
+
 ### MySQL、Redis、Qdrant 真实接入
 
 - 变更类型：功能开发。

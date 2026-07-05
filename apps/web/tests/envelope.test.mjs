@@ -67,6 +67,14 @@ test("Web page persists the signed-in profile across refresh", async () => {
   assert.match(source, /JSON\.parse/);
 });
 
+test("Web page keeps the same conversation id for follow-up diagnosis", async () => {
+  const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /selectedConversationId/);
+  assert.match(source, /setSelectedConversationId/);
+  assert.match(source, /selectedConversationId \?\?/);
+  assert.match(source, /streamDiagnosis\(profile\.token, conversationId, message\)/);
+});
+
 test("Web page navigation buttons update visible workspace sections", async () => {
   const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(source, /activeSection/);

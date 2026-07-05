@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.llm import generate_answer
+from app.memory import build_memory_context, extract_memory_candidates
 from app.rag import KnowledgeItem, search_knowledge
 
 DISCLAIMER = "免责声明：本诊断仅用于经营分析参考，不构成投资、法律或财务建议。"
@@ -11,6 +12,9 @@ def diagnose(
     question: str,
     *,
     knowledge: list[KnowledgeItem],
+    recent_messages: list[dict] | None = None,
+    conversation_summary: str | None = None,
+    long_term_memories: list[dict] | None = None,
     region_id: str | None = None,
     industry_id: str | None = None,
     membership_level: str = "FREE",
@@ -48,6 +52,9 @@ def diagnose(
         }
 
     context = "\n".join(f"{item.title}: {item.content}" for item in results)
+    memory_context = build_memory_context(recent_messages, conversation_summary, long_term_memories)
+    if memory_context:
+        context = f"{memory_context}\n{context}"
     answer = generate_answer(question, context)
     return {
         "answer": answer,
@@ -67,4 +74,5 @@ def diagnose(
         "timeliness": TIMELINESS,
         "selfCheckStatus": "PASSED",
         "disclaimer": DISCLAIMER,
+        "memoryCandidates": extract_memory_candidates(question, answer),
     }

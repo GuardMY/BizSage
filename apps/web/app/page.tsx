@@ -188,6 +188,7 @@ export default function Home() {
   const [password, setPassword] = useState("password");
   const [profile, setProfile] = useState<LoginProfile | null>(null);
   const [activeSection, setActiveSection] = useState<WorkspaceSection>("diagnosis");
+  const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
   const [message, setMessage] = useState(messages["zh-CN"].defaultQuestion);
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
   const [report, setReport] = useState<DiagnosisReport | null>(null);
@@ -263,6 +264,7 @@ export default function Home() {
     setActiveSection("diagnosis");
     setDiagnosis(null);
     setReport(null);
+    setSelectedConversationId(null);
     setPaidRows([]);
     setMetrics(null);
     setSelectedSource(null);
@@ -278,8 +280,11 @@ export default function Home() {
     setDiagnosis(null);
     setReport(null);
     try {
-      const conversation = await createConversation(profile.token, t.diagnosisConversation);
-      const nextDiagnosis = await streamDiagnosis(profile.token, conversation.id, message);
+      const conversationId = selectedConversationId ?? (
+        await createConversation(profile.token, t.diagnosisConversation)
+      ).id;
+      setSelectedConversationId(conversationId);
+      const nextDiagnosis = await streamDiagnosis(profile.token, conversationId, message);
       setDiagnosis(nextDiagnosis);
       const nextReport = await fetchDiagnosisReport(profile.token, message);
       setReport(nextReport);
@@ -399,7 +404,14 @@ export default function Home() {
             <section className="dialogue">
               <div className="sectionHead">
                 <div><h2>{t.diagnosisConversation}</h2><p>{t.evidenceLine}</p></div>
-                <button className="ghost" onClick={() => setDiagnosis(null)}><FilePlus2 size={16} />{t.newConversation}</button>
+                <button
+                  className="ghost"
+                  onClick={() => {
+                    setDiagnosis(null);
+                    setReport(null);
+                    setSelectedConversationId(null);
+                  }}
+                ><FilePlus2 size={16} />{t.newConversation}</button>
               </div>
               <div className="messages">
                 <div className="bubble user">{message}</div>

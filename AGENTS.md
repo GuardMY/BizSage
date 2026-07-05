@@ -42,7 +42,7 @@ Before functional work, read the relevant product, architecture, implementation,
 - `docs/en/data-collection-and-intelligence-perception.md` / `docs/zh-CN/data-collection-and-intelligence-perception-zh-CN.md`
 - `docs/en/risk-management-and-compliance.md` / `docs/zh-CN/risk-management-and-compliance-zh-CN.md`
 
-Prefer existing repository patterns and the smallest clear, testable implementation. Do not implement work outside the current milestone unless the milestone documents are updated in the same change. Never revert, overwrite, or delete others' work; understand related changes before acting.
+Prefer existing repository patterns. Do not implement work outside the current milestone unless the milestone documents are updated in the same change. Never revert, overwrite, or delete others' work; understand related changes before acting.
 
 ## Bilingual Documentation & Change Logs
 

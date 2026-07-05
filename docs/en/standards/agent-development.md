@@ -5,7 +5,7 @@ This document defines the development standards for AI coding agents, automated 
 ## 1. Core Principles
 
 - Understand the project documents, existing code structure, and current git state before making changes.
-- Prefer existing repository patterns. When no pattern exists, choose the smallest clear and testable implementation.
+- Prefer existing repository patterns.
 - Do not implement V2/V3 scope unless the milestone documents have been updated.
 - Do not revert or overwrite existing work from others. If related changes conflict, understand them before acting.
 - Keep module directories isolated: Web, Android, API, AI worker, collector, infra, and docs must preserve their boundaries.

@@ -34,8 +34,14 @@ CREATE TABLE IF NOT EXISTS messages (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   conversation_id BIGINT NOT NULL,
   sender VARCHAR(32) NOT NULL,
+  message_type VARCHAR(32) NOT NULL DEFAULT 'CHAT',
   content TEXT NOT NULL,
   sources_json JSON NULL,
+  confidence VARCHAR(16) NULL,
+  timeliness VARCHAR(255) NULL,
+  self_check_status VARCHAR(32) NULL,
+  is_active_context BOOLEAN NOT NULL DEFAULT TRUE,
+  summary_group_id BIGINT NULL,
   region_id VARCHAR(64) NOT NULL,
   industry_id VARCHAR(64) NOT NULL,
   source_id VARCHAR(64) NOT NULL DEFAULT 'conversation',
@@ -43,6 +49,57 @@ CREATE TABLE IF NOT EXISTS messages (
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_messages_conversation (conversation_id)
+);
+
+CREATE TABLE IF NOT EXISTS conversation_summaries (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  conversation_id BIGINT NOT NULL,
+  summary_text TEXT NOT NULL,
+  covered_message_start_id BIGINT NOT NULL,
+  covered_message_end_id BIGINT NOT NULL,
+  summary_version INT NOT NULL DEFAULT 1,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  source_id VARCHAR(64) NOT NULL DEFAULT 'summary',
+  weight DECIMAL(8,4) NOT NULL DEFAULT 1.0000,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_conversation_summaries_conversation (conversation_id)
+);
+
+CREATE TABLE IF NOT EXISTS user_memory_profiles (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT NOT NULL,
+  memory_category VARCHAR(32) NOT NULL,
+  memory_key VARCHAR(64) NOT NULL,
+  memory_value TEXT NOT NULL,
+  value_type VARCHAR(16) NOT NULL DEFAULT 'STRING',
+  confidence DECIMAL(8,4) NOT NULL DEFAULT 0.8000,
+  source_conversation_id BIGINT NULL,
+  source_message_id BIGINT NULL,
+  last_used_at DATETIME NULL,
+  expires_at DATETIME NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_user_memory_profiles_user (user_id),
+  INDEX idx_user_memory_profiles_lookup (user_id, memory_category, memory_key, status)
+);
+
+CREATE TABLE IF NOT EXISTS user_memory_embeddings (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_memory_profile_id BIGINT NULL,
+  user_id BIGINT NOT NULL,
+  memory_text TEXT NOT NULL,
+  qdrant_point_id VARCHAR(128) NULL,
+  embedding_status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+  source_conversation_id BIGINT NULL,
+  source_message_id BIGINT NULL,
+  last_synced_at DATETIME NULL,
+  expires_at DATETIME NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_user_memory_embeddings_user (user_id, status)
 );
 
 CREATE TABLE IF NOT EXISTS intelligence (

@@ -2,6 +2,55 @@
 
 ## 2026-07-05
 
+### Agent Standards Wording Cleanup
+
+- Change type: documentation maintenance.
+- Affected modules: `AGENTS.md`, `AGENTS-zh-CN.md`, `docs/en/standards`, `docs/zh-CN/standards`, and change logs.
+- Main changes:
+  - Removed the "smallest clear, testable implementation" wording from the English root agent guidance and the English agent development standards.
+  - Removed the matching "最小、清晰、可测试的实现" wording from the Chinese root agent guidance and the Chinese agent development standards.
+  - Kept the remaining milestone, bilingual-documentation, verification, and safety requirements unchanged.
+- Verification results:
+  - Documentation-only change; no service test suite was required.
+  - Confirmed the English and Chinese standards documents and change logs were updated together.
+- Unfinished items:
+  - No additional unfinished work for this wording update.
+
+### Three-Layer Agent Memory
+
+- Change type: functional development.
+- Affected modules: `services/api`, `services/ai-worker`, `apps/web`, `infra/mysql/init`, and change logs.
+- Main changes:
+  - Added short-term conversation memory persistence in the API through `messages`, active-context filtering, and rolling conversation summaries.
+  - Added long-term memory storage in MySQL for user preferences and reusable business facts, plus a `user_memory_embeddings` sidecar table for unstructured memories that should sync to Qdrant later.
+  - Reworked the diagnosis flow so follow-up questions reuse the same conversation, read recent messages plus summaries plus long-term memory, and persist both user and assistant turns.
+  - Added AI worker memory helpers for summary assembly, long-term memory extraction, and vector-sync eligibility decisions.
+  - Updated the web diagnosis workflow to reuse the current conversation id until the user starts a new conversation.
+- Verification results:
+  - `mvn test` in `services/api`: 16 tests passed.
+  - `python -m pytest` in `services/ai-worker`: 24 tests passed.
+  - `npm test -- envelope.test.mjs` in `apps/web`: 9 tests passed.
+  - `npm run build` in `apps/web`: Next.js production build completed successfully.
+- Unfinished items:
+  - The API diagnosis path now uses the new memory-aware local diagnosis service; the cross-service API-to-AI-worker runtime handoff is prepared by schema and worker helpers but is not yet wired as the production execution path.
+  - Qdrant synchronization is currently recorded in MySQL as pending semantic-memory work items; no live background sync job was added in this change.
+  - Manual browser verification and full-stack Docker startup were not executed in this environment.
+
+### Component Interaction And Data Flow Archive
+
+- Change type: documentation maintenance.
+- Affected modules: `docs/en`, `docs/zh-CN`, and change logs.
+- Main changes:
+  - Added `docs/en/component-interactions-and-data-flows.md` as the archived English reference for current and target runtime interaction maps.
+  - Added `docs/zh-CN/component-interactions-and-data-flows-zh-CN.md` with matching Chinese content.
+  - Documented both Mermaid and ASCII diagrams for the current implementation map, target architecture map, diagnosis request sequence, and collection/ingestion sequence.
+  - Recorded the current implementation gaps between the repository's live code paths and the target architecture flow.
+- Verification results:
+  - Documentation-only change; no service test suite was required.
+  - Confirmed the English and Chinese documents were added as a matched pair and both change logs were updated in the same change.
+- Unfinished items:
+  - The archived flow maps describe the repository state reviewed on `2026-07-05`; they will need refresh when the API-to-AI-worker diagnosis path or collector-to-storage automation changes.
+
 ### MySQL Redis Qdrant Real Integration
 
 - Change type: functional development.
