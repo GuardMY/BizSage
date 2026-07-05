@@ -1,15 +1,20 @@
 package com.bizsage.api.messages;
 
+import com.bizsage.api.common.ApiResponse;
+import com.bizsage.api.common.RequestIds;
 import com.bizsage.api.conversations.ConversationStore;
 import com.bizsage.api.users.UserStore;
 import com.bizsage.api.worker.AiWorkerException;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.security.Principal;
+import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -24,14 +29,17 @@ public class MessageController {
 
   private final DiagnosisService diagnosisService;
   private final ConversationStore conversationStore;
+  private final ConversationMessageStore messageStore;
   private final UserStore userStore;
 
   public MessageController(
       DiagnosisService diagnosisService,
       ConversationStore conversationStore,
+      ConversationMessageStore messageStore,
       UserStore userStore) {
     this.diagnosisService = diagnosisService;
     this.conversationStore = conversationStore;
+    this.messageStore = messageStore;
     this.userStore = userStore;
   }
 
@@ -51,6 +59,17 @@ public class MessageController {
       String errorPayload = toErrorPayload(ex);
       return "event: error\n" + "data: " + errorPayload + "\n\n";
     }
+  }
+
+  @GetMapping
+  ApiResponse<List<ConversationMessage>> listMessages(
+      @PathVariable long conversationId,
+      Principal principal,
+      HttpServletRequest request) {
+    conversationStore.getForOwner(principal.getName(), conversationId);
+    return ApiResponse.ok(
+        messageStore.activeMessages(conversationId),
+        request.getAttribute(RequestIds.ATTRIBUTE).toString());
   }
 
   private String toErrorPayload(AiWorkerException ex) {

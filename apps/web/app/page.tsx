@@ -4,6 +4,7 @@ import {
   Archive,
   Bot,
   CheckCircle2,
+  ChevronDown,
   Database,
   Eye,
   FilePlus2,
@@ -18,15 +19,20 @@ import {
   ShieldCheck,
   UserRound
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Markdown from "../lib/markdown";
 import {
   createConversation,
+  fetchConversations,
   fetchDiagnosisReport,
+  fetchMessages,
   fetchOpsMetrics,
   fetchPaidIntelligence,
   login,
   streamDiagnosis,
   WorkerError,
+  type Conversation,
+  type ConversationMessage,
   type Diagnosis,
   type DiagnosisReport,
   type LoginProfile,
@@ -92,6 +98,11 @@ const messages: Record<Locale, {
   confidence: string;
   score: string;
   close: string;
+  generateReport: string;
+  generatingReport: string;
+  selectConversation: string;
+  noConversations: string;
+  newConversationTitle: string;
 }> = {
   "zh-CN": {
     brandSubtitle: "V2 灰度工作台",
@@ -144,7 +155,12 @@ const messages: Record<Locale, {
     sourceUrl: "地址",
     confidence: "置信度",
     score: "检索分",
-    close: "关闭"
+    close: "关闭",
+    generateReport: "生成诊断报告",
+    generatingReport: "正在生成报告...",
+    selectConversation: "选择会话",
+    noConversations: "暂无会话",
+    newConversationTitle: "新诊断会话"
   },
   en: {
     brandSubtitle: "V2 gray workspace",
@@ -197,7 +213,12 @@ const messages: Record<Locale, {
     sourceUrl: "URL",
     confidence: "Confidence",
     score: "Retrieval score",
-    close: "Close"
+    close: "Close",
+    generateReport: "Generate Report",
+    generatingReport: "Generating report...",
+    selectConversation: "Select conversation",
+    noConversations: "No conversations",
+    newConversationTitle: "New Diagnosis Chat"
   }
 };
 
@@ -208,14 +229,19 @@ export default function Home() {
   const [profile, setProfile] = useState<LoginProfile | null>(null);
   const [activeSection, setActiveSection] = useState<WorkspaceSection>("diagnosis");
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [messageHistory, setMessageHistory] = useState<ConversationMessage[]>([]);
   const [message, setMessage] = useState(messages["zh-CN"].defaultQuestion);
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
   const [report, setReport] = useState<DiagnosisReport | null>(null);
+  const [reportBusy, setReportBusy] = useState(false);
   const [paidRows, setPaidRows] = useState<PaidIntelligence[]>([]);
   const [metrics, setMetrics] = useState<OpsMetrics | null>(null);
   const [selectedSource, setSelectedSource] = useState<Source | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(messages["zh-CN"].loginNotice);
+  const [convDropdownOpen, setConvDropdownOpen] = useState(false);
+  const convDropdownRef = useRef<HTMLDivElement>(null);
 
   const t = messages[locale];
 
@@ -235,6 +261,9 @@ export default function Home() {
       window.localStorage.removeItem(PROFILE_STORAGE_KEY);
       setPaidRows([]);
       setMetrics(null);
+      setConversations([]);
+      setMessageHistory([]);
+      setSelectedConversationId(null);
       return;
     }
 
@@ -243,17 +272,55 @@ export default function Home() {
     let cancelled = false;
     Promise.allSettled([
       fetchPaidIntelligence(profile.token),
-      fetchOpsMetrics(profile.token)
-    ]).then(([nextPaidRows, nextMetrics]) => {
+      fetchOpsMetrics(profile.token),
+      fetchConversations(profile.token)
+    ]).then(([nextPaidRows, nextMetrics, nextConversations]) => {
       if (cancelled) return;
       setPaidRows(nextPaidRows.status === "fulfilled" ? nextPaidRows.value : []);
       setMetrics(nextMetrics.status === "fulfilled" ? nextMetrics.value : null);
+      const convs = nextConversations.status === "fulfilled" ? nextConversations.value : [];
+      setConversations(convs);
+      if (convs.length > 0 && !selectedConversationId) {
+        setSelectedConversationId(convs[0].id);
+      }
     });
 
     return () => {
       cancelled = true;
     };
   }, [profile]);
+
+  // Load message history when a conversation is selected
+  useEffect(() => {
+    if (!profile || !selectedConversationId) {
+      setMessageHistory([]);
+      return;
+    }
+
+    let cancelled = false;
+    fetchMessages(profile.token, selectedConversationId)
+      .then((msgs) => {
+        if (!cancelled) setMessageHistory(msgs);
+      })
+      .catch(() => {
+        if (!cancelled) setMessageHistory([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profile, selectedConversationId]);
+
+  // Close conversation dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (convDropdownRef.current && !convDropdownRef.current.contains(event.target as Node)) {
+        setConvDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const status = useMemo(() => {
     if (!profile) return t.loginNotice;
@@ -281,12 +348,16 @@ export default function Home() {
   function handleLogout() {
     setProfile(null);
     setActiveSection("diagnosis");
+    setConversations([]);
+    setMessageHistory([]);
     setDiagnosis(null);
     setReport(null);
     setSelectedConversationId(null);
     setPaidRows([]);
     setMetrics(null);
     setSelectedSource(null);
+    setConvDropdownOpen(false);
+    setReportBusy(false);
     setNotice(t.loginNotice);
   }
 
@@ -299,20 +370,22 @@ export default function Home() {
     setDiagnosis(null);
     setReport(null);
     try {
-      const conversationId = selectedConversationId ?? (
-        await createConversation(profile.token, t.diagnosisConversation)
-      ).id;
-      setSelectedConversationId(conversationId);
+      let conversationId = selectedConversationId;
+      if (!conversationId) {
+        const created = await createConversation(profile.token, t.newConversationTitle);
+        conversationId = created.id;
+        setSelectedConversationId(conversationId);
+        // Refresh conversation list
+        setConversations((prev) => [created, ...prev]);
+      }
       const nextDiagnosis = await streamDiagnosis(profile.token, conversationId, message);
       setDiagnosis(nextDiagnosis);
+      // Reload messages to include the new diagnosis in history
       try {
-        const nextReport = await fetchDiagnosisReport(profile.token, message);
-        setReport(nextReport);
-      } catch (reportError) {
-        // Report failure is non-fatal; still show diagnosis
-        if (reportError instanceof WorkerError) {
-          setNotice(reportError.message);
-        }
+        const updatedMessages = await fetchMessages(profile.token, conversationId);
+        setMessageHistory(updatedMessages);
+      } catch {
+        // Non-fatal if message reload fails
       }
       setNotice(t.diagnosisCreated);
     } catch (error) {
@@ -336,6 +409,43 @@ export default function Home() {
       }
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function generateReport() {
+    if (!profile) return;
+    setReportBusy(true);
+    try {
+      const nextReport = await fetchDiagnosisReport(profile.token, message);
+      setReport(nextReport);
+    } catch (error) {
+      if (error instanceof WorkerError) {
+        setNotice(error.message);
+      } else {
+        setNotice(error instanceof Error ? error.message : t.diagnosisFailed);
+      }
+    } finally {
+      setReportBusy(false);
+    }
+  }
+
+  function handleSelectConversation(id: number) {
+    setSelectedConversationId(id);
+    setDiagnosis(null);
+    setReport(null);
+    setConvDropdownOpen(false);
+  }
+
+  async function handleNewConversation() {
+    if (!profile) return;
+    try {
+      const created = await createConversation(profile.token, t.newConversationTitle);
+      setConversations((prev) => [created, ...prev]);
+      setSelectedConversationId(created.id);
+      setDiagnosis(null);
+      setReport(null);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : t.diagnosisFailed);
     }
   }
 
@@ -438,7 +548,7 @@ export default function Home() {
               <LogOut size={16} />
               {t.logout}
             </button>
-            <div className="health"><CheckCircle2 size={18} />{t.health}</div>
+            <div className="health"><span className="healthDot" /><CheckCircle2 size={16} />{t.health}</div>
           </div>
         </header>
 
@@ -446,22 +556,74 @@ export default function Home() {
           <div className="grid">
             <section className="dialogue">
               <div className="sectionHead">
-                <div><h2>{t.diagnosisConversation}</h2><p>{t.evidenceLine}</p></div>
-                <button
-                  className="ghost"
-                  onClick={() => {
-                    setDiagnosis(null);
-                    setReport(null);
-                    setSelectedConversationId(null);
-                  }}
-                ><FilePlus2 size={16} />{t.newConversation}</button>
+                <div className="convSelector" ref={convDropdownRef}>
+                  <button
+                    className="convSelectBtn"
+                    onClick={() => setConvDropdownOpen(!convDropdownOpen)}
+                  >
+                    <h2>
+                      {selectedConversationId
+                        ? (conversations.find(c => c.id === selectedConversationId)?.title ?? t.diagnosisConversation)
+                        : (conversations.length > 0 ? t.selectConversation : t.diagnosisConversation)}
+                    </h2>
+                    <ChevronDown size={16} className={`chevron ${convDropdownOpen ? "chevronOpen" : ""}`} />
+                  </button>
+                  {convDropdownOpen && (
+                    <div className="convDropdown">
+                      {conversations.length === 0 && (
+                        <div className="convDropdownEmpty">{t.noConversations}</div>
+                      )}
+                      {conversations.map((conv) => (
+                        <button
+                          key={conv.id}
+                          className={`convDropdownItem ${conv.id === selectedConversationId ? "active" : ""}`}
+                          onClick={() => handleSelectConversation(conv.id)}
+                        >
+                          <span className="convTitle">{conv.title}</span>
+                          <span className="convStatus">{conv.status}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button className="ghost" onClick={handleNewConversation}>
+                  <FilePlus2 size={16} />{t.newConversation}
+                </button>
               </div>
               <div className="messages">
-                <div className="bubble user">{message}</div>
-                {busy && <div className="bubble agent muted">{t.busyDiagnosis}</div>}
+                {/* History messages */}
+                {messageHistory.map((msg) => (
+                  <div key={msg.id} className={`bubble ${msg.sender === "USER" ? "user" : "agent"}`}>
+                    {msg.sender === "ASSISTANT" ? (
+                      <Markdown content={msg.content} />
+                    ) : (
+                      <p>{msg.content}</p>
+                    )}
+                    {msg.confidence && (
+                      <div className="meta">
+                        <span>{msg.confidence}</span>
+                        {msg.selfCheckStatus && (
+                          <span className={msg.selfCheckStatus === "NEEDS_REVIEW" ? "flag needsReview" : msg.selfCheckStatus === "INSUFFICIENT_EVIDENCE" ? "flag insufficientEvidence" : ""}>
+                            {msg.selfCheckStatus === "NEEDS_REVIEW"
+                              ? `⚠ ${t.needsReview}`
+                              : msg.selfCheckStatus === "INSUFFICIENT_EVIDENCE"
+                              ? `ℹ ${t.insufficientEvidence}`
+                              : msg.selfCheckStatus}
+                          </span>
+                        )}
+                        <span>{msg.timeliness}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {/* Current input (preview) */}
+                {!busy && !diagnosis && messageHistory.length === 0 && (
+                  <div className="bubble user">{message}</div>
+                )}
+                {busy && <div className="bubble agent muted"><span className="loadingDots"><span /><span /><span /></span>{t.busyDiagnosis}</div>}
                 {diagnosis && (
                   <div className={`bubble agent${diagnosis.selfCheckStatus && diagnosis.selfCheckStatus !== "PASSED" ? ` status-${diagnosis.selfCheckStatus.toLowerCase()}` : ""}`}>
-                    <p>{diagnosis.answer}</p>
+                    <Markdown content={diagnosis.answer} />
                     <div className="meta">
                       <span>{diagnosis.confidence}</span>
                       <span className={diagnosis.selfCheckStatus === "NEEDS_REVIEW" ? "flag needsReview" : diagnosis.selfCheckStatus === "INSUFFICIENT_EVIDENCE" ? "flag insufficientEvidence" : ""}>
@@ -494,7 +656,7 @@ export default function Home() {
             <aside className="ops">
               <MetricsPanel metrics={metrics} t={t} />
               <PaidIntelligencePanel paidRows={paidRows} t={t} />
-              <ReportPanel report={report} t={t} />
+              <ReportPanel report={report} diagnosis={diagnosis} reportBusy={reportBusy} onGenerateReport={generateReport} t={t} />
             </aside>
           </div>
         )}
@@ -519,7 +681,7 @@ export default function Home() {
 
             <aside className="ops">
               <MetricsPanel metrics={metrics} t={t} />
-              <ReportPanel report={report} t={t} />
+              <ReportPanel report={report} diagnosis={diagnosis} reportBusy={reportBusy} onGenerateReport={generateReport} t={t} />
             </aside>
           </div>
         )}
@@ -623,7 +785,19 @@ function PaidIntelligencePanel({ paidRows, t }: { paidRows: PaidIntelligence[]; 
   );
 }
 
-function ReportPanel({ report, t }: { report: DiagnosisReport | null; t: (typeof messages)[Locale] }) {
+function ReportPanel({
+  report,
+  diagnosis,
+  reportBusy,
+  onGenerateReport,
+  t
+}: {
+  report: DiagnosisReport | null;
+  diagnosis: Diagnosis | null;
+  reportBusy: boolean;
+  onGenerateReport: () => void;
+  t: (typeof messages)[Locale];
+}) {
   return (
     <section className="opsBlock">
       <div className="sectionHead compact"><h2><FileText size={16} /> {t.reportTitle}</h2></div>
@@ -633,6 +807,16 @@ function ReportPanel({ report, t }: { report: DiagnosisReport | null; t: (typeof
             <strong>{report.format} {t.reportMetadata}</strong>
             <span>{report.selfCheckStatus}</span>
             <small>{report.summary}</small>
+          </div>
+        ) : diagnosis ? (
+          <div className="row">
+            <div className="reportGenerateArea">
+              <small>{t.reportEmptyDetail}</small>
+              <button className="primary" onClick={onGenerateReport} disabled={reportBusy}>
+                <FileText size={16} />
+                {reportBusy ? t.generatingReport : t.generateReport}
+              </button>
+            </div>
           </div>
         ) : (
           <EmptyRow title={t.reportEmptyTitle} detail={t.reportEmptyDetail} />
@@ -653,9 +837,9 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function EmptyRow({ title, detail }: { title: string; detail: string }) {
   return (
-    <div className="row">
+    <div className="emptyRow">
+      <FileText size={28} />
       <strong>{title}</strong>
-      <span>EMPTY</span>
       <small>{detail}</small>
     </div>
   );

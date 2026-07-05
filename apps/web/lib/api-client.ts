@@ -87,6 +87,21 @@ export type DiagnosisReport = {
   disclaimer: string;
 };
 
+export type ConversationMessage = {
+  id: number;
+  conversationId: number;
+  sender: "USER" | "ASSISTANT";
+  messageType: string;
+  content: string;
+  sourcesJson: string | null;
+  confidence: string | null;
+  timeliness: string | null;
+  selfCheckStatus: string | null;
+  activeContext: boolean;
+  summaryGroupId: number | null;
+  createTime: string;
+};
+
 export type OpsMetrics = {
   grayCohort: string;
   cacheHitRateTarget: number;
@@ -146,6 +161,24 @@ export async function createConversation(token: string, title: string) {
   });
   if (!response.ok) throw new Error("Create conversation failed");
   const envelope = (await response.json()) as ApiEnvelope<Conversation>;
+  return envelope.data;
+}
+
+export async function fetchConversations(token: string) {
+  const response = await fetch(`${API_BASE}/conversations`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw new Error("Fetch conversations failed");
+  const envelope = (await response.json()) as ApiEnvelope<Conversation[]>;
+  return envelope.data;
+}
+
+export async function fetchMessages(token: string, conversationId: number) {
+  const response = await fetch(`${API_BASE}/conversations/${conversationId}/messages`, {
+    headers: authHeaders(token)
+  });
+  if (!response.ok) throw new Error("Fetch messages failed");
+  const envelope = (await response.json()) as ApiEnvelope<ConversationMessage[]>;
   return envelope.data;
 }
 
