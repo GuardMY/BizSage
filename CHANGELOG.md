@@ -2,6 +2,20 @@
 
 ## 2026-07-05
 
+### Three-Layer Memory Plan Archive
+
+- Change type: documentation maintenance.
+- Affected modules: `docs/superpowers/plans` and change logs.
+- Main changes:
+  - Added `docs/superpowers/plans/2026-07-05-three-layer-memory.md` as the English implementation plan archive for the three-layer memory rollout.
+  - Added `docs/superpowers/plans/2026-07-05-three-layer-memory-zh-CN.md` as the matching Chinese version.
+  - Preserved the task-by-task rollout order covering schema, API persistence, long-term memory, AI worker support, summarization, and web verification.
+- Verification results:
+  - Documentation-only change; no service test suite was required.
+  - Confirmed the English and Chinese plan files and both change logs were updated together.
+- Unfinished items:
+  - The archived plan reflects the implementation breakdown reviewed on `2026-07-05`; if later execution diverges, the plan archive should be refreshed accordingly.
+
 ### Agent Standards Wording Cleanup
 
 - Change type: documentation maintenance.
