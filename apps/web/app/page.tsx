@@ -316,7 +316,7 @@ export default function Home() {
           <button className="navItem" title={t.navUsers}><UserRound size={18} />{t.navUsers}</button>
           <button className="navItem" title={t.navArchive}><Archive size={18} />{t.navArchive}</button>
         </nav>
-        <section className="identityPanel">
+        <section className="identityPanel" aria-label={t.identity}>
           <div className="panelTitle"><ShieldCheck size={16} />{t.identity}</div>
           <strong>{profile.username}</strong>
           <small>{profile.role} / {profile.membershipLevel}</small>

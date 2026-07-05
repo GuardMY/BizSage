@@ -41,3 +41,19 @@ test("Web page gates workspace behind a standalone login screen", async () => {
   assert.match(source, /setPaidRows\(\[\]\)/);
   assert.match(source, /setSelectedSource\(null\)/);
 });
+
+test("Web page shows profile identity after login without embedding login controls", async () => {
+  const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const identityStart = source.indexOf("<section className=\"identityPanel\" aria-label={t.identity}>");
+  const identityEnd = source.indexOf("</section>", identityStart);
+  assert.notEqual(identityStart, -1);
+  assert.notEqual(identityEnd, -1);
+
+  const identityPanel = source.slice(identityStart, identityEnd);
+  assert.match(identityPanel, /profile\.username/);
+  assert.match(identityPanel, /profile\.role/);
+  assert.match(identityPanel, /profile\.membershipLevel/);
+  assert.doesNotMatch(identityPanel, /<input/);
+  assert.doesNotMatch(identityPanel, /LogIn/);
+  assert.doesNotMatch(identityPanel, /handleLogin/);
+});

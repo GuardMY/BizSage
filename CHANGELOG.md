@@ -2,6 +2,20 @@
 
 ## 2026-07-05
 
+### Web Authenticated Identity Panel Guard
+
+- Change type: functional maintenance.
+- Affected modules: `apps/web`.
+- Main changes:
+  - Added a regression test that keeps the main workspace behind the login gate.
+  - Added a regression test that verifies the authenticated identity panel contains profile details instead of login controls.
+  - Added an accessible label to the authenticated identity panel so the state boundary is explicit and testable.
+- Verification results:
+  - `npm test` in `apps/web`: 6 tests passed.
+  - `npm run build` in `apps/web`: Next.js production build completed successfully.
+- Unfinished items:
+  - Manual browser login flow was not executed because the local API service was not started in this turn.
+
 ### Agent Standards Merge
 
 - Change type: documentation maintenance.
