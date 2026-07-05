@@ -1,5 +1,50 @@
 ﻿# Change Log
 
+## 2026-07-05
+
+### Agent Standards Merge
+
+- Change type: documentation maintenance.
+- Affected modules: root contributor documentation and change log.
+- Main changes:
+  - Added the contents of `AGENTS-b.md` into `AGENTS.md` as agent development standards.
+  - Added matching Chinese guidance to `AGENTS-zh-CN.md`.
+  - Preserved contributor guide sections while restoring governance, bilingual documentation, milestone, verification, and safety rules.
+- Verification results:
+  - Documentation-only change; no service test suite was required.
+  - Confirmed the English and Chinese root guides both contain the merged agent standards.
+- Unfinished items:
+  - None.
+
+### Contributor Guide Refresh
+
+- Change type: documentation maintenance.
+- Affected modules: root contributor documentation and change log.
+- Main changes:
+  - Recreated `AGENTS.md` as a concise repository contributor guide.
+  - Updated `AGENTS-zh-CN.md` with matching Chinese guidance.
+  - Documented project structure, local commands, style, testing, PR expectations, and agent-specific notes.
+- Verification results:
+  - Documentation-only change; no service test suite was required.
+  - Confirmed the matching Chinese guide and change log entry were updated in the same change.
+- Unfinished items:
+  - None.
+
+### Web Login Gate And Bilingual Interface
+
+- Change type: functional development.
+- Affected modules: `apps/web` and V2 documentation.
+- Main changes:
+  - Changed the Web app so signed-out users see only a standalone BizSage login screen.
+  - Added Chinese/English in-page language switching on both the login screen and authenticated workspace.
+  - Added logout cleanup for profile, diagnosis, report, paid intelligence, metrics, and source modal state.
+  - Updated V2 milestone and verification records, and restored readable UTF-8 Chinese for affected documentation.
+- Verification results:
+  - `npm test` in `apps/web`: 5 tests passed.
+  - `npm run build` in `apps/web`: Next.js production build completed successfully.
+- Unfinished items:
+  - Manual browser login flow was not executed because the local API service was not started in this turn.
+
 ## 2026-07-04
 
 ### Local Full-Stack Startup Script

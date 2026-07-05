@@ -1,9 +1,13 @@
 # V2 Verification Results
 
-Verification date: 2026-07-04
+Verification date: 2026-07-05
 
 ## Passed In Current Environment
 
+- Web login gate and bilingual UI tests: `npm test` in `apps/web`
+  - Result: 5 tests passed, 0 failures.
+- Web production build after login gate and bilingual UI update: `npm run build` in `apps/web`
+  - Result: Next.js production build completed successfully.
 - API full test suite: `mvn test` in `services/api`
   - Result: 12 tests passed, 0 failures.
 - Collector full test suite: `python -m pytest` in `services/collector`
@@ -27,6 +31,7 @@ Verification date: 2026-07-04
 - API stores for users, conversations, intelligence, paid intelligence, and knowledge use JDBC-backed repositories.
 - User-visible diagnosis and seed knowledge text is readable UTF-8 Chinese in API, AI worker, Web, and corrected database seed paths.
 - Web login, diagnosis submission, report metadata, paid intelligence, and ops metrics use real API-client calls.
+- Signed-out Web users now see only the standalone login screen; the authenticated workspace supports Chinese/English in-page switching and logout state cleanup.
 - Collector resilience helpers cover incremental fingerprinting, retry exhaustion, circuit opening, dead-letter classification, and recent snapshot fallback.
 - AI retrieval filters by region, industry, and entitlement; self-check blocks suspicious conflicts with controlled output.
 
@@ -48,7 +53,11 @@ Verification date: 2026-07-04
   - Reason: requires long-running deployed environment.
   - Command to run: monitor API, collector, AI worker, Web, Redis, MySQL, and Qdrant for the required duration.
   - Remediation: schedule observation during staging or gray release and record incidents.
+- Browser-based manual login flow.
+  - Reason: local API service was not started during the Web login gate implementation turn.
+  - Command to run: start the API service, run `npm run dev` in `apps/web`, then verify `operator/password` login, language switching, diagnosis submission, and logout in a browser.
+  - Remediation: execute during the next local full-stack smoke pass.
 
 ## Current Exit Status
 
-V2 is active but not ready to exit. Functional gray-release skeleton checks pass, while recovery drills, load testing, Docker health checks, and gray stability evidence remain open.
+V2 is active but not ready to exit. Functional gray-release skeleton checks and Web login gate/bilingual UI checks pass, while recovery drills, load testing, Docker health checks, browser-based full-stack login smoke testing, and gray stability evidence remain open.
