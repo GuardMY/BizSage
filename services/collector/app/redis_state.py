@@ -25,20 +25,3 @@ class RedisStateStore:
         if isinstance(raw, bytes):
             raw = raw.decode("utf-8")
         return json.loads(raw)
-
-
-class FakeRedis:
-    def __init__(self):
-        self.data = {}
-
-    def exists(self, key):
-        return 1 if key in self.data else 0
-
-    def set(self, key, value):
-        self.data[key] = value
-
-    def setex(self, key, ttl, value):
-        self.data[key] = value
-
-    def get(self, key):
-        return self.data.get(key)
