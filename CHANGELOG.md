@@ -2,6 +2,22 @@
 
 ## 2026-07-05
 
+### Infrastructure Host Port Exposure
+
+- Change type: functional development.
+- Affected modules: `infra/docker-compose.yml` and change logs.
+- Main changes:
+  - Exposed MySQL to the host with non-default port mapping `${MYSQL_PORT:-13306}:3306`.
+  - Exposed Redis to the host with non-default port mapping `${REDIS_PORT:-16379}:6379`.
+  - Exposed Qdrant to the host with non-default port mapping `${QDRANT_PORT:-16333}:6333`.
+  - Kept container-internal service ports unchanged so existing inter-container URLs and local startup scripts continue to work.
+- Verification results:
+  - Reviewed `infra/scripts/start-local.ps1` and `infra/scripts/start-all.ps1`, which already wait on host ports `13306`, `16379`, and `16333`.
+  - Performed a configuration-level verification by re-reading `infra/docker-compose.yml` after the change.
+  - Did not run `docker compose up` in this turn, so live container reachability was not executed.
+- Unfinished items:
+  - A live Docker startup check is still needed to confirm the three host port mappings are reachable on the target machine.
+
 ### Conversation Schema Compatibility Fix
 
 - Change type: functional development.
