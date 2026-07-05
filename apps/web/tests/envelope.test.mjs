@@ -57,3 +57,21 @@ test("Web page shows profile identity after login without embedding login contro
   assert.doesNotMatch(identityPanel, /LogIn/);
   assert.doesNotMatch(identityPanel, /handleLogin/);
 });
+
+test("Web page persists the signed-in profile across refresh", async () => {
+  const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /localStorage/);
+  assert.match(source, /useEffect/);
+  assert.match(source, /setProfile\(nextProfile\)/);
+  assert.match(source, /JSON\.stringify\(profile\)/);
+  assert.match(source, /JSON\.parse/);
+});
+
+test("Web page navigation buttons update visible workspace sections", async () => {
+  const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /activeSection/);
+  assert.match(source, /setActiveSection\("intelligence"\)/);
+  assert.match(source, /setActiveSection\("users"\)/);
+  assert.match(source, /setActiveSection\("archive"\)/);
+  assert.match(source, /className=\{`navItem \$\{activeSection ===/);
+});

@@ -18,7 +18,7 @@ import {
   ShieldCheck,
   UserRound
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   createConversation,
   fetchDiagnosisReport,
@@ -35,6 +35,9 @@ import {
 } from "../lib/api-client";
 
 type Locale = "zh-CN" | "en";
+type WorkspaceSection = "diagnosis" | "intelligence" | "users" | "archive";
+
+const PROFILE_STORAGE_KEY = "bizsage.web.profile";
 
 const messages: Record<Locale, {
   brandSubtitle: string;
@@ -184,6 +187,7 @@ export default function Home() {
   const [username, setUsername] = useState("operator");
   const [password, setPassword] = useState("password");
   const [profile, setProfile] = useState<LoginProfile | null>(null);
+  const [activeSection, setActiveSection] = useState<WorkspaceSection>("diagnosis");
   const [message, setMessage] = useState(messages["zh-CN"].defaultQuestion);
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
   const [report, setReport] = useState<DiagnosisReport | null>(null);
@@ -194,6 +198,42 @@ export default function Home() {
   const [notice, setNotice] = useState(messages["zh-CN"].loginNotice);
 
   const t = messages[locale];
+
+  useEffect(() => {
+    try {
+      const rawProfile = window.localStorage.getItem(PROFILE_STORAGE_KEY);
+      if (!rawProfile) return;
+      const savedProfile = JSON.parse(rawProfile) as LoginProfile;
+      setProfile(savedProfile);
+    } catch {
+      window.localStorage.removeItem(PROFILE_STORAGE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!profile) {
+      window.localStorage.removeItem(PROFILE_STORAGE_KEY);
+      setPaidRows([]);
+      setMetrics(null);
+      return;
+    }
+
+    window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
+
+    let cancelled = false;
+    Promise.allSettled([
+      fetchPaidIntelligence(profile.token),
+      fetchOpsMetrics(profile.token)
+    ]).then(([nextPaidRows, nextMetrics]) => {
+      if (cancelled) return;
+      setPaidRows(nextPaidRows.status === "fulfilled" ? nextPaidRows.value : []);
+      setMetrics(nextMetrics.status === "fulfilled" ? nextMetrics.value : null);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profile]);
 
   const status = useMemo(() => {
     if (!profile) return t.loginNotice;
@@ -209,14 +249,8 @@ export default function Home() {
     try {
       const nextProfile = await login(username, password);
       setProfile(nextProfile);
+      setActiveSection("diagnosis");
       setNotice(t.loginSuccess);
-
-      const [nextPaidRows, nextMetrics] = await Promise.allSettled([
-        fetchPaidIntelligence(nextProfile.token),
-        fetchOpsMetrics(nextProfile.token)
-      ]);
-      setPaidRows(nextPaidRows.status === "fulfilled" ? nextPaidRows.value : []);
-      setMetrics(nextMetrics.status === "fulfilled" ? nextMetrics.value : null);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : t.loginFailed);
     } finally {
@@ -226,6 +260,7 @@ export default function Home() {
 
   function handleLogout() {
     setProfile(null);
+    setActiveSection("diagnosis");
     setDiagnosis(null);
     setReport(null);
     setPaidRows([]);
@@ -311,10 +346,26 @@ export default function Home() {
           </div>
         </div>
         <nav className="nav">
-          <button className="navItem active" title={t.diagnosisConversation}><Bot size={18} />{t.navDiagnosis}</button>
-          <button className="navItem" title={t.navIntelligence}><Database size={18} />{t.navIntelligence}</button>
-          <button className="navItem" title={t.navUsers}><UserRound size={18} />{t.navUsers}</button>
-          <button className="navItem" title={t.navArchive}><Archive size={18} />{t.navArchive}</button>
+          <button
+            className={`navItem ${activeSection === "diagnosis" ? "active" : ""}`}
+            title={t.diagnosisConversation}
+            onClick={() => setActiveSection("diagnosis")}
+          ><Bot size={18} />{t.navDiagnosis}</button>
+          <button
+            className={`navItem ${activeSection === "intelligence" ? "active" : ""}`}
+            title={t.navIntelligence}
+            onClick={() => setActiveSection("intelligence")}
+          ><Database size={18} />{t.navIntelligence}</button>
+          <button
+            className={`navItem ${activeSection === "users" ? "active" : ""}`}
+            title={t.navUsers}
+            onClick={() => setActiveSection("users")}
+          ><UserRound size={18} />{t.navUsers}</button>
+          <button
+            className={`navItem ${activeSection === "archive" ? "active" : ""}`}
+            title={t.navArchive}
+            onClick={() => setActiveSection("archive")}
+          ><Archive size={18} />{t.navArchive}</button>
         </nav>
         <section className="identityPanel" aria-label={t.identity}>
           <div className="panelTitle"><ShieldCheck size={16} />{t.identity}</div>
@@ -343,51 +394,54 @@ export default function Home() {
           </div>
         </header>
 
-        <div className="grid">
-          <section className="dialogue">
-            <div className="sectionHead">
-              <div><h2>{t.diagnosisConversation}</h2><p>{t.evidenceLine}</p></div>
-              <button className="ghost" onClick={() => setDiagnosis(null)}><FilePlus2 size={16} />{t.newConversation}</button>
-            </div>
-            <div className="messages">
-              <div className="bubble user">{message}</div>
-              {busy && <div className="bubble agent muted">{t.busyDiagnosis}</div>}
-              {diagnosis && (
-                <div className="bubble agent">
-                  <p>{diagnosis.answer}</p>
-                  <div className="meta">
-                    <span>{diagnosis.confidence}</span>
-                    <span>{diagnosis.selfCheckStatus ?? "PASSED"}</span>
-                    <span>{diagnosis.timeliness}</span>
+        {activeSection === "diagnosis" && (
+          <div className="grid">
+            <section className="dialogue">
+              <div className="sectionHead">
+                <div><h2>{t.diagnosisConversation}</h2><p>{t.evidenceLine}</p></div>
+                <button className="ghost" onClick={() => setDiagnosis(null)}><FilePlus2 size={16} />{t.newConversation}</button>
+              </div>
+              <div className="messages">
+                <div className="bubble user">{message}</div>
+                {busy && <div className="bubble agent muted">{t.busyDiagnosis}</div>}
+                {diagnosis && (
+                  <div className="bubble agent">
+                    <p>{diagnosis.answer}</p>
+                    <div className="meta">
+                      <span>{diagnosis.confidence}</span>
+                      <span>{diagnosis.selfCheckStatus ?? "PASSED"}</span>
+                      <span>{diagnosis.timeliness}</span>
+                    </div>
+                    <div className="sourceLine">
+                      {diagnosis.sources.map((source) => (
+                        <button key={source.id} onClick={() => setSelectedSource(source)}><Eye size={14} />{source.title}</button>
+                      ))}
+                    </div>
+                    <small>{diagnosis.disclaimer}</small>
                   </div>
-                  <div className="sourceLine">
-                    {diagnosis.sources.map((source) => (
-                      <button key={source.id} onClick={() => setSelectedSource(source)}><Eye size={14} />{source.title}</button>
-                    ))}
-                  </div>
-                  <small>{diagnosis.disclaimer}</small>
-                </div>
-              )}
-            </div>
-            <div className="composer">
-              <Search size={18} />
-              <input value={message} onChange={(event) => setMessage(event.target.value)} />
-              <button className="primary icon" onClick={submitDiagnosis} disabled={busy} title={t.sendDiagnosis}><Send size={18} /></button>
-            </div>
-          </section>
-
-          <aside className="ops">
-            <section className="opsBlock">
-              <div className="sectionHead compact"><h2><Gauge size={16} /> {t.metricsTitle}</h2></div>
-              <div className="metricGrid">
-                <Metric label={t.grayCohort} value={metrics?.grayCohort ?? "-"} />
-                <Metric label={t.apiCacheTarget} value={metrics ? `${Math.round(metrics.cacheHitRateTarget * 100)}%` : "-"} />
-                <Metric label={t.crawlerRtoTarget} value={metrics ? `< ${metrics.crawlerRtoMinutesTarget} min` : "-"} />
-                <Metric label={t.dbRecoveryTarget} value={metrics ? `<= ${metrics.databaseRecoveryDataLossHoursTarget} h` : "-"} />
+                )}
+              </div>
+              <div className="composer">
+                <Search size={18} />
+                <input value={message} onChange={(event) => setMessage(event.target.value)} />
+                <button className="primary icon" onClick={submitDiagnosis} disabled={busy} title={t.sendDiagnosis}><Send size={18} /></button>
               </div>
             </section>
-            <section className="opsBlock">
-              <div className="sectionHead compact"><h2><LockKeyhole size={16} /> {t.paidTitle}</h2></div>
+
+            <aside className="ops">
+              <MetricsPanel metrics={metrics} t={t} />
+              <PaidIntelligencePanel paidRows={paidRows} t={t} />
+              <ReportPanel report={report} t={t} />
+            </aside>
+          </div>
+        )}
+
+        {activeSection === "intelligence" && (
+          <div className="grid">
+            <section className="dialogue">
+              <div className="sectionHead">
+                <div><h2>{t.navIntelligence}</h2><p>{t.evidenceLine}</p></div>
+              </div>
               <div className="table">
                 {paidRows.length === 0 && <EmptyRow title={t.paidEmptyTitle} detail={t.paidEmptyDetail} />}
                 {paidRows.map((row) => (
@@ -399,8 +453,42 @@ export default function Home() {
                 ))}
               </div>
             </section>
-            <section className="opsBlock">
-              <div className="sectionHead compact"><h2><FileText size={16} /> {t.reportTitle}</h2></div>
+
+            <aside className="ops">
+              <MetricsPanel metrics={metrics} t={t} />
+              <ReportPanel report={report} t={t} />
+            </aside>
+          </div>
+        )}
+
+        {activeSection === "users" && (
+          <div className="grid">
+            <section className="dialogue">
+              <div className="sectionHead">
+                <div><h2>{t.navUsers}</h2><p>{status}</p></div>
+              </div>
+              <div className="table">
+                <div className="row">
+                  <strong>{profile.username}</strong>
+                  <span>{profile.role}</span>
+                  <small>{profile.membershipLevel} / {profile.regionId} / {profile.industryId}</small>
+                </div>
+              </div>
+            </section>
+
+            <aside className="ops">
+              <MetricsPanel metrics={metrics} t={t} />
+              <PaidIntelligencePanel paidRows={paidRows} t={t} />
+            </aside>
+          </div>
+        )}
+
+        {activeSection === "archive" && (
+          <div className="grid">
+            <section className="dialogue">
+              <div className="sectionHead">
+                <div><h2>{t.navArchive}</h2><p>{t.reportMetadata}</p></div>
+              </div>
               <div className="table">
                 {report ? (
                   <div className="row">
@@ -413,8 +501,13 @@ export default function Home() {
                 )}
               </div>
             </section>
-          </aside>
-        </div>
+
+            <aside className="ops">
+              <MetricsPanel metrics={metrics} t={t} />
+              <PaidIntelligencePanel paidRows={paidRows} t={t} />
+            </aside>
+          </div>
+        )}
       </section>
 
       {selectedSource && (
@@ -432,6 +525,57 @@ export default function Home() {
         </div>
       )}
     </main>
+  );
+}
+
+function MetricsPanel({ metrics, t }: { metrics: OpsMetrics | null; t: (typeof messages)[Locale] }) {
+  return (
+    <section className="opsBlock">
+      <div className="sectionHead compact"><h2><Gauge size={16} /> {t.metricsTitle}</h2></div>
+      <div className="metricGrid">
+        <Metric label={t.grayCohort} value={metrics?.grayCohort ?? "-"} />
+        <Metric label={t.apiCacheTarget} value={metrics ? `${Math.round(metrics.cacheHitRateTarget * 100)}%` : "-"} />
+        <Metric label={t.crawlerRtoTarget} value={metrics ? `< ${metrics.crawlerRtoMinutesTarget} min` : "-"} />
+        <Metric label={t.dbRecoveryTarget} value={metrics ? `<= ${metrics.databaseRecoveryDataLossHoursTarget} h` : "-"} />
+      </div>
+    </section>
+  );
+}
+
+function PaidIntelligencePanel({ paidRows, t }: { paidRows: PaidIntelligence[]; t: (typeof messages)[Locale] }) {
+  return (
+    <section className="opsBlock">
+      <div className="sectionHead compact"><h2><LockKeyhole size={16} /> {t.paidTitle}</h2></div>
+      <div className="table">
+        {paidRows.length === 0 && <EmptyRow title={t.paidEmptyTitle} detail={t.paidEmptyDetail} />}
+        {paidRows.map((row) => (
+          <div className="row" key={row.id}>
+            <strong>{row.title}</strong>
+            <span>{row.status}</span>
+            <small>{row.entitlement} / {row.regionId} / {row.industryId}</small>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ReportPanel({ report, t }: { report: DiagnosisReport | null; t: (typeof messages)[Locale] }) {
+  return (
+    <section className="opsBlock">
+      <div className="sectionHead compact"><h2><FileText size={16} /> {t.reportTitle}</h2></div>
+      <div className="table">
+        {report ? (
+          <div className="row">
+            <strong>{report.format} {t.reportMetadata}</strong>
+            <span>{report.selfCheckStatus}</span>
+            <small>{report.summary}</small>
+          </div>
+        ) : (
+          <EmptyRow title={t.reportEmptyTitle} detail={t.reportEmptyDetail} />
+        )}
+      </div>
+    </section>
   );
 }
 
