@@ -1,4 +1,4 @@
-import { Archive, Bot, CheckCircle2, Database, Languages, LogOut, ShieldCheck, UserRound } from "lucide-react";
+import { Archive, Bot, Database, Languages, LogOut, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 import type { LoginProfile, WorkspaceMessages, WorkspaceSection } from "./workspace-types";
 
@@ -64,13 +64,6 @@ export function WorkspaceShell({
         </nav>
 
         {sidebar}
-
-        <section className="identityPanel" aria-label={t.identity}>
-          <div className="panelTitle"><ShieldCheck size={16} />{t.identity}</div>
-          <strong>{profile.username}</strong>
-          <small>{profile.role} / {profile.membershipLevel}</small>
-          <small>{profile.regionId} / {profile.industryId}</small>
-        </section>
       </aside>
 
       <section className="workspaceBody">
@@ -80,15 +73,23 @@ export function WorkspaceShell({
             <p>{status}</p>
           </div>
           <div className="topActions">
-            <button className="languageButton" onClick={onToggleLocale} type="button">
-              <Languages size={16} />
-              {t.languageToggle}
-            </button>
-            <button className="ghost" onClick={onLogout} type="button">
-              <LogOut size={16} />
-              {t.logout}
-            </button>
-            <div className="health"><span className="healthDot" /><CheckCircle2 size={16} />{t.health}</div>
+            <section className="topbarIdentity" aria-label={t.identity}>
+              <div className="topbarIdentityCopy">
+                <strong>{profile.username}</strong>
+                <small>{profile.role} / {profile.membershipLevel}</small>
+                <small>{profile.regionId} / {profile.industryId}</small>
+              </div>
+              <div className="topbarIdentityActions">
+                <button className="languageButton" onClick={onToggleLocale} type="button">
+                  <Languages size={16} />
+                  {t.languageToggle}
+                </button>
+                <button className="ghost" onClick={onLogout} type="button">
+                  <LogOut size={16} />
+                  {t.logout}
+                </button>
+              </div>
+            </section>
           </div>
         </header>
 

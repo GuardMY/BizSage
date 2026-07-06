@@ -1,5 +1,34 @@
 ﻿# Change Log
 
+## 2026-07-07
+
+### Web Streaming Diagnosis And Identity Layout Fixes
+
+- Change type: functional development.
+- Affected modules: `apps/web`, `docs/superpowers/plans/2026-07-07-web-streaming-layout-fixes.md`, and both change logs.
+- Main changes:
+  - Added incremental Web diagnosis rendering through a streamed SSE reader so the assistant reply can appear progressively before the history refresh finishes.
+  - Merged signed-in identity details and logout controls into one top-right block, removed the ready badge, and switched the topbar status line to show the current workspace notice instead of duplicating profile metadata.
+  - Updated the workspace shell and diagnosis pane to keep the rail and message column independently scrollable, and auto-follow the latest streamed reply so long conversations no longer leave the identity area feeling pinned over the session.
+- Verification results:
+  - In `apps/web`, `npm test` passes with 26/26 tests green, including new source assertions for incremental streaming, merged identity actions, and scroll-follow behavior.
+  - In `apps/web`, `npm run build` passes, confirming the updated shell, stream reader, and diagnosis workspace compile in production mode.
+- Unfinished items:
+  - The backend still emits a final SSE diagnosis event rather than token-by-token model events, so perceived streaming now depends on incremental transport delivery of that event payload in the browser.
+
+### Web Diagnosis Reply De-duplication
+
+- Change type: functional development.
+- Affected modules: `apps/web` and both change logs.
+- Main changes:
+  - Fixed the diagnosis conversation workspace so it no longer renders a second standalone assistant bubble after the same reply has already been loaded into `messageHistory`.
+  - Kept the transient `diagnosis` state only as a pre-refresh fallback, which preserves the immediate reply experience while preventing the duplicate two-card rendering seen in the active session.
+  - Updated the report-generation entry condition so the report action remains available when a conversation already contains assistant replies in history.
+- Verification results:
+  - In `apps/web`, `npm test` passes with a new regression assertion that locks the no-duplicate assistant-bubble behavior in `DiagnosisWorkspace`.
+- Unfinished items:
+  - A live browser verification is still recommended to confirm the active-session render now matches the post-refresh view during real diagnosis requests.
+
 ## 2026-07-06
 
 ### Web Conversation IA Refresh

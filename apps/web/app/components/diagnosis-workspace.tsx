@@ -1,4 +1,5 @@
 import { Archive, Eye, FileText, LockKeyhole, Search, Send } from "lucide-react";
+import { useEffect, useRef } from "react";
 import Markdown from "../../lib/markdown";
 import type {
   Conversation,
@@ -24,6 +25,7 @@ type DiagnosisWorkspaceProps = {
   report: DiagnosisReport | null;
   reportBusy: boolean;
   selectedConversation: Conversation | null;
+  streamingDiagnosis: Diagnosis | null;
   t: WorkspaceMessages;
 };
 
@@ -41,8 +43,18 @@ export function DiagnosisWorkspace({
   report,
   reportBusy,
   selectedConversation,
+  streamingDiagnosis,
   t
 }: DiagnosisWorkspaceProps) {
+  const hasAssistantReply = messageHistory.some((messageItem) => messageItem.sender === "ASSISTANT");
+  const displayedDiagnosis = streamingDiagnosis ?? diagnosis;
+  const messagesRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!messagesRef.current) return;
+    messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+  }, [busy, displayedDiagnosis, messageHistory]);
+
   return (
     <div className="workspacePanelGrid">
       <section className="dialogue">
@@ -59,8 +71,8 @@ export function DiagnosisWorkspace({
           )}
         </div>
 
-        <div className="messages">
-          {selectedConversation == null && messageHistory.length === 0 && !busy && !diagnosis && (
+        <div className="messages" ref={messagesRef}>
+          {selectedConversation == null && messageHistory.length === 0 && !busy && !displayedDiagnosis && (
             <div className="guidePrompt">
               <Search size={20} />
               <strong>{t.selectConversation}</strong>
@@ -77,42 +89,42 @@ export function DiagnosisWorkspace({
             />
           ))}
 
-          {busy && (
+          {busy && !displayedDiagnosis && (
             <div className="bubble agent muted">
               <span className="loadingDots"><span /><span /><span /></span>
               {t.busyDiagnosis}
             </div>
           )}
 
-          {diagnosis && (
+          {!hasAssistantReply && displayedDiagnosis && (
             <div
               className={`bubble agent${
-                diagnosis.selfCheckStatus && diagnosis.selfCheckStatus !== "PASSED"
-                  ? ` status-${diagnosis.selfCheckStatus.toLowerCase()}`
+                displayedDiagnosis.selfCheckStatus && displayedDiagnosis.selfCheckStatus !== "PASSED"
+                  ? ` status-${displayedDiagnosis.selfCheckStatus.toLowerCase()}`
                   : ""
-              }`}
+              }${streamingDiagnosis ? " streaming" : ""}`}
             >
-              <Markdown content={diagnosis.answer} />
+              <Markdown content={displayedDiagnosis.answer} />
               <div className="meta">
-                <span>{diagnosis.confidence}</span>
-                {diagnosis.selfCheckStatus && diagnosis.selfCheckStatus !== "PASSED" && (
+                <span>{displayedDiagnosis.confidence}</span>
+                {displayedDiagnosis.selfCheckStatus && displayedDiagnosis.selfCheckStatus !== "PASSED" && (
                   <span
                     className={
-                      diagnosis.selfCheckStatus === "NEEDS_REVIEW"
+                      displayedDiagnosis.selfCheckStatus === "NEEDS_REVIEW"
                         ? "flag needsReview"
-                        : diagnosis.selfCheckStatus === "INSUFFICIENT_EVIDENCE"
+                        : displayedDiagnosis.selfCheckStatus === "INSUFFICIENT_EVIDENCE"
                           ? "flag insufficientEvidence"
                           : ""
                     }
                   >
-                    {labelForStatus(diagnosis.selfCheckStatus, t)}
+                    {labelForStatus(displayedDiagnosis.selfCheckStatus, t)}
                   </span>
                 )}
-                <span>{diagnosis.timeliness}</span>
+                <span>{displayedDiagnosis.timeliness}</span>
               </div>
-              {diagnosis.sources.length > 0 && (
+              {displayedDiagnosis.sources.length > 0 && (
                 <div className="sourceLine">
-                  {diagnosis.sources.map((source) => (
+                  {displayedDiagnosis.sources.map((source) => (
                     <button key={source.id} onClick={() => onOpenSource(source)} type="button">
                       <Eye size={14} />
                       {source.title}
@@ -120,7 +132,7 @@ export function DiagnosisWorkspace({
                   ))}
                 </div>
               )}
-              <small>{diagnosis.disclaimer}</small>
+              <small>{displayedDiagnosis.disclaimer}</small>
             </div>
           )}
         </div>
@@ -146,7 +158,7 @@ export function DiagnosisWorkspace({
                 <span>{report.selfCheckStatus}</span>
                 <small>{report.summary}</small>
               </div>
-            ) : diagnosis ? (
+            ) : displayedDiagnosis || hasAssistantReply ? (
               <div className="row">
                 <div className="reportGenerateArea">
                   <small>{t.reportEmptyDetail}</small>

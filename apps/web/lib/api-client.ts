@@ -15,14 +15,6 @@ export type Source = {
   entitlement?: "FREE" | "PAID";
 };
 
-/**
- * Self-check status values from the AI worker.
- * - PASSED: normal success
- * - NEEDS_REVIEW: conflicting evidence, needs human review
- * - INSUFFICIENT_EVIDENCE: not enough knowledge to answer
- * - LLM_NOT_CONFIGURED: worker is up but no LLM key configured
- * - LLM_CALL_FAILED: worker is up but LLM call errored
- */
 export type SelfCheckStatus =
   | "PASSED"
   | "NEEDS_REVIEW"
@@ -39,13 +31,13 @@ export type Diagnosis = {
   disclaimer: string;
 };
 
-/**
- * Structured error received from the SSE stream or API response
- * when the AI worker or LLM is unavailable.
- */
 export type DiagnosisError = {
   error: "WORKER_UNREACHABLE" | "WORKER_TIMEOUT" | "LLM_NOT_CONFIGURED" | "WORKER_ERROR";
   message: string;
+};
+
+type StreamDiagnosisOptions = {
+  onPartialAnswer?: (answer: string) => void;
 };
 
 export type Conversation = {
@@ -110,10 +102,6 @@ export type OpsMetrics = {
   environment: string;
 };
 
-/**
- * Thrown when the AI worker is unreachable or the LLM is not configured.
- * Carries a structured error that the UI can render explicitly.
- */
 export class WorkerError extends Error {
   readonly code: DiagnosisError["error"];
 
@@ -228,14 +216,8 @@ export async function fetchMessages(token: string, conversationId: number) {
   return envelope.data;
 }
 
-/**
- * Parse an SSE response body.
- * Returns the Diagnosis on "event: diagnosis" or throws a WorkerError on "event: error".
- */
 export function parseDiagnosisEvent(raw: string): Diagnosis {
   const lines = raw.split(/\r?\n/);
-
-  // Check for error event first
   const eventLine = lines.find((line) => line.startsWith("event:"));
   if (eventLine && eventLine.includes("error")) {
     const dataLine = lines.find((line) => line.startsWith("data:"));
@@ -246,17 +228,15 @@ export function parseDiagnosisEvent(raw: string): Diagnosis {
     throw new WorkerError("WORKER_ERROR", "AI worker returned an error");
   }
 
-  // Parse diagnosis data event
   const dataLine = lines.find((line) => line.startsWith("data:"));
   if (!dataLine) throw new WorkerError("WORKER_ERROR", "Diagnosis stream did not contain a data event");
   const payload = JSON.parse(dataLine.slice("data: ".length)) as Diagnosis;
 
-  // Check for error states embedded in the status
   if (payload.selfCheckStatus === "LLM_NOT_CONFIGURED") {
-    throw new WorkerError("LLM_NOT_CONFIGURED", "AI 引擎未配置，请联系管理员配置 OPENAI_COMPATIBLE_API_KEY。");
+    throw new WorkerError("LLM_NOT_CONFIGURED", "AI engine is not configured");
   }
   if (payload.selfCheckStatus === "LLM_CALL_FAILED") {
-    throw new WorkerError("WORKER_ERROR", "上游大模型调用失败，请稍后重试。");
+    throw new WorkerError("WORKER_ERROR", "Upstream model call failed");
   }
 
   return {
@@ -265,7 +245,12 @@ export function parseDiagnosisEvent(raw: string): Diagnosis {
   };
 }
 
-export async function streamDiagnosis(token: string, conversationId: number, question: string) {
+export async function streamDiagnosisEvents(
+  token: string,
+  conversationId: number,
+  question: string,
+  options: StreamDiagnosisOptions = {}
+) {
   const response = await fetch(`${API_BASE}/conversations/${conversationId}/messages/stream`, {
     method: "POST",
     headers: {
@@ -276,29 +261,51 @@ export async function streamDiagnosis(token: string, conversationId: number, que
   });
 
   if (!response.ok) {
-    throw new WorkerError(
-      "WORKER_UNREACHABLE",
-      `诊断服务返回 HTTP ${response.status}，请稍后重试。`
-    );
+    throw new WorkerError("WORKER_UNREACHABLE", `Diagnosis stream returned HTTP ${response.status}`);
   }
 
-  const text = await response.text();
+  const reader = response.body?.getReader();
+  if (!reader) {
+    throw new WorkerError("WORKER_ERROR", "Diagnosis stream body is unavailable");
+  }
 
-  // Detect SSE error events inside a 200 response
+  const decoder = new TextDecoder();
+  let text = "";
+  let lastPartialAnswer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      text += decoder.decode();
+      break;
+    }
+
+    text += decoder.decode(value, { stream: true });
+    const partialAnswer = readPartialAnswer(text);
+    if (partialAnswer != null && partialAnswer !== lastPartialAnswer) {
+      lastPartialAnswer = partialAnswer;
+      options.onPartialAnswer?.(partialAnswer);
+    }
+  }
+
   if (text.includes("event: error")) {
     const dataMatch = text.match(/data:\s*(\{.+?\})/);
     if (dataMatch) {
       try {
         const errorPayload = JSON.parse(dataMatch[1]) as DiagnosisError;
         throw new WorkerError(errorPayload.error, errorPayload.message);
-      } catch (err) {
-        if (err instanceof WorkerError) throw err;
+      } catch (error) {
+        if (error instanceof WorkerError) throw error;
       }
     }
-    throw new WorkerError("WORKER_ERROR", "诊断服务发生未知错误。");
+    throw new WorkerError("WORKER_ERROR", "Diagnosis service returned an unknown streaming error");
   }
 
   return parseDiagnosisEvent(text);
+}
+
+export async function streamDiagnosis(token: string, conversationId: number, question: string) {
+  return streamDiagnosisEvents(token, conversationId, question);
 }
 
 export async function fetchPaidIntelligence(token: string) {
@@ -320,10 +327,7 @@ export async function fetchDiagnosisReport(token: string, question: string) {
       throw new AuthExpiredError(envelope?.message || "authentication required");
     }
     if (response.status === 503) {
-      throw new WorkerError(
-        "WORKER_UNREACHABLE",
-        "诊断报告生成失败 — AI 引擎不可用。"
-      );
+      throw new WorkerError("WORKER_UNREACHABLE", "Diagnosis report generation failed because AI is unavailable");
     }
     throw new Error(`Fetch diagnosis report failed (HTTP ${response.status})`);
   }
@@ -345,4 +349,70 @@ function authHeaders(token: string) {
     "Content-Type": "application/json",
     Authorization: `Bearer ${token}`
   };
+}
+
+function readPartialAnswer(raw: string) {
+  const marker = '"answer":"';
+  const start = raw.indexOf(marker);
+  if (start === -1) {
+    return null;
+  }
+
+  let current = "";
+  let escaping = false;
+
+  for (let index = start + marker.length; index < raw.length; index += 1) {
+    const char = raw[index];
+
+    if (escaping) {
+      if (char === "u") {
+        const codePoint = raw.slice(index + 1, index + 5);
+        if (codePoint.length < 4 || /[^0-9a-f]/i.test(codePoint)) {
+          break;
+        }
+        current += String.fromCharCode(Number.parseInt(codePoint, 16));
+        index += 4;
+      } else {
+        current += decodeEscapedCharacter(char);
+      }
+      escaping = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escaping = true;
+      continue;
+    }
+
+    if (char === "\"") {
+      return current;
+    }
+
+    current += char;
+  }
+
+  return current;
+}
+
+function decodeEscapedCharacter(char: string) {
+  switch (char) {
+    case "\"":
+      return "\"";
+    case "\\":
+      return "\\";
+    case "/":
+      return "/";
+    case "b":
+      return "\b";
+    case "f":
+      return "\f";
+    case "n":
+      return "\n";
+    case "r":
+      return "\r";
+    case "t":
+      return "\t";
+    default:
+      return char;
+  }
 }

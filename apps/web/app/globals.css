@@ -204,6 +204,7 @@ small {
 }
 
 .workspace {
+  height: 100vh;
   min-height: 100vh;
   display: grid;
   grid-template-columns: 320px 1fr;
@@ -213,11 +214,12 @@ small {
 .rail {
   min-height: 100vh;
   display: grid;
-  grid-template-rows: auto auto 1fr auto;
+  grid-template-rows: auto auto 1fr;
   gap: 18px;
   padding: 22px 18px;
   background: linear-gradient(180deg, #102d24 0%, #0f241d 100%);
   color: #eef8f4;
+  overflow: auto;
 }
 
 .brand {
@@ -244,8 +246,6 @@ small {
 }
 
 .brand small,
-.identityPanel,
-.identityPanel small,
 .conversationSidebarEyebrow {
   color: #aac2b8;
   font-size: 12px;
@@ -376,24 +376,10 @@ small {
   text-align: center;
 }
 
-.identityPanel {
-  display: grid;
-  gap: 10px;
-  padding-top: 18px;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.panelTitle {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  font-weight: 700;
-  font-size: 13px;
-}
-
 .workspaceBody {
   min-width: 0;
   min-height: 0;
+  max-height: 100vh;
   display: grid;
   grid-template-rows: auto 1fr;
   gap: 20px;
@@ -413,27 +399,38 @@ small {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 14px;
   flex-wrap: wrap;
 }
 
-.health {
-  display: inline-flex;
+.topbarIdentity {
+  display: flex;
   align-items: center;
-  gap: 8px;
-  color: var(--mint-dark);
-  font-weight: 700;
-  font-size: 13px;
-  padding: 6px 14px;
-  background: var(--mint-light);
-  border-radius: 20px;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
 }
 
-.healthDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--mint);
+.topbarIdentityCopy {
+  display: grid;
+  gap: 2px;
+}
+
+.topbarIdentityCopy strong {
+  font-size: 14px;
+}
+
+.topbarIdentityCopy small {
+  font-size: 12px;
+}
+
+.topbarIdentityActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .workspaceScroll {
@@ -522,6 +519,12 @@ small {
   overflow: auto;
 }
 
+@keyframes streamingCaret {
+  50% {
+    opacity: 0;
+  }
+}
+
 .bubble {
   max-width: 820px;
   padding: 14px 16px;
@@ -548,6 +551,17 @@ small {
 .bubble.agent.status-llm_call_failed {
   border-left: 4px solid var(--red-border);
   background: var(--red-soft);
+}
+
+.bubble.streaming::after {
+  content: "";
+  display: inline-block;
+  width: 0.6ch;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--mint);
+  animation: streamingCaret 1s steps(1, end) infinite;
 }
 
 .bubble.muted {
@@ -822,6 +836,12 @@ dd {
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
+  }
+
+  .topbarIdentity {
+    width: 100%;
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .topActions {

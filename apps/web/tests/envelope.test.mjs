@@ -23,6 +23,14 @@ test("API client includes real diagnosis stream helpers", async () => {
   assert.match(source, /text\/event-stream/);
 });
 
+test("API client exposes stream helpers for incremental diagnosis rendering", async () => {
+  const source = readFileSync(new URL("../lib/api-client.ts", import.meta.url), "utf8");
+  assert.match(source, /export async function streamDiagnosisEvents/);
+  assert.match(source, /response\.body\?\.getReader\(\)/);
+  assert.match(source, /new TextDecoder\(\)/);
+  assert.match(source, /onPartialAnswer/);
+});
+
 test("API client exposes a dedicated auth-expired error path for protected fetch requests", async () => {
   const source = readFileSync(new URL("../lib/api-client.ts", import.meta.url), "utf8");
   assert.match(source, /class AuthExpiredError extends Error/);
@@ -53,7 +61,7 @@ test("Web page gates workspace behind a standalone login screen", async () => {
 
 test("Workspace shell shows profile identity after login without embedding login controls", async () => {
   const shell = readFileSync(new URL("../app/components/workspace-shell.tsx", import.meta.url), "utf8");
-  const identityStart = shell.indexOf("<section className=\"identityPanel\" aria-label={t.identity}>");
+  const identityStart = shell.indexOf("<section className=\"topbarIdentity\" aria-label={t.identity}>");
   const identityEnd = shell.indexOf("</section>", identityStart);
   assert.notEqual(identityStart, -1);
   assert.notEqual(identityEnd, -1);
@@ -65,6 +73,17 @@ test("Workspace shell shows profile identity after login without embedding login
   assert.doesNotMatch(identityPanel, /<input/);
   assert.doesNotMatch(identityPanel, /LogIn/);
   assert.doesNotMatch(identityPanel, /handleLogin/);
+});
+
+test("Workspace shell removes the ready badge and merges identity with logout actions", async () => {
+  const shell = readFileSync(new URL("../app/components/workspace-shell.tsx", import.meta.url), "utf8");
+  assert.match(shell, /topbarIdentity/);
+  assert.match(shell, /profile\.username/);
+  assert.match(shell, /profile\.role/);
+  assert.match(shell, /profile\.membershipLevel/);
+  assert.match(shell, /onLogout/);
+  assert.doesNotMatch(shell, /className="health"/);
+  assert.doesNotMatch(shell, /CheckCircle2/);
 });
 
 test("Web page composes the new workspace shell and conversation helpers", async () => {
@@ -99,7 +118,14 @@ test("Web page keeps the same conversation id for follow-up diagnosis", async ()
   assert.match(source, /selectedConversationId/);
   assert.match(source, /setSelectedConversationId/);
   assert.match(source, /selectedConversationId \?\?/);
-  assert.match(source, /streamDiagnosis\(profile\.token, conversationId, message\)/);
+  assert.match(source, /streamDiagnosisEvents\(profile\.token, conversationId, message/);
+});
+
+test("Web page uses incremental diagnosis stream state before final refresh", async () => {
+  const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /streamDiagnosisEvents/);
+  assert.match(source, /streamingDiagnosis/);
+  assert.match(source, /setStreamingDiagnosis/);
 });
 
 test("Workspace shell navigation buttons update visible workspace sections", async () => {
@@ -119,4 +145,25 @@ test("Workspace layout supports a persistent sidebar shell and responsive conten
   assert.match(source, /\.workspaceBody\s*\{/);
   assert.match(source, /\.workspacePanelGrid\s*\{/);
   assert.match(source, /@media \(max-width:\s*980px\)[\s\S]*\.workspace\s*\{[\s\S]*grid-template-columns:\s*1fr;/);
+});
+
+test("Workspace styles allow independent rail and content scrolling for long conversations", async () => {
+  const source = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(source, /\.rail\s*\{[\s\S]*overflow:\s*auto;/);
+  assert.match(source, /\.workspaceScroll\s*\{[\s\S]*overflow:\s*auto;/);
+  assert.match(source, /\.topbarIdentity\s*\{/);
+});
+
+test("Diagnosis workspace auto-follows streaming conversation updates", async () => {
+  const source = readFileSync(new URL("../app/components/diagnosis-workspace.tsx", import.meta.url), "utf8");
+  assert.match(source, /messagesRef/);
+  assert.match(source, /scrollTop = messagesRef\.current\.scrollHeight/);
+  assert.match(source, /streamingDiagnosis/);
+});
+
+test("Diagnosis workspace avoids rendering a second standalone assistant bubble after history refresh", async () => {
+  const source = readFileSync(new URL("../app/components/diagnosis-workspace.tsx", import.meta.url), "utf8");
+  assert.match(source, /const hasAssistantReply = messageHistory\.some\(\(messageItem\) => messageItem\.sender === "ASSISTANT"\);/);
+  assert.doesNotMatch(source, /\{diagnosis && \(\s*<div[\s\S]*?<Markdown content=\{diagnosis\.answer\} \/>[\s\S]*?\)\}/);
+  assert.match(source, /\) : displayedDiagnosis \|\| hasAssistantReply \? \(/);
 });

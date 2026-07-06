@@ -21,7 +21,7 @@ import {
   fetchMessages,
   fetchPaidIntelligence,
   login,
-  streamDiagnosis,
+  streamDiagnosisEvents,
   WorkerError,
   type Conversation,
   type ConversationMessage,
@@ -203,6 +203,7 @@ export default function Home() {
   const [messageHistory, setMessageHistory] = useState<ConversationMessage[]>([]);
   const [message, setMessage] = useState(messages["zh-CN"].defaultQuestion);
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
+  const [streamingDiagnosis, setStreamingDiagnosis] = useState<Diagnosis | null>(null);
   const [report, setReport] = useState<DiagnosisReport | null>(null);
   const [reportBusy, setReportBusy] = useState(false);
   const [paidRows, setPaidRows] = useState<PaidIntelligence[]>([]);
@@ -304,11 +305,6 @@ export default function Home() {
     };
   }, [profile, resolvedSelectedConversationId, t.sessionExpired]);
 
-  const status = useMemo(() => {
-    if (!profile) return t.loginNotice;
-    return `${profile.username} / ${profile.membershipLevel} / ${profile.regionId} / ${profile.industryId}`;
-  }, [profile, t.loginNotice]);
-
   function toggleLocale() {
     setLocale(locale === "zh-CN" ? "en" : "zh-CN");
   }
@@ -334,6 +330,7 @@ export default function Home() {
     setConversations([]);
     setMessageHistory([]);
     setDiagnosis(null);
+    setStreamingDiagnosis(null);
     setReport(null);
     setSelectedConversationId(null);
     setPaidRows([]);
@@ -349,6 +346,7 @@ export default function Home() {
     setConversations([]);
     setMessageHistory([]);
     setDiagnosis(null);
+    setStreamingDiagnosis(null);
     setReport(null);
     setSelectedConversationId(null);
     setPaidRows([]);
@@ -359,6 +357,7 @@ export default function Home() {
 
   function resetConversationOutputs() {
     setDiagnosis(null);
+    setStreamingDiagnosis(null);
     setReport(null);
     setSelectedSource(null);
   }
@@ -466,6 +465,7 @@ export default function Home() {
 
     setBusy(true);
     setDiagnosis(null);
+    setStreamingDiagnosis(null);
     setReport(null);
 
     try {
@@ -476,7 +476,19 @@ export default function Home() {
         setConversations((previous) => [created, ...previous]);
       }
 
-      const nextDiagnosis = await streamDiagnosis(profile.token, conversationId, message);
+      const nextDiagnosis = await streamDiagnosisEvents(profile.token, conversationId, message, {
+        onPartialAnswer(answer) {
+          setStreamingDiagnosis((previous) => ({
+            answer,
+            confidence: previous?.confidence ?? "LOW",
+            disclaimer: previous?.disclaimer ?? "",
+            selfCheckStatus: previous?.selfCheckStatus,
+            sources: previous?.sources ?? [],
+            timeliness: previous?.timeliness ?? "Streaming"
+          }));
+        }
+      });
+      setStreamingDiagnosis(nextDiagnosis);
       setDiagnosis(nextDiagnosis);
 
       try {
@@ -492,6 +504,7 @@ export default function Home() {
       setNotice(t.diagnosisCreated);
       setActiveSection("diagnosis");
     } catch (error) {
+      setStreamingDiagnosis(null);
       if (error instanceof AuthExpiredError) {
         handleSessionExpired();
         return;
@@ -516,6 +529,7 @@ export default function Home() {
         setNotice(error instanceof Error ? error.message : t.diagnosisFailed);
       }
     } finally {
+      setStreamingDiagnosis(null);
       setBusy(false);
     }
   }
@@ -604,7 +618,7 @@ export default function Home() {
             t={t}
           />
         }
-        status={status}
+        status={notice}
         t={t}
       >
         {activeSection === "diagnosis" && (
@@ -622,6 +636,7 @@ export default function Home() {
             report={report}
             reportBusy={reportBusy}
             selectedConversation={selectedConversation}
+            streamingDiagnosis={streamingDiagnosis}
             t={t}
           />
         )}
