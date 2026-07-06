@@ -2,6 +2,20 @@
 
 ## 2026-07-06
 
+### Web Conversation IA Refresh
+
+- Change type: functional development.
+- Affected modules: `apps/web` and both change logs.
+- Main changes:
+  - Reworked the Web home page into a persistent conversation-management shell with extracted `WorkspaceShell`, `ConversationSidebar`, `DiagnosisWorkspace`, and `ArchiveWorkspace` components.
+  - Removed Web-visible `V2` and gray-release wording and deleted the metrics panel plus the page-level `fetchOpsMetrics` dependency, while keeping the existing top-level modules `Diagnosis`, `Intelligence`, `Users`, and `Archive`.
+  - Added a pure conversation workspace helper plus a new regression test suite that locks section-based filtering, newest-first ordering, archive fallback selection, and post-archive next-selection behavior.
+- Verification results:
+  - In `apps/web`, `npm test` passes with the new conversation workspace regression coverage and refreshed source-level IA assertions.
+  - In `apps/web`, `npm run build` passes, confirming the refactored page, new components, and conversation helper compile successfully in production mode.
+- Unfinished items:
+  - Live browser verification on the target deployment is still recommended to confirm the responsive sidebar shell and archive read-only experience against real data volumes.
+
 ### Web Workspace Viewport Height Fit
 
 - Change type: functional development.

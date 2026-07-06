@@ -202,6 +202,15 @@ export async function fetchConversations(token: string) {
   return envelope.data;
 }
 
+export async function archiveConversation(token: string, conversationId: number) {
+  const response = await fetch(`${API_BASE}/conversations/${conversationId}/archive`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  const envelope = await readProtectedEnvelope<Conversation>(response, "Archive conversation failed");
+  return envelope.data;
+}
+
 export async function fetchMessages(token: string, conversationId: number) {
   const response = await fetch(`${API_BASE}/conversations/${conversationId}/messages`, {
     headers: authHeaders(token)
