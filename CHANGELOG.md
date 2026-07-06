@@ -2,6 +2,20 @@
 
 ## 2026-07-07
 
+### Diagnosis SSE Multi-Frame Streaming Fix
+
+- Change type: functional development.
+- Affected modules: `apps/web`, `services/api`, and both change logs.
+- Main changes:
+  - Updated the API message streaming endpoint to emit multiple `diagnosis` SSE frames for one diagnosis request instead of returning a single terminal payload, so the browser can render visible progressive output.
+  - Updated the Web diagnosis stream parser to read complete SSE frames and always use the latest `diagnosis` payload, which fixes the previous behavior where the first streamed `answer` frame could pin the UI and block later updates.
+  - Added regression coverage for multi-frame SSE responses in `services/api` and for latest-frame stream parsing expectations in `apps/web`.
+- Verification results:
+  - In `services/api`, `mvn -Dtest=MessageStreamApiTest test` passes with 4/4 tests green, including the new multi-frame SSE regression.
+  - In `apps/web`, `npm test -- envelope.test.mjs` passes with 27/27 tests green, including the new latest-frame stream parsing assertion.
+- Unfinished items:
+  - The backend currently streams progressive snapshots derived from the completed diagnosis payload, not token-by-token upstream model events.
+
 ### Web Streaming Diagnosis And Identity Layout Fixes
 
 - Change type: functional development.

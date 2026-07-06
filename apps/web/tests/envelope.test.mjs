@@ -31,6 +31,13 @@ test("API client exposes stream helpers for incremental diagnosis rendering", as
   assert.match(source, /onPartialAnswer/);
 });
 
+test("API client reads the latest diagnosis frame instead of the first streamed answer", async () => {
+  const source = readFileSync(new URL("../lib/api-client.ts", import.meta.url), "utf8");
+  assert.match(source, /parseSseEvents/);
+  assert.match(source, /findLatestDiagnosisPayload/);
+  assert.match(source, /events\.length - 1/);
+});
+
 test("API client exposes a dedicated auth-expired error path for protected fetch requests", async () => {
   const source = readFileSync(new URL("../lib/api-client.ts", import.meta.url), "utf8");
   assert.match(source, /class AuthExpiredError extends Error/);

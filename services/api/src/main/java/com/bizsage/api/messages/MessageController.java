@@ -5,12 +5,18 @@ import com.bizsage.api.common.RequestIds;
 import com.bizsage.api.conversations.ConversationStore;
 import com.bizsage.api.users.UserStore;
 import com.bizsage.api.worker.AiWorkerException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.security.Principal;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -20,6 +26,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 @RestController
 @RequestMapping("/api/conversations/{conversationId}/messages")
@@ -31,34 +38,38 @@ public class MessageController {
   private final ConversationStore conversationStore;
   private final ConversationMessageStore messageStore;
   private final UserStore userStore;
+  private final ObjectMapper objectMapper;
 
   public MessageController(
       DiagnosisService diagnosisService,
       ConversationStore conversationStore,
       ConversationMessageStore messageStore,
-      UserStore userStore) {
+      UserStore userStore,
+      ObjectMapper objectMapper) {
     this.diagnosisService = diagnosisService;
     this.conversationStore = conversationStore;
     this.messageStore = messageStore;
     this.userStore = userStore;
+    this.objectMapper = objectMapper;
   }
 
   @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-  String streamDiagnosis(
+  StreamingResponseBody streamDiagnosis(
       @PathVariable long conversationId,
       @Valid @RequestBody MessageRequest request,
       Principal principal) {
     var user = userStore.findByUsername(principal.getName()).orElseThrow();
     var conversation = conversationStore.getForOwner(principal.getName(), conversationId);
-
-    try {
-      String diagnosis = diagnosisService.diagnose(conversation, user, request.question());
-      return "event: diagnosis\n" + "data: " + diagnosis + "\n\n";
-    } catch (AiWorkerException ex) {
-      log.error("Diagnosis failed — worker error (conversation={}): {}", conversationId, ex.getMessage());
-      String errorPayload = toErrorPayload(ex);
-      return "event: error\n" + "data: " + errorPayload + "\n\n";
-    }
+    return outputStream -> {
+      writeEvent(outputStream, "status", "{\"state\":\"started\"}");
+      try {
+        String diagnosis = diagnosisService.diagnose(conversation, user, request.question());
+        writeDiagnosisFrames(outputStream, diagnosis);
+      } catch (AiWorkerException ex) {
+        log.error("Diagnosis failed — worker error (conversation={}): {}", conversationId, ex.getMessage());
+        writeEvent(outputStream, "error", toErrorPayload(ex));
+      }
+    };
   }
 
   @GetMapping
@@ -89,6 +100,52 @@ public class MessageController {
 
   private static String escapeJson(String value) {
     return value.replace("\\", "\\\\").replace("\"", "\\\"");
+  }
+
+  private void writeDiagnosisFrames(OutputStream outputStream, String diagnosis) throws IOException {
+    JsonNode payload = objectMapper.readTree(diagnosis);
+    String answer = payload.path("answer").asText("");
+    List<String> snapshots = progressiveAnswers(answer);
+
+    if (payload instanceof ObjectNode payloadObject) {
+      for (String snapshot : snapshots) {
+        ObjectNode partialPayload = payloadObject.deepCopy();
+        partialPayload.put("answer", snapshot);
+        writeEvent(outputStream, "diagnosis", objectMapper.writeValueAsString(partialPayload));
+      }
+    } else {
+      writeEvent(outputStream, "diagnosis", diagnosis);
+      return;
+    }
+
+    if (snapshots.isEmpty() || !answer.equals(snapshots.getLast())) {
+      writeEvent(outputStream, "diagnosis", diagnosis);
+    }
+  }
+
+  private static List<String> progressiveAnswers(String answer) {
+    if (answer == null || answer.isEmpty()) {
+      return List.of();
+    }
+    if (answer.length() == 1) {
+      return List.of(answer);
+    }
+
+    List<String> snapshots = new ArrayList<>();
+    int chunkSize = 24;
+    int end = Math.min(answer.length() - 1, chunkSize);
+    while (end < answer.length()) {
+      snapshots.add(answer.substring(0, end));
+      end += chunkSize;
+    }
+    snapshots.add(answer);
+    return snapshots;
+  }
+
+  private static void writeEvent(OutputStream outputStream, String eventName, String payload) throws IOException {
+    String event = "event: " + eventName + "\n" + "data: " + payload + "\n\n";
+    outputStream.write(event.getBytes(StandardCharsets.UTF_8));
+    outputStream.flush();
   }
 
   record MessageRequest(@NotBlank String question) {

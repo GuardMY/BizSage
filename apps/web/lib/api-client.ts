@@ -40,6 +40,11 @@ type StreamDiagnosisOptions = {
   onPartialAnswer?: (answer: string) => void;
 };
 
+type SseEvent = {
+  event: string;
+  data: string;
+};
+
 export type Conversation = {
   id: number;
   title: string;
@@ -217,20 +222,13 @@ export async function fetchMessages(token: string, conversationId: number) {
 }
 
 export function parseDiagnosisEvent(raw: string): Diagnosis {
-  const lines = raw.split(/\r?\n/);
-  const eventLine = lines.find((line) => line.startsWith("event:"));
-  if (eventLine && eventLine.includes("error")) {
-    const dataLine = lines.find((line) => line.startsWith("data:"));
-    if (dataLine) {
-      const errorPayload = JSON.parse(dataLine.slice("data: ".length)) as DiagnosisError;
-      throw new WorkerError(errorPayload.error, errorPayload.message);
-    }
-    throw new WorkerError("WORKER_ERROR", "AI worker returned an error");
+  const errorPayload = findLatestErrorPayload(raw);
+  if (errorPayload) {
+    throw new WorkerError(errorPayload.error, errorPayload.message);
   }
 
-  const dataLine = lines.find((line) => line.startsWith("data:"));
-  if (!dataLine) throw new WorkerError("WORKER_ERROR", "Diagnosis stream did not contain a data event");
-  const payload = JSON.parse(dataLine.slice("data: ".length)) as Diagnosis;
+  const payload = findLatestDiagnosisPayload(raw);
+  if (!payload) throw new WorkerError("WORKER_ERROR", "Diagnosis stream did not contain a data event");
 
   if (payload.selfCheckStatus === "LLM_NOT_CONFIGURED") {
     throw new WorkerError("LLM_NOT_CONFIGURED", "AI engine is not configured");
@@ -289,14 +287,9 @@ export async function streamDiagnosisEvents(
   }
 
   if (text.includes("event: error")) {
-    const dataMatch = text.match(/data:\s*(\{.+?\})/);
-    if (dataMatch) {
-      try {
-        const errorPayload = JSON.parse(dataMatch[1]) as DiagnosisError;
-        throw new WorkerError(errorPayload.error, errorPayload.message);
-      } catch (error) {
-        if (error instanceof WorkerError) throw error;
-      }
+    const errorPayload = findLatestErrorPayload(text);
+    if (errorPayload) {
+      throw new WorkerError(errorPayload.error, errorPayload.message);
     }
     throw new WorkerError("WORKER_ERROR", "Diagnosis service returned an unknown streaming error");
   }
@@ -352,46 +345,61 @@ function authHeaders(token: string) {
 }
 
 function readPartialAnswer(raw: string) {
-  const marker = '"answer":"';
-  const start = raw.indexOf(marker);
-  if (start === -1) {
-    return null;
-  }
+  return findLatestDiagnosisPayload(raw)?.answer ?? null;
+}
 
-  let current = "";
-  let escaping = false;
+function parseSseEvents(raw: string): SseEvent[] {
+  const events: SseEvent[] = [];
 
-  for (let index = start + marker.length; index < raw.length; index += 1) {
-    const char = raw[index];
+  for (const block of raw.split(/\r?\n\r?\n/)) {
+    const lines = block.split(/\r?\n/);
+    let event = "message";
+    const dataLines: string[] = [];
 
-    if (escaping) {
-      if (char === "u") {
-        const codePoint = raw.slice(index + 1, index + 5);
-        if (codePoint.length < 4 || /[^0-9a-f]/i.test(codePoint)) {
-          break;
-        }
-        current += String.fromCharCode(Number.parseInt(codePoint, 16));
-        index += 4;
-      } else {
-        current += decodeEscapedCharacter(char);
+    for (const line of lines) {
+      if (line.startsWith("event:")) {
+        event = line.slice("event:".length).trim();
+      } else if (line.startsWith("data:")) {
+        dataLines.push(line.slice("data:".length).trimStart());
       }
-      escaping = false;
-      continue;
     }
 
-    if (char === "\\") {
-      escaping = true;
-      continue;
+    if (dataLines.length > 0) {
+      events.push({ event, data: dataLines.join("\n") });
     }
-
-    if (char === "\"") {
-      return current;
-    }
-
-    current += char;
   }
 
-  return current;
+  return events;
+}
+
+function findLatestDiagnosisPayload(raw: string): Diagnosis | null {
+  const events = parseSseEvents(raw);
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    if (events[index].event !== "diagnosis") continue;
+    try {
+      const payload = JSON.parse(events[index].data) as Diagnosis;
+      return {
+        ...payload,
+        sources: normalizeSources(payload.sources)
+      };
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+function findLatestErrorPayload(raw: string): DiagnosisError | null {
+  const events = parseSseEvents(raw);
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    if (events[index].event !== "error") continue;
+    try {
+      return JSON.parse(events[index].data) as DiagnosisError;
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 function decodeEscapedCharacter(char: string) {
