@@ -445,3 +445,18 @@
   - Generated the current list of documents missing bilingual maintenance.
 - Unfinished items:
   - Superseded by the bilingual documentation backfill above. See `docs/en/standards/documentation-bilingual-audit.md`.
+## 2026-07-07
+
+### Conversation Sidebar Archive/Delete Actions
+
+- Change type: functional development.
+- Affected modules: `apps/web`, `services/api`, and both change logs.
+- Main changes:
+  - Added API-backed conversation soft deletion with a new `POST /api/conversations/{id}/delete` endpoint that only deletes archived conversations and keeps deleted rows out of normal conversation listings.
+  - Updated the Web conversation workspace helper so deleted conversations are excluded from active/archive partitions and the sidebar can describe section-specific titles plus row actions.
+  - Added direct archive and delete controls to the Web conversation sidebar and wired page-level handlers to update list state, selection fallback, and notices after row actions.
+- Verification results:
+  - In `apps/web`, `npm test -- conversation-workspace.test.mjs` now covers deleted-conversation filtering and section-specific sidebar labels/actions.
+  - In `services/api`, `mvn -Dtest=BusinessWorkflowApiTest#archivedConversationCanBeSoftDeletedAndDisappearsFromList test` verifies archived conversations can be soft-deleted and no longer appear in the conversation list.
+- Unfinished items:
+  - A live browser verification is still recommended to confirm the row-action affordances and archive/delete flow feel right with real user data and localized copy.

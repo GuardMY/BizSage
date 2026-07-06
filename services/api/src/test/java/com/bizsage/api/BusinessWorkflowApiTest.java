@@ -26,19 +26,7 @@ class BusinessWorkflowApiTest {
   void userCanCreateAndArchiveConversation() throws Exception {
     String token = login("user");
 
-    String response = mvc.perform(post("/api/conversations")
-        .header("Authorization", "Bearer " + token)
-        .contentType(MediaType.APPLICATION_JSON)
-        .content("{\"title\":\"门店现金流诊断\"}"))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.code").value("OK"))
-      .andExpect(jsonPath("$.data.title").value("门店现金流诊断"))
-      .andExpect(jsonPath("$.data.status").value("ACTIVE"))
-      .andReturn()
-      .getResponse()
-      .getContentAsString();
-
-    long conversationId = objectMapper.readTree(response).at("/data/id").asLong();
+    long conversationId = createConversation(token, "门店现金流诊断");
 
     mvc.perform(get("/api/conversations").header("Authorization", "Bearer " + token))
       .andExpect(status().isOk())
@@ -47,6 +35,24 @@ class BusinessWorkflowApiTest {
     mvc.perform(post("/api/conversations/" + conversationId + "/archive").header("Authorization", "Bearer " + token))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.status").value("ARCHIVED"));
+  }
+
+  @Test
+  void archivedConversationCanBeSoftDeletedAndDisappearsFromList() throws Exception {
+    String token = login("user");
+    long conversationId = createConversation(token, "待删除归档会话");
+
+    mvc.perform(post("/api/conversations/" + conversationId + "/archive").header("Authorization", "Bearer " + token))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.status").value("ARCHIVED"));
+
+    mvc.perform(post("/api/conversations/" + conversationId + "/delete").header("Authorization", "Bearer " + token))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.status").value("DELETED"));
+
+    mvc.perform(get("/api/conversations").header("Authorization", "Bearer " + token))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data[?(@.id == " + conversationId + ")]").isEmpty());
   }
 
   @Test
@@ -141,5 +147,21 @@ class BusinessWorkflowApiTest {
       .getContentAsString();
 
     return objectMapper.readTree(response).at("/data/token").asText();
+  }
+
+  private long createConversation(String token, String title) throws Exception {
+    String response = mvc.perform(post("/api/conversations")
+        .header("Authorization", "Bearer " + token)
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"title\":\"" + title + "\"}"))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.code").value("OK"))
+      .andExpect(jsonPath("$.data.title").value(title))
+      .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+      .andReturn()
+      .getResponse()
+      .getContentAsString();
+
+    return objectMapper.readTree(response).at("/data/id").asLong();
   }
 }

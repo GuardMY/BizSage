@@ -46,6 +46,11 @@ public class ConversationController {
     return ApiResponse.ok(conversationStore.archive(principal.getName(), id), requestId(request));
   }
 
+  @PostMapping("/{id}/delete")
+  ApiResponse<Conversation> delete(@PathVariable long id, Principal principal, HttpServletRequest request) {
+    return ApiResponse.ok(conversationStore.softDelete(principal.getName(), id), requestId(request));
+  }
+
   private String requestId(HttpServletRequest request) {
     return request.getAttribute(RequestIds.ATTRIBUTE).toString();
   }

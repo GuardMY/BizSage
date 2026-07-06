@@ -66,7 +66,11 @@ export type WorkspaceMessages = {
   newConversationTitle: string;
   activeConversations: string;
   archivedConversations: string;
+  diagnosisConversationList: string;
+  archiveConversationList: string;
   archiveCurrent: string;
+  archiveConversation: string;
+  deleteConversation: string;
   archiveReadonly: string;
   selectedConversation: string;
   noArchivedMessages: string;

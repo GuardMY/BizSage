@@ -40,6 +40,7 @@ public class ConversationStore {
         select id, owner_username, title, status, region_id, industry_id, source_id, weight
           from conversations
          where owner_username = ?
+           and status <> 'DELETED'
          order by id
         """, mapper(), ownerUsername);
   }
@@ -57,6 +58,18 @@ public class ConversationStore {
   }
 
   public Conversation getForOwner(String ownerUsername, long id) {
+    return findForOwner(ownerUsername, id);
+  }
+
+  public Conversation softDelete(String ownerUsername, long id) {
+    int updated = jdbcTemplate.update("""
+        update conversations
+           set status = 'DELETED', update_time = current_timestamp
+         where id = ? and owner_username = ? and status = 'ARCHIVED'
+        """, id, ownerUsername);
+    if (updated == 0) {
+      throw new IllegalArgumentException("conversation not found");
+    }
     return findForOwner(ownerUsername, id);
   }
 

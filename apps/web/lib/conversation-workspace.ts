@@ -17,10 +17,28 @@ export function sortConversationsNewestFirst(conversations) {
  */
 export function partitionConversations(conversations) {
   const ordered = sortConversationsNewestFirst(conversations);
+  const visible = ordered.filter((conversation) => conversation.status !== "DELETED");
 
   return {
-    active: ordered.filter((conversation) => conversation.status !== "ARCHIVED"),
-    archived: ordered.filter((conversation) => conversation.status === "ARCHIVED")
+    active: visible.filter((conversation) => conversation.status !== "ARCHIVED"),
+    archived: visible.filter((conversation) => conversation.status === "ARCHIVED")
+  };
+}
+
+/**
+ * @param {WorkspaceSection} section
+ */
+export function describeConversationSidebar(section) {
+  if (section === "archive") {
+    return {
+      titleKey: "archiveConversationList",
+      actionKey: "deleteConversation"
+    };
+  }
+
+  return {
+    titleKey: "diagnosisConversationList",
+    actionKey: "archiveConversation"
   };
 }
 

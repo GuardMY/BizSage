@@ -463,3 +463,18 @@
   - 已生成当时缺少双语维护的文档清单。
 - 未完成事项：
   - 已由双语文档补齐变更关闭。详见 `docs/zh-CN/standards/documentation-bilingual-audit-zh-CN.md`。
+## 2026-07-07
+
+### 会话侧边栏归档与删除动作
+
+- 变更类型：功能开发。
+- 影响模块：`apps/web`、`services/api` 和两份变更日志。
+- 主要变更：
+  - 为 API 新增基于状态的会话软删除能力，增加 `POST /api/conversations/{id}/delete` 接口，仅允许删除已归档会话，并让普通会话列表默认过滤 `DELETED` 记录。
+  - 更新 Web 会话工作区辅助逻辑，使已删除会话不会再进入活跃/归档分区，同时让侧边栏可根据分区返回对应的标题和行级动作定义。
+  - 在 Web 会话侧边栏中加入直接归档与删除按钮，并接通页面级状态更新、选中项回退和操作提示。
+- 验证结果：
+  - 在 `apps/web` 运行 `npm test -- conversation-workspace.test.mjs`，验证已删除会话过滤以及分区化侧边栏标题/动作回归测试通过。
+  - 在 `services/api` 运行 `mvn -Dtest=BusinessWorkflowApiTest#archivedConversationCanBeSoftDeletedAndDisappearsFromList test`，验证已归档会话可被软删除且不会再出现在会话列表中。
+- 未完成事项：
+  - 仍建议做一次真实浏览器复验，确认行级动作的可发现性以及归档/删除流程在真实数据和本地化文案下都符合预期。

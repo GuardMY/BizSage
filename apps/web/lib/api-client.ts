@@ -211,6 +211,15 @@ export async function archiveConversation(token: string, conversationId: number)
   return envelope.data;
 }
 
+export async function deleteConversation(token: string, conversationId: number) {
+  const response = await fetch(`${API_BASE}/conversations/${conversationId}/delete`, {
+    method: "POST",
+    headers: authHeaders(token)
+  });
+  const envelope = await readProtectedEnvelope<Conversation>(response, "Delete conversation failed");
+  return envelope.data;
+}
+
 export async function fetchMessages(token: string, conversationId: number) {
   const response = await fetch(`${API_BASE}/conversations/${conversationId}/messages`, {
     headers: authHeaders(token)

@@ -15,6 +15,7 @@ import {
   archiveConversation,
   AuthExpiredError,
   createConversation,
+  deleteConversation,
   fetchConversations,
   fetchDiagnosisReport,
   fetchMessages,
@@ -35,8 +36,30 @@ type Locale = "zh-CN" | "en";
 
 const PROFILE_STORAGE_KEY = "bizsage.web.profile";
 
+const sidebarMessages: Record<
+  Locale,
+  Pick<
+    WorkspaceMessages,
+    "diagnosisConversationList" | "archiveConversationList" | "archiveConversation" | "deleteConversation"
+  >
+> = {
+  "zh-CN": {
+    diagnosisConversationList: "诊断会话列表",
+    archiveConversationList: "归档会话列表",
+    archiveConversation: "归档会话",
+    deleteConversation: "删除会话"
+  },
+  en: {
+    diagnosisConversationList: "Diagnosis conversation list",
+    archiveConversationList: "Archive conversation list",
+    archiveConversation: "Archive conversation",
+    deleteConversation: "Delete conversation"
+  }
+};
+
 const messages: Record<Locale, WorkspaceMessages> = {
   "zh-CN": {
+    ...sidebarMessages["zh-CN"],
     brandSubtitle: "对话工作台",
     loginTitle: "登录 BizSage",
     loginIntro: "未登录用户只能访问独立登录界面。登录后进入经营诊断工作台和对话管理界面。",
@@ -102,6 +125,7 @@ const messages: Record<Locale, WorkspaceMessages> = {
     noConversationContext: "当前模块没有可用会话。"
   },
   en: {
+    ...sidebarMessages.en,
     brandSubtitle: "Conversation workspace",
     loginTitle: "Sign in to BizSage",
     loginIntro: "Signed-out users only see this login screen. After sign-in, the operating diagnosis workspace and conversation manager open.",
@@ -387,6 +411,53 @@ export default function Home() {
     }
   }
 
+  async function handleArchiveConversationFromList(conversationId: number) {
+    if (!profile) return;
+
+    try {
+      const archivedConversation = await archiveConversation(profile.token, conversationId);
+      const updatedConversations = conversations.map((conversation) =>
+        conversation.id === archivedConversation.id ? archivedConversation : conversation
+      );
+      setConversations(updatedConversations);
+      setSelectedConversationId(
+        nextSelectionAfterArchive({
+          selectedConversationId: conversationId,
+          conversations: updatedConversations
+        })
+      );
+      if (selectedConversation?.id === conversationId) {
+        resetConversationOutputs();
+      }
+      setNotice(t.conversationArchived);
+    } catch (error) {
+      if (error instanceof AuthExpiredError) {
+        handleSessionExpired();
+        return;
+      }
+      setNotice(error instanceof Error ? error.message : t.diagnosisFailed);
+    }
+  }
+
+  async function handleDeleteConversation(conversationId: number) {
+    if (!profile) return;
+
+    try {
+      await deleteConversation(profile.token, conversationId);
+      setConversations((previous) => previous.filter((conversation) => conversation.id !== conversationId));
+      if (selectedConversation?.id === conversationId) {
+        resetConversationOutputs();
+      }
+      setNotice(t.deleteConversation);
+    } catch (error) {
+      if (error instanceof AuthExpiredError) {
+        handleSessionExpired();
+        return;
+      }
+      setNotice(error instanceof Error ? error.message : t.diagnosisFailed);
+    }
+  }
+
   async function submitDiagnosis() {
     if (!profile) {
       setNotice(t.loginRequired);
@@ -525,6 +596,8 @@ export default function Home() {
           <ConversationSidebar
             activeSection={activeSection}
             conversations={workspaceSelection.visibleConversations}
+            onArchiveConversation={handleArchiveConversationFromList}
+            onDeleteConversation={handleDeleteConversation}
             onNewConversation={handleNewConversation}
             onSelectConversation={handleSelectConversation}
             selectedConversationId={resolvedSelectedConversationId}

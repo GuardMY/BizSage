@@ -324,13 +324,21 @@ small {
   color: #eef8f4;
   border-radius: var(--radius-sm);
   padding: 12px;
-  display: grid;
-  gap: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .conversationItem.active {
   background: rgba(214, 243, 232, 0.15);
   border-color: rgba(72, 199, 166, 0.35);
+}
+
+.conversationItemBody {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
 }
 
 .conversationItem strong {
@@ -339,6 +347,25 @@ small {
 
 .conversationItem small {
   color: #c6dbd3;
+}
+
+.conversationItemActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.conversationRowAction {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+}
+
+.conversationRowAction.danger {
+  color: #ffd2d2;
 }
 
 .emptySidebarState {

@@ -1,9 +1,12 @@
-import { FilePlus2, MessageSquareMore } from "lucide-react";
+import { Archive, FilePlus2, MessageSquareMore, Trash2 } from "lucide-react";
+import { describeConversationSidebar } from "../../lib/conversation-workspace";
 import type { Conversation, WorkspaceMessages, WorkspaceSection } from "./workspace-types";
 
 type ConversationSidebarProps = {
   activeSection: WorkspaceSection;
   conversations: Conversation[];
+  onArchiveConversation: (id: number) => void;
+  onDeleteConversation: (id: number) => void;
   onNewConversation: () => void;
   onSelectConversation: (id: number) => void;
   selectedConversationId: number | null;
@@ -13,12 +16,17 @@ type ConversationSidebarProps = {
 export function ConversationSidebar({
   activeSection,
   conversations,
+  onArchiveConversation,
+  onDeleteConversation,
   onNewConversation,
   onSelectConversation,
   selectedConversationId,
   t
 }: ConversationSidebarProps) {
-  const title = activeSection === "archive" ? t.archivedConversations : t.activeConversations;
+  const sidebar = describeConversationSidebar(activeSection);
+  const title = t[sidebar.titleKey];
+  const showArchiveAction = sidebar.actionKey === "archiveConversation";
+  const showDeleteAction = sidebar.actionKey === "deleteConversation";
 
   return (
     <section className="conversationSidebar" aria-label={title}>
@@ -53,8 +61,54 @@ export function ConversationSidebar({
             onClick={() => onSelectConversation(conversation.id)}
             type="button"
           >
-            <strong>{conversation.title}</strong>
-            <small>{conversation.regionId} / {conversation.industryId}</small>
+            <span className="conversationItemBody">
+              <strong>{conversation.title}</strong>
+              <small>{conversation.regionId} / {conversation.industryId}</small>
+            </span>
+            <span className="conversationItemActions">
+              {showArchiveAction && (
+                <span
+                  className="ghost conversationRowAction"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onArchiveConversation(conversation.id);
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onArchiveConversation(conversation.id);
+                    }
+                  }}
+                  aria-label={t.archiveConversation}
+                >
+                  <Archive size={14} />
+                </span>
+              )}
+              {showDeleteAction && (
+                <span
+                  className="ghost conversationRowAction danger"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onDeleteConversation(conversation.id);
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onDeleteConversation(conversation.id);
+                    }
+                  }}
+                  aria-label={t.deleteConversation}
+                >
+                  <Trash2 size={14} />
+                </span>
+              )}
+            </span>
           </button>
         ))}
       </div>
