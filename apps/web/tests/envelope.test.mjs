@@ -101,3 +101,14 @@ test("Web page navigation buttons update visible workspace sections", async () =
   assert.match(source, /setActiveSection\("archive"\)/);
   assert.match(source, /className=\{`navItem \$\{activeSection ===/);
 });
+
+test("Workspace layout keeps the diagnosis area within the first viewport at 100% zoom", async () => {
+  const source = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(source, /\.workspace\s*\{[\s\S]*min-height:\s*100vh;/);
+  assert.match(source, /\.main\s*\{[\s\S]*min-height:\s*0;/);
+  assert.match(source, /\.main\s*\{[\s\S]*grid-template-rows:\s*auto 1fr;/);
+  assert.match(source, /\.grid\s*\{[\s\S]*min-height:\s*0;/);
+  assert.match(source, /\.dialogue\s*\{[\s\S]*min-height:\s*0;/);
+  assert.match(source, /\.dialogue\s*\{[\s\S]*height:\s*100%;/);
+  assert.doesNotMatch(source, /\.dialogue\s*\{[\s\S]*min-height:\s*calc\(100vh - 140px\);/);
+});

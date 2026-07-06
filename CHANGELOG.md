@@ -2,6 +2,19 @@
 
 ## 2026-07-06
 
+### Web Workspace Viewport Height Fit
+
+- Change type: functional development.
+- Affected modules: `apps/web` and both change logs.
+- Main changes:
+  - Reworked the desktop workspace layout so the main content column now uses a fixed viewport-height shell with internal height distribution instead of relying on a chat card `min-height` derived from `calc(100vh - ...)`.
+  - Updated the diagnosis grid, dialogue panel, and right-side ops stack to inherit constrained height from their parents and scroll internally when needed.
+  - Added a Web regression test that asserts the workspace CSS keeps the diagnosis area within the first viewport at browser 100% zoom.
+- Verification results:
+  - In `apps/web`, `npm test` now covers the new viewport-fit layout regression assertions together with the existing source-level Web checks.
+- Unfinished items:
+  - A live browser verification on the target deployment is still recommended to confirm the 100% zoom experience matches the CSS regression intent across real viewport sizes.
+
 ### Web Auth Expiry Returns to Login Screen
 
 - Change type: functional development.
