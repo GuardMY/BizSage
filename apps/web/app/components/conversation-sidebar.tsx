@@ -32,7 +32,6 @@ export function ConversationSidebar({
     <section className="conversationSidebar" aria-label={title}>
       <div className="conversationSidebarHead">
         <div>
-          <p className="conversationSidebarEyebrow">{t.selectedConversation}</p>
           <h2>{title}</h2>
         </div>
         {activeSection !== "archive" && (
@@ -55,61 +54,49 @@ export function ConversationSidebar({
         )}
 
         {conversations.map((conversation) => (
-          <button
+          <div
             key={conversation.id}
             className={`conversationItem ${conversation.id === selectedConversationId ? "active" : ""}`}
-            onClick={() => onSelectConversation(conversation.id)}
-            type="button"
           >
-            <span className="conversationItemBody">
-              <strong>{conversation.title}</strong>
-              <small>{conversation.regionId} / {conversation.industryId}</small>
-            </span>
+            <button
+              className="conversationItemSelect"
+              onClick={() => onSelectConversation(conversation.id)}
+              type="button"
+            >
+              <span className="conversationItemBody">
+                <strong>{conversation.title}</strong>
+                <small>{conversation.regionId} / {conversation.industryId}</small>
+              </span>
+            </button>
             <span className="conversationItemActions">
               {showArchiveAction && (
-                <span
-                  className="ghost conversationRowAction"
+                <button
+                  className="conversationRowAction"
                   onClick={(event) => {
                     event.stopPropagation();
                     onArchiveConversation(conversation.id);
                   }}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      onArchiveConversation(conversation.id);
-                    }
-                  }}
+                  type="button"
                   aria-label={t.archiveConversation}
                 >
                   <Archive size={14} />
-                </span>
+                </button>
               )}
               {showDeleteAction && (
-                <span
-                  className="ghost conversationRowAction danger"
+                <button
+                  className="conversationRowAction danger"
                   onClick={(event) => {
                     event.stopPropagation();
                     onDeleteConversation(conversation.id);
                   }}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      onDeleteConversation(conversation.id);
-                    }
-                  }}
+                  type="button"
                   aria-label={t.deleteConversation}
                 >
                   <Trash2 size={14} />
-                </span>
+                </button>
               )}
             </span>
-          </button>
+          </div>
         ))}
       </div>
     </section>

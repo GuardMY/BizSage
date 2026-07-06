@@ -76,8 +76,7 @@ export function WorkspaceShell({
             <section className="topbarIdentity" aria-label={t.identity}>
               <div className="topbarIdentityCopy">
                 <strong>{profile.username}</strong>
-                <small>{profile.role} / {profile.membershipLevel}</small>
-                <small>{profile.regionId} / {profile.industryId}</small>
+                <small>{profile.role} / {profile.membershipLevel} / {profile.regionId} / {profile.industryId}</small>
               </div>
               <div className="topbarIdentityActions">
                 <button className="languageButton" onClick={onToggleLocale} type="button">

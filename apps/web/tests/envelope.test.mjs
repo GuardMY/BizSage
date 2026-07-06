@@ -157,8 +157,30 @@ test("Workspace layout supports a persistent sidebar shell and responsive conten
 test("Workspace styles allow independent rail and content scrolling for long conversations", async () => {
   const source = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(source, /\.rail\s*\{[\s\S]*overflow:\s*auto;/);
-  assert.match(source, /\.workspaceScroll\s*\{[\s\S]*overflow:\s*auto;/);
+  assert.match(source, /\.workspaceBody\s*\{[\s\S]*overflow:\s*hidden;/);
+  assert.match(source, /\.workspaceScroll\s*\{[\s\S]*overflow-y:\s*auto;/);
   assert.match(source, /\.topbarIdentity\s*\{/);
+});
+
+test("Conversation sidebar uses explicit icon buttons for archive and delete actions", async () => {
+  const source = readFileSync(new URL("../app/components/conversation-sidebar.tsx", import.meta.url), "utf8");
+  assert.match(source, /className="conversationRowAction"/);
+  assert.match(source, /className="conversationRowAction danger"/);
+  assert.match(source, /<button[\s\S]*?type="button"[\s\S]*?aria-label=\{t\.archiveConversation\}/);
+  assert.match(source, /<button[\s\S]*?type="button"[\s\S]*?aria-label=\{t\.deleteConversation\}/);
+  assert.doesNotMatch(source, /className="conversationSidebarEyebrow"/);
+});
+
+test("Workspace shell renders compact two-line identity metadata", async () => {
+  const shell = readFileSync(new URL("../app/components/workspace-shell.tsx", import.meta.url), "utf8");
+  assert.match(shell, /<strong>\{profile\.username\}<\/strong>/);
+  assert.match(shell, /<small>\{profile\.role\} \/ \{profile\.membershipLevel\} \/ \{profile\.regionId\} \/ \{profile\.industryId\}<\/small>/);
+  assert.doesNotMatch(shell, /<small>\{profile\.role\} \/ \{profile\.membershipLevel\}<\/small>\s*<small>\{profile\.regionId\} \/ \{profile\.industryId\}<\/small>/);
+});
+
+test("Users workspace no longer renders the current-context summary row", async () => {
+  const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /<strong>\{t\.selectedConversation\}<\/strong>/);
 });
 
 test("Diagnosis workspace auto-follows streaming conversation updates", async () => {

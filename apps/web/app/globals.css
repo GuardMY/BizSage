@@ -245,8 +245,7 @@ small {
   display: block;
 }
 
-.brand small,
-.conversationSidebarEyebrow {
+.brand small {
   color: #aac2b8;
   font-size: 12px;
 }
@@ -318,21 +317,29 @@ small {
 
 .conversationItem {
   width: 100%;
-  text-align: left;
   border: 1px solid transparent;
   background: rgba(255, 255, 255, 0.04);
   color: #eef8f4;
   border-radius: var(--radius-sm);
   padding: 12px;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
 }
 
 .conversationItem.active {
   background: rgba(214, 243, 232, 0.15);
   border-color: rgba(72, 199, 166, 0.35);
+}
+
+.conversationItemSelect {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
 }
 
 .conversationItemBody {
@@ -358,10 +365,18 @@ small {
 .conversationRowAction {
   width: 28px;
   height: 28px;
+  padding: 0;
+  border: 0;
+  background: rgba(255, 255, 255, 0.12);
+  color: #eef8f4;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
+}
+
+.conversationRowAction:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .conversationRowAction.danger {
@@ -380,6 +395,7 @@ small {
   min-width: 0;
   min-height: 0;
   max-height: 100vh;
+  overflow: hidden;
   display: grid;
   grid-template-rows: auto 1fr;
   gap: 20px;
@@ -435,7 +451,8 @@ small {
 
 .workspaceScroll {
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .workspacePanelGrid {

@@ -679,11 +679,6 @@ export default function Home() {
                   <span>{profile.role}</span>
                   <small>{profile.membershipLevel} / {profile.regionId} / {profile.industryId}</small>
                 </div>
-                <div className="row">
-                  <strong>{t.selectedConversation}</strong>
-                  <span>{activeSection}</span>
-                  <small>{selectedConversation?.title ?? t.noConversations}</small>
-                </div>
               </div>
             </section>
           </div>
