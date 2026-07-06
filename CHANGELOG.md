@@ -8,10 +8,10 @@
 - Affected modules: `apps/web` and both change logs.
 - Main changes:
   - Reworked the conversation list row structure so archive and delete actions use explicit icon buttons instead of nested interactive spans inside the row button, which restores visible action icons and keeps the row markup valid.
-  - Constrained the right workspace column so only the content area scrolls while the top bar stays fixed in the shell, avoiding whole-panel scrolling during long sessions.
+  - Constrained the diagnosis workspace scroll boundaries so the shell-level right column stops scrolling in the diagnosis section, the conversation message stream scrolls independently, and the right-side report/intelligence column keeps its own overflow handling.
   - Compressed the top-right identity block into two lines and removed the visible "Current context" label from the sidebar and users panel.
 - Verification results:
-  - In `apps/web`, `npm test` passes with 30/30 tests green, including the new regressions for row action buttons, right-column scroll containment, compact identity metadata, and removing the current-context summary row.
+  - In `apps/web`, `npm test` passes with 31/31 tests green, including the new regressions for row action buttons, diagnosis-only scroll containment, compact identity metadata, and removing the current-context summary row.
 - Unfinished items:
   - No visual browser pass was run in this change set, so the update is verified by source-based regression coverage only.
 

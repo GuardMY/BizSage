@@ -25,6 +25,8 @@ export function WorkspaceShell({
   status,
   t
 }: WorkspaceShellProps) {
+  const scrollClassName = `workspaceScroll ${activeSection === "diagnosis" ? "conversationScrollOnly" : ""}`.trim();
+
   return (
     <main className="workspace">
       <aside className="rail">
@@ -92,7 +94,7 @@ export function WorkspaceShell({
           </div>
         </header>
 
-        <div className="workspaceScroll">{children}</div>
+        <div className={scrollClassName}>{children}</div>
       </section>
     </main>
   );

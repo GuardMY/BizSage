@@ -455,11 +455,20 @@ small {
   overflow-x: hidden;
 }
 
+.workspaceScroll.conversationScrollOnly {
+  overflow: hidden;
+}
+
 .workspacePanelGrid {
   min-height: 0;
+  height: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;
   gap: 20px;
+}
+
+.conversationWorkspace {
+  align-items: stretch;
 }
 
 .archivePanelGrid,
@@ -472,6 +481,7 @@ small {
   display: grid;
   gap: 20px;
   align-content: start;
+  overflow: auto;
 }
 
 .dialogue,
@@ -533,7 +543,8 @@ small {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 @keyframes streamingCaret {

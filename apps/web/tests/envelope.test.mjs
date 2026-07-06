@@ -183,6 +183,17 @@ test("Users workspace no longer renders the current-context summary row", async 
   assert.doesNotMatch(source, /<strong>\{t\.selectedConversation\}<\/strong>/);
 });
 
+test("Diagnosis section locks shell scrolling and keeps scroll inside the conversation content", async () => {
+  const shell = readFileSync(new URL("../app/components/workspace-shell.tsx", import.meta.url), "utf8");
+  const styles = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(shell, /const scrollClassName = `workspaceScroll \$\{activeSection === "diagnosis" \? "conversationScrollOnly" : ""\}`\.trim\(\);/);
+  assert.match(shell, /className=\{scrollClassName\}/);
+  assert.match(styles, /\.workspaceScroll\.conversationScrollOnly\s*\{[\s\S]*overflow:\s*hidden;/);
+  assert.match(styles, /\.workspacePanelGrid\s*\{[\s\S]*height:\s*100%;/);
+  assert.match(styles, /\.workspaceAside\s*\{[\s\S]*overflow:\s*auto;/);
+  assert.match(styles, /\.messages\s*\{[\s\S]*overflow-y:\s*auto;/);
+});
+
 test("Diagnosis workspace auto-follows streaming conversation updates", async () => {
   const source = readFileSync(new URL("../app/components/diagnosis-workspace.tsx", import.meta.url), "utf8");
   assert.match(source, /messagesRef/);

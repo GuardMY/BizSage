@@ -56,7 +56,7 @@ export function DiagnosisWorkspace({
   }, [busy, displayedDiagnosis, messageHistory]);
 
   return (
-    <div className="workspacePanelGrid">
+    <div className="workspacePanelGrid conversationWorkspace">
       <section className="dialogue">
         <div className="sectionHead">
           <div className="sectionCopy">
