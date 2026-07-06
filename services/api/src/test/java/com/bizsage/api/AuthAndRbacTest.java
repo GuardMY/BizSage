@@ -60,6 +60,15 @@ class AuthAndRbacTest {
       .andExpect(jsonPath("$.data[0].username").value("admin"));
   }
 
+  @Test
+  void invalidTokenReturnsUnauthorizedEnvelope() throws Exception {
+    mvc.perform(get("/api/users").header("Authorization", "Bearer invalid.token"))
+      .andExpect(status().isUnauthorized())
+      .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+      .andExpect(jsonPath("$.message").value("authentication required"))
+      .andExpect(jsonPath("$.requestId").isNotEmpty());
+  }
+
   private String login(String username) throws Exception {
     String response = mvc.perform(post("/api/auth/login")
         .contentType(MediaType.APPLICATION_JSON)

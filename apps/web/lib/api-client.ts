@@ -124,7 +124,38 @@ export class WorkerError extends Error {
   }
 }
 
+export class AuthExpiredError extends Error {
+  readonly code = "UNAUTHORIZED";
+
+  constructor(message = "Authentication expired") {
+    super(message);
+    this.name = "AuthExpiredError";
+  }
+}
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "/api";
+
+async function readEnvelope<T>(response: Response): Promise<ApiEnvelope<T> | null> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    return null;
+  }
+  return (await response.json()) as ApiEnvelope<T>;
+}
+
+async function readProtectedEnvelope<T>(response: Response, fallbackMessage: string): Promise<ApiEnvelope<T>> {
+  const envelope = await readEnvelope<T>(response);
+
+  if (response.status === 401 || envelope?.code === "UNAUTHORIZED") {
+    throw new AuthExpiredError(envelope?.message || "authentication required");
+  }
+
+  if (!response.ok || !envelope) {
+    throw new Error(fallbackMessage);
+  }
+
+  return envelope;
+}
 
 export function normalizeSources(raw: unknown): Source[] {
   if (!Array.isArray(raw)) return [];
@@ -159,8 +190,7 @@ export async function createConversation(token: string, title: string) {
     headers: authHeaders(token),
     body: JSON.stringify({ title })
   });
-  if (!response.ok) throw new Error("Create conversation failed");
-  const envelope = (await response.json()) as ApiEnvelope<Conversation>;
+  const envelope = await readProtectedEnvelope<Conversation>(response, "Create conversation failed");
   return envelope.data;
 }
 
@@ -168,8 +198,7 @@ export async function fetchConversations(token: string) {
   const response = await fetch(`${API_BASE}/conversations`, {
     headers: authHeaders(token)
   });
-  if (!response.ok) throw new Error("Fetch conversations failed");
-  const envelope = (await response.json()) as ApiEnvelope<Conversation[]>;
+  const envelope = await readProtectedEnvelope<Conversation[]>(response, "Fetch conversations failed");
   return envelope.data;
 }
 
@@ -177,8 +206,7 @@ export async function fetchMessages(token: string, conversationId: number) {
   const response = await fetch(`${API_BASE}/conversations/${conversationId}/messages`, {
     headers: authHeaders(token)
   });
-  if (!response.ok) throw new Error("Fetch messages failed");
-  const envelope = (await response.json()) as ApiEnvelope<ConversationMessage[]>;
+  const envelope = await readProtectedEnvelope<ConversationMessage[]>(response, "Fetch messages failed");
   return envelope.data;
 }
 
@@ -259,8 +287,7 @@ export async function fetchPaidIntelligence(token: string) {
   const response = await fetch(`${API_BASE}/paid-intelligence`, {
     headers: authHeaders(token)
   });
-  if (!response.ok) throw new Error("Fetch paid intelligence failed");
-  const envelope = (await response.json()) as ApiEnvelope<PaidIntelligence[]>;
+  const envelope = await readProtectedEnvelope<PaidIntelligence[]>(response, "Fetch paid intelligence failed");
   return envelope.data;
 }
 
@@ -270,6 +297,10 @@ export async function fetchDiagnosisReport(token: string, question: string) {
   });
 
   if (!response.ok) {
+    const envelope = await readEnvelope<DiagnosisReport>(response);
+    if (response.status === 401 || envelope?.code === "UNAUTHORIZED") {
+      throw new AuthExpiredError(envelope?.message || "authentication required");
+    }
     if (response.status === 503) {
       throw new WorkerError(
         "WORKER_UNREACHABLE",
@@ -287,8 +318,7 @@ export async function fetchOpsMetrics(token: string) {
   const response = await fetch(`${API_BASE}/ops/metrics`, {
     headers: authHeaders(token)
   });
-  if (!response.ok) throw new Error("Fetch ops metrics failed");
-  const envelope = (await response.json()) as ApiEnvelope<OpsMetrics>;
+  const envelope = await readProtectedEnvelope<OpsMetrics>(response, "Fetch ops metrics failed");
   return envelope.data;
 }
 

@@ -22,6 +22,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import Markdown from "../lib/markdown";
 import {
+  AuthExpiredError,
   createConversation,
   fetchConversations,
   fetchDiagnosisReport,
@@ -57,6 +58,7 @@ const messages: Record<Locale, {
   loginNotice: string;
   loginSuccess: string;
   loginFailed: string;
+  sessionExpired: string;
   languageToggle: string;
   navDiagnosis: string;
   navIntelligence: string;
@@ -115,6 +117,7 @@ const messages: Record<Locale, {
     loginNotice: "请登录 API 后开始诊断。",
     loginSuccess: "已连接 API。",
     loginFailed: "登录失败，请检查账号和密码。",
+    sessionExpired: "登录已失效，请重新登录。",
     languageToggle: "English",
     navDiagnosis: "诊断",
     navIntelligence: "情报",
@@ -173,6 +176,7 @@ const messages: Record<Locale, {
     loginNotice: "Sign in to the API to start diagnosis.",
     loginSuccess: "Connected to API.",
     loginFailed: "Sign-in failed. Check the username and password.",
+    sessionExpired: "Your session expired. Please sign in again.",
     languageToggle: "中文",
     navDiagnosis: "Diagnosis",
     navIntelligence: "Intelligence",
@@ -276,6 +280,13 @@ export default function Home() {
       fetchConversations(profile.token)
     ]).then(([nextPaidRows, nextMetrics, nextConversations]) => {
       if (cancelled) return;
+      const failures = [nextPaidRows, nextMetrics, nextConversations].filter(
+        (result): result is PromiseRejectedResult => result.status === "rejected"
+      );
+      if (failures.some((result) => result.reason instanceof AuthExpiredError)) {
+        handleSessionExpired();
+        return;
+      }
       setPaidRows(nextPaidRows.status === "fulfilled" ? nextPaidRows.value : []);
       setMetrics(nextMetrics.status === "fulfilled" ? nextMetrics.value : null);
       const convs = nextConversations.status === "fulfilled" ? nextConversations.value : [];
@@ -288,7 +299,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [profile]);
+  }, [profile, selectedConversationId, t.sessionExpired]);
 
   // Load message history when a conversation is selected
   useEffect(() => {
@@ -302,14 +313,18 @@ export default function Home() {
       .then((msgs) => {
         if (!cancelled) setMessageHistory(msgs);
       })
-      .catch(() => {
+      .catch((error) => {
+        if (error instanceof AuthExpiredError) {
+          handleSessionExpired();
+          return;
+        }
         if (!cancelled) setMessageHistory([]);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [profile, selectedConversationId]);
+  }, [profile, selectedConversationId, t.sessionExpired]);
 
   // Close conversation dropdown when clicking outside
   useEffect(() => {
@@ -346,6 +361,7 @@ export default function Home() {
   }
 
   function handleLogout() {
+    window.localStorage.removeItem(PROFILE_STORAGE_KEY);
     setProfile(null);
     setActiveSection("diagnosis");
     setConversations([]);
@@ -361,6 +377,23 @@ export default function Home() {
     setNotice(t.loginNotice);
   }
 
+  function handleSessionExpired() {
+    window.localStorage.removeItem(PROFILE_STORAGE_KEY);
+    setProfile(null);
+    setActiveSection("diagnosis");
+    setConversations([]);
+    setMessageHistory([]);
+    setDiagnosis(null);
+    setReport(null);
+    setSelectedConversationId(null);
+    setPaidRows([]);
+    setMetrics(null);
+    setSelectedSource(null);
+    setConvDropdownOpen(false);
+    setReportBusy(false);
+    setNotice(t.sessionExpired);
+  }
+
   async function submitDiagnosis() {
     if (!profile) {
       setNotice(t.loginRequired);
@@ -370,12 +403,10 @@ export default function Home() {
     setDiagnosis(null);
     setReport(null);
     try {
-      let conversationId = selectedConversationId;
-      if (!conversationId) {
-        const created = await createConversation(profile.token, t.newConversationTitle);
-        conversationId = created.id;
+      const created = selectedConversationId ? null : await createConversation(profile.token, t.newConversationTitle);
+      const conversationId = selectedConversationId ?? created!.id;
+      if (created) {
         setSelectedConversationId(conversationId);
-        // Refresh conversation list
         setConversations((prev) => [created, ...prev]);
       }
       const nextDiagnosis = await streamDiagnosis(profile.token, conversationId, message);
@@ -384,11 +415,19 @@ export default function Home() {
       try {
         const updatedMessages = await fetchMessages(profile.token, conversationId);
         setMessageHistory(updatedMessages);
-      } catch {
+      } catch (error) {
+        if (error instanceof AuthExpiredError) {
+          handleSessionExpired();
+          return;
+        }
         // Non-fatal if message reload fails
       }
       setNotice(t.diagnosisCreated);
     } catch (error) {
+      if (error instanceof AuthExpiredError) {
+        handleSessionExpired();
+        return;
+      }
       if (error instanceof WorkerError) {
         // Map specific worker error codes to localized messages
         switch (error.code) {
@@ -419,6 +458,10 @@ export default function Home() {
       const nextReport = await fetchDiagnosisReport(profile.token, message);
       setReport(nextReport);
     } catch (error) {
+      if (error instanceof AuthExpiredError) {
+        handleSessionExpired();
+        return;
+      }
       if (error instanceof WorkerError) {
         setNotice(error.message);
       } else {
@@ -445,6 +488,10 @@ export default function Home() {
       setDiagnosis(null);
       setReport(null);
     } catch (error) {
+      if (error instanceof AuthExpiredError) {
+        handleSessionExpired();
+        return;
+      }
       setNotice(error instanceof Error ? error.message : t.diagnosisFailed);
     }
   }

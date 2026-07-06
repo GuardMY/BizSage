@@ -24,6 +24,14 @@ test("API client includes real diagnosis stream helpers", async () => {
   assert.match(source, /text\/event-stream/);
 });
 
+test("API client exposes a dedicated auth-expired error path for protected fetch requests", async () => {
+  const source = readFileSync(new URL("../lib/api-client.ts", import.meta.url), "utf8");
+  assert.match(source, /class AuthExpiredError extends Error/);
+  assert.match(source, /response\.status === 401/);
+  assert.match(source, /code === "UNAUTHORIZED"/);
+  assert.match(source, /throw new AuthExpiredError/);
+});
+
 test("Web page defines bilingual UI messages and language switching", async () => {
   const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(source, /type Locale = "zh-CN" \| "en"/);
@@ -65,6 +73,16 @@ test("Web page persists the signed-in profile across refresh", async () => {
   assert.match(source, /setProfile\(nextProfile\)/);
   assert.match(source, /JSON\.stringify\(profile\)/);
   assert.match(source, /JSON\.parse/);
+});
+
+test("Web page returns to the login screen on auth expiry without clearing draft input", async () => {
+  const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /sessionExpired/);
+  assert.match(source, /AuthExpiredError/);
+  assert.match(source, /window\.localStorage\.removeItem\(PROFILE_STORAGE_KEY\)/);
+  assert.match(source, /setProfile\(null\)/);
+  assert.match(source, /setNotice\(t\.sessionExpired\)/);
+  assert.doesNotMatch(source, /setMessage\(messages\["zh-CN"\]\.defaultQuestion\)/);
 });
 
 test("Web page keeps the same conversation id for follow-up diagnosis", async () => {

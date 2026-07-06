@@ -1,5 +1,21 @@
 ﻿# Change Log
 
+## 2026-07-06
+
+### Web Auth Expiry Returns to Login Screen
+
+- Change type: functional development.
+- Affected modules: `apps/web`, `services/api`, and both change logs.
+- Main changes:
+  - Updated the API JWT authentication filter so invalid or expired bearer tokens on protected HTTP endpoints now resolve through the standard unauthorized path instead of surfacing as server errors.
+  - Added a dedicated Web `AuthExpiredError` path for protected `fetch` calls, covering conversations, message history, paid intelligence, ops metrics, and diagnosis report requests.
+  - Updated the Web home page to clear persisted sign-in state, return to the existing login screen, and show a session-expired notice when protected HTTP requests detect auth expiry, while keeping the current unsent draft input intact.
+- Verification results:
+  - In `services/api`, `mvn -Dtest=AuthAndRbacTest test` verifies invalid bearer tokens now return `401` with `code: UNAUTHORIZED`.
+  - In `apps/web`, `npm test` verifies the auth-expired client path, login-screen fallback behavior, and draft-preservation source assertions.
+- Unfinished items:
+  - SSE diagnosis auth-expiry auto-logout is still intentionally out of scope for this change.
+
 ## 2026-07-05
 
 ### LLM Closure Implementation Plan Archive
