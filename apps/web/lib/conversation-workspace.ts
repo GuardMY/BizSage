@@ -1,9 +1,11 @@
 // @ts-nocheck
 /** @typedef {import("./api-client").Conversation} Conversation */
 
-/**
- * @typedef {"diagnosis" | "intelligence" | "users" | "archive"} WorkspaceSection
- */
+export type WorkspaceSection = "diagnosis" | "intelligence" | "users" | "archive";
+export type ConversationSidebarDescriptor = {
+  titleKey: "diagnosisConversationList" | "archiveConversationList";
+  actionKey: "archiveConversation" | "deleteConversation";
+};
 
 /**
  * @param {Conversation[]} conversations
@@ -25,10 +27,7 @@ export function partitionConversations(conversations) {
   };
 }
 
-/**
- * @param {WorkspaceSection} section
- */
-export function describeConversationSidebar(section) {
+export function describeConversationSidebar(section: WorkspaceSection): ConversationSidebarDescriptor {
   if (section === "archive") {
     return {
       titleKey: "archiveConversationList",
