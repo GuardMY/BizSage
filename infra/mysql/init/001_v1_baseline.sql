@@ -206,6 +206,68 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   INDEX idx_audit_action (action, actor)
 );
 
+
+CREATE TABLE IF NOT EXISTS admin_intelligence_reviews (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  intelligence_id BIGINT NOT NULL,
+  review_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+  verdict VARCHAR(32) NULL,
+  reviewer VARCHAR(64) NULL,
+  reason VARCHAR(512) NULL,
+  evidence_json JSON NULL,
+  source_id VARCHAR(64) NOT NULL DEFAULT 'admin-review',
+  weight DECIMAL(8,4) NOT NULL DEFAULT 1.0000,
+  region_id VARCHAR(64) NOT NULL DEFAULT 'global',
+  industry_id VARCHAR(64) NOT NULL DEFAULT 'global',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_admin_reviews_status (review_status, verdict),
+  INDEX idx_admin_reviews_intelligence (intelligence_id)
+);
+
+CREATE TABLE IF NOT EXISTS admin_tickets (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  ticket_type VARCHAR(64) NOT NULL,
+  severity VARCHAR(16) NOT NULL,
+  target_type VARCHAR(64) NOT NULL,
+  target_id BIGINT NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  description TEXT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'NEW',
+  owner VARCHAR(64) NULL,
+  next_action VARCHAR(255) NULL,
+  source_id VARCHAR(64) NOT NULL DEFAULT 'admin-ticket',
+  weight DECIMAL(8,4) NOT NULL DEFAULT 1.0000,
+  region_id VARCHAR(64) NOT NULL DEFAULT 'global',
+  industry_id VARCHAR(64) NOT NULL DEFAULT 'global',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_admin_tickets_status (status, severity),
+  INDEX idx_admin_tickets_target (target_type, target_id)
+);
+
+CREATE TABLE IF NOT EXISTS admin_human_intelligence (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  city VARCHAR(64) NOT NULL,
+  industry_id VARCHAR(64) NOT NULL,
+  link_id VARCHAR(64) NOT NULL,
+  content TEXT NOT NULL,
+  source_type VARCHAR(64) NOT NULL,
+  collector VARCHAR(64) NOT NULL,
+  event_time VARCHAR(64) NULL,
+  confidence DECIMAL(8,4) NOT NULL DEFAULT 0.7000,
+  entitlement VARCHAR(32) NOT NULL DEFAULT 'FREE',
+  status VARCHAR(32) NOT NULL DEFAULT 'PENDING_REVIEW',
+  reviewer VARCHAR(64) NULL,
+  review_notes VARCHAR(512) NULL,
+  source_id VARCHAR(64) NOT NULL DEFAULT 'human-intel',
+  weight DECIMAL(8,4) NOT NULL DEFAULT 1.0000,
+  region_id VARCHAR(64) NOT NULL DEFAULT 'cn-default',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_admin_human_status (status, entitlement),
+  INDEX idx_admin_human_scope (industry_id, region_id)
+);
 CREATE TABLE IF NOT EXISTS report_jobs (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   user_id BIGINT NOT NULL,

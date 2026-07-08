@@ -207,3 +207,40 @@ test("Diagnosis workspace avoids rendering a second standalone assistant bubble 
   assert.doesNotMatch(source, /\{diagnosis && \(\s*<div[\s\S]*?<Markdown content=\{diagnosis\.answer\} \/>[\s\S]*?\)\}/);
   assert.match(source, /\) : displayedDiagnosis \|\| hasAssistantReply \? \(/);
 });
+
+test("Admin V3 API client exposes real services/api endpoints for Admin-V3-1 and Admin-V3-2", async () => {
+  const source = readFileSync(new URL("../lib/api-client.ts", import.meta.url), "utf8");
+  assert.match(source, /fetchAdminDashboard/);
+  assert.match(source, /\/admin\/dashboard/);
+  assert.match(source, /fetchAdminAlerts/);
+  assert.match(source, /\/admin\/alerts/);
+  assert.match(source, /fetchAdminAuditLogs/);
+  assert.match(source, /\/admin\/audit-logs/);
+  assert.match(source, /fetchAdminIntelligenceReviews/);
+  assert.match(source, /\/admin\/intelligence-reviews/);
+  assert.match(source, /fetchAdminTickets/);
+  assert.match(source, /\/admin\/tickets/);
+  assert.match(source, /fetchAdminHumanIntelligence/);
+  assert.match(source, /\/admin\/human-intelligence/);
+});
+
+test("Admin page renders a dedicated operations workspace with real action handlers", async () => {
+  const source = readFileSync(new URL("../app/admin/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /type AdminSection = "dashboard" \| "alerts" \| "audit" \| "reviews" \| "tickets" \| "human"/);
+  assert.match(source, /fetchAdminDashboard/);
+  assert.match(source, /updateAdminAlert/);
+  assert.match(source, /decideAdminReview/);
+  assert.match(source, /transitionAdminTicket/);
+  assert.match(source, /createAdminHumanIntelligence/);
+  assert.match(source, /reviewAdminHumanIntelligence/);
+  assert.match(source, /role === "SUPER_ADMIN" \|\| profile\?\.role === "OPERATOR"/);
+});
+
+test("Admin workspace styles provide dense metrics, tables, badges, and review layouts", async () => {
+  const source = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(source, /\.adminWorkspace/);
+  assert.match(source, /\.adminMetricGrid/);
+  assert.match(source, /\.adminTableHead/);
+  assert.match(source, /\.adminBadge/);
+  assert.match(source, /\.adminReviewItem/);
+});

@@ -1,4 +1,47 @@
-﻿# Change Log
+# Change Log
+
+## 2026-07-08
+### Admin-V3-1 And Admin-V3-2 Implementation
+
+- Change type: functional development.
+- Affected modules: `services/api`, `infra/mysql`, `apps/web`, `docs/en`, `docs/zh-CN`, and both change logs.
+- Main changes:
+  - Added real Admin V3 database persistence with `admin_intelligence_reviews`, `admin_tickets`, and `admin_human_intelligence`, plus MySQL initialization and API startup auto-migration support.
+  - Added `/api/admin/**` endpoints for dashboard metrics, alert handling, audit-log search, intelligence review verdicts, ticket transitions, and human-intelligence entry/review, with admin write actions recorded in `audit_logs`.
+  - Added a standalone `/admin` Web console that connects to the real admin APIs and covers the Admin-V3-1/V3-2 workspace: control center, alerts, audit logs, intelligence reviews, tickets, and human intelligence.
+  - Added backend `AdminV3ApiTest` coverage and Web source regression coverage for the admin API client, page, and styles.
+- Verification results:
+  - Attempted `mvn -Dtest=AdminV3ApiTest test` in `services/api`, but the current execution environment does not provide `mvn`.
+  - Attempted `npm test` in `apps/web`, but the current execution environment does not provide `npm` or `node`.
+  - Performed static source checks for the new admin API, schema, page, and styles after the toolchain commands were unavailable.
+- Unfinished items:
+  - Run the added backend and Web test suites in an environment with Maven and Node/npm available.
+  - Browser-level visual verification of `/admin` remains pending.
+### V3 Admin UI Design Documentation
+
+- Change type: documentation.
+- Affected modules: `docs/en`, `docs/zh-CN`, and both change logs.
+- Main changes:
+  - Added the V3 administrator backend UI design as paired English and Chinese documents.
+  - Defined the admin information architecture, role boundaries, reusable Next.js workspace patterns, key page designs, core workflows, API needs, and acceptance criteria.
+  - Covered full V3 operations scope including knowledge, collection, intelligence review, tickets, risk rules, users/members, orders, alerts, audit logs, compliance, and monthly reports.
+- Verification results:
+  - Documentation-only change; no service test suite was required.
+  - Confirmed the English and Chinese admin UI design documents describe the same scope, workflows, acceptance criteria, and phased delivery plan.
+- Unfinished items:
+  - The UI design is not yet implemented in `apps/web`; API contracts and page-level tests still need to be added during development.
+
+### Agent Requirement Clarification Rule
+
+- Change type: documentation.
+- Affected modules: `AGENTS.md`, `AGENTS-zh-CN.md`, and both change logs.
+- Main changes:
+  - Added an agent collaboration rule requiring one question at a time before final plans or implementation for functionality additions or changes.
+  - Clarified that follow-up questions should continue until the agent has about 95% confidence in the user's real needs, goals, boundaries, and acceptance criteria.
+- Verification results:
+  - Confirmed the English and Chinese agent documents carry the same requirement.
+- Unfinished items:
+  - None.
 
 ## 2026-07-07
 

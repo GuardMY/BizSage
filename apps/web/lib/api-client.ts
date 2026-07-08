@@ -107,6 +107,108 @@ export type OpsMetrics = {
   environment: string;
 };
 
+
+export type AdminMetric = {
+  key: string;
+  label: string;
+  value: string;
+  status: string;
+  detail: string;
+};
+
+export type AdminAlert = {
+  id: number;
+  level: string;
+  component: string;
+  message: string;
+  status: string;
+  owner: string | null;
+  regionId: string;
+  industryId: string;
+  createTime: string;
+  updateTime: string;
+};
+
+export type AdminAuditLog = {
+  id: number;
+  actor: string;
+  action: string;
+  targetType: string;
+  targetId: string;
+  result: string;
+  regionId: string;
+  industryId: string;
+  createTime: string;
+};
+
+export type AdminIntelligenceReview = {
+  id: number;
+  intelligenceId: number;
+  title: string;
+  content: string;
+  url: string | null;
+  status: string;
+  reviewStatus: string;
+  verdict: string | null;
+  reviewer: string | null;
+  reason: string | null;
+  confidence: number;
+  regionId: string;
+  industryId: string;
+  sourceId: string;
+  createTime: string;
+  updateTime: string;
+};
+
+export type AdminTicket = {
+  id: number;
+  ticketType: string;
+  severity: string;
+  targetType: string;
+  targetId: number;
+  title: string;
+  status: string;
+  owner: string | null;
+  nextAction: string | null;
+  regionId: string;
+  industryId: string;
+  createTime: string;
+  updateTime: string;
+};
+
+export type AdminHumanIntelligence = {
+  id: number;
+  city: string;
+  industryId: string;
+  linkId: string;
+  content: string;
+  sourceType: string;
+  collector: string;
+  eventTime: string | null;
+  confidence: number;
+  entitlement: string;
+  status: string;
+  reviewer: string | null;
+  reviewNotes: string | null;
+  regionId: string;
+  sourceId: string;
+  createTime: string;
+  updateTime: string;
+};
+
+export type AdminList<T> = {
+  items: T[];
+  total: number;
+  summary: Record<string, unknown>;
+};
+
+export type AdminDashboard = {
+  metrics: AdminMetric[];
+  urgentAlerts: AdminAlert[];
+  openTickets: AdminTicket[];
+  pendingReviews: AdminIntelligenceReview[];
+  recentAuditLogs: AdminAuditLog[];
+};
 export class WorkerError extends Error {
   readonly code: DiagnosisError["error"];
 
@@ -337,6 +439,115 @@ export async function fetchOpsMetrics(token: string) {
   return envelope.data;
 }
 
+
+export async function fetchAdminDashboard(token: string) {
+  const response = await fetch(`${API_BASE}/admin/dashboard`, {
+    headers: authHeaders(token)
+  });
+  const envelope = await readProtectedEnvelope<AdminDashboard>(response, "Fetch admin dashboard failed");
+  return envelope.data;
+}
+
+export async function fetchAdminAlerts(token: string, status?: string) {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  const response = await fetch(`${API_BASE}/admin/alerts${query}`, {
+    headers: authHeaders(token)
+  });
+  const envelope = await readProtectedEnvelope<AdminList<AdminAlert>>(response, "Fetch admin alerts failed");
+  return envelope.data;
+}
+
+export async function updateAdminAlert(token: string, alertId: number, action: "acknowledge" | "claim" | "close") {
+  const response = await fetch(`${API_BASE}/admin/alerts/${alertId}/${action}`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ notes: action })
+  });
+  const envelope = await readProtectedEnvelope<AdminAlert>(response, "Update admin alert failed");
+  return envelope.data;
+}
+
+export async function fetchAdminAuditLogs(token: string, query = "") {
+  const suffix = query ? `?q=${encodeURIComponent(query)}` : "";
+  const response = await fetch(`${API_BASE}/admin/audit-logs${suffix}`, {
+    headers: authHeaders(token)
+  });
+  const envelope = await readProtectedEnvelope<AdminList<AdminAuditLog>>(response, "Fetch admin audit logs failed");
+  return envelope.data;
+}
+
+export async function fetchAdminIntelligenceReviews(token: string, status?: string) {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  const response = await fetch(`${API_BASE}/admin/intelligence-reviews${query}`, {
+    headers: authHeaders(token)
+  });
+  const envelope = await readProtectedEnvelope<AdminList<AdminIntelligenceReview>>(response, "Fetch admin reviews failed");
+  return envelope.data;
+}
+
+export async function decideAdminReview(token: string, reviewId: number, verdict: "PASS" | "REJECT" | "FLAG", notes: string) {
+  const response = await fetch(`${API_BASE}/admin/intelligence-reviews/${reviewId}/verdict`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ verdict, notes })
+  });
+  const envelope = await readProtectedEnvelope<AdminIntelligenceReview>(response, "Decide admin review failed");
+  return envelope.data;
+}
+
+export async function fetchAdminTickets(token: string, status?: string) {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  const response = await fetch(`${API_BASE}/admin/tickets${query}`, {
+    headers: authHeaders(token)
+  });
+  const envelope = await readProtectedEnvelope<AdminList<AdminTicket>>(response, "Fetch admin tickets failed");
+  return envelope.data;
+}
+
+export async function transitionAdminTicket(token: string, ticketId: number, status: string, nextAction: string) {
+  const response = await fetch(`${API_BASE}/admin/tickets/${ticketId}/transition`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ status, nextAction, notes: nextAction })
+  });
+  const envelope = await readProtectedEnvelope<AdminTicket>(response, "Transition admin ticket failed");
+  return envelope.data;
+}
+
+export async function fetchAdminHumanIntelligence(token: string, status?: string) {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  const response = await fetch(`${API_BASE}/admin/human-intelligence${query}`, {
+    headers: authHeaders(token)
+  });
+  const envelope = await readProtectedEnvelope<AdminList<AdminHumanIntelligence>>(response, "Fetch human intelligence failed");
+  return envelope.data;
+}
+
+export async function createAdminHumanIntelligence(
+  token: string,
+  payload: Pick<AdminHumanIntelligence, "city" | "industryId" | "linkId" | "content" | "sourceType" | "collector" | "entitlement" | "regionId" | "sourceId"> & {
+    eventTime: string;
+    confidence: number;
+  }
+) {
+  const response = await fetch(`${API_BASE}/admin/human-intelligence`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify(payload)
+  });
+  const envelope = await readProtectedEnvelope<AdminHumanIntelligence>(response, "Create human intelligence failed");
+  return envelope.data;
+}
+
+export async function reviewAdminHumanIntelligence(token: string, id: number, verdict: "PASS" | "REJECT", notes: string) {
+  const response = await fetch(`${API_BASE}/admin/human-intelligence/${id}/review`, {
+    method: "POST",
+    headers: authHeaders(token),
+    body: JSON.stringify({ verdict, notes })
+  });
+  const envelope = await readProtectedEnvelope<AdminHumanIntelligence>(response, "Review human intelligence failed");
+  return envelope.data;
+}
 function authHeaders(token: string) {
   return {
     "Content-Type": "application/json",
