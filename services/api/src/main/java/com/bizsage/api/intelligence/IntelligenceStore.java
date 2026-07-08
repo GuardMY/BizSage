@@ -222,9 +222,11 @@ public class IntelligenceStore {
       knowledgeItem.put("source_id", item.sourceId() != null ? item.sourceId() : "intelligence");
       knowledgeItem.put("weight", item.weight());
       knowledgeItem.put("confidence", item.confidence());
+      knowledgeItem.put("authority", 0.85);     // V2: six-dimension rerank
+      knowledgeItem.put("timeliness", 0.85);    // V2: six-dimension rerank
       knowledgeItem.put("industry_id", item.industryId() != null ? item.industryId() : "general");
       knowledgeItem.put("region_id", item.regionId() != null ? item.regionId() : "cn-default");
-      knowledgeItem.put("entitlement", "FREE");
+      knowledgeItem.put("entitlement", item.entitlement() != null ? item.entitlement() : "FREE");
       aiWorkerClient.syncKnowledge(List.of(knowledgeItem));
     } catch (Exception ex) {
       log.warn("Failed to sync approved intelligence {} to Qdrant (non-fatal): {}",

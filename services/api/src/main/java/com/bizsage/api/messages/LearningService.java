@@ -303,6 +303,8 @@ public class LearningService {
     map.put("source_id", item.sourceId() != null ? item.sourceId() : "knowledge");
     map.put("weight", item.weight());
     map.put("confidence", item.confidence());
+    map.put("authority", 0.85);     // V2: six-dimension rerank
+    map.put("timeliness", 0.85);    // V2: six-dimension rerank
     map.put("industry_id", item.industryId() != null ? item.industryId() : "general");
     map.put("region_id", item.regionId() != null ? item.regionId() : "cn-default");
     map.put("entitlement", "FREE");
@@ -318,6 +320,8 @@ public class LearningService {
     map.put("source_id", item.sourceId() != null ? item.sourceId() : "intelligence");
     map.put("weight", item.weight());
     map.put("confidence", item.confidence());
+    map.put("authority", 0.85);     // V2: six-dimension rerank
+    map.put("timeliness", 0.85);    // V2: six-dimension rerank
     map.put("industry_id", item.industryId() != null ? item.industryId() : "general");
     map.put("region_id", item.regionId() != null ? item.regionId() : "cn-default");
     map.put("entitlement", "FREE");

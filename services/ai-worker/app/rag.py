@@ -19,8 +19,11 @@ class KnowledgeItem:
     industry_id: str
     region_id: str
     entitlement: str = "FREE"
-    review_confidence: float = 0.85
-    historical_quality: float = 0.85
+    # V2: Six-dimension rerank fields
+    authority: float = 0.85       # source authority (gov > official > media > forum)
+    timeliness: float = 0.85      # freshness score (today=1.0, decays over time)
+    review_confidence: float = 0.85  # confidence from admin review process
+    historical_quality: float = 0.85  # long-term historical accuracy of source
     link_id: str = ""
 
 
@@ -200,6 +203,8 @@ def _candidate_to_knowledge_item(
         industry_id=str(payload.get("industry_id") or payload.get("industryId") or "general"),
         region_id=str(payload.get("region_id") or payload.get("regionId") or "cn-default"),
         entitlement=str(payload.get("entitlement", "FREE")),
+        authority=float(payload.get("authority", 0.85)),
+        timeliness=float(payload.get("timeliness", 0.85)),
         review_confidence=float(payload.get("review_confidence", payload.get("reviewConfidence", 0.85))),
         historical_quality=float(payload.get("historical_quality", payload.get("historicalQuality", 0.85))),
     )
@@ -222,11 +227,23 @@ def _matches_business_filters(
 
 
 def _quality_score(item: KnowledgeItem) -> float:
+    """V2: Six-dimension rerank scoring.
+
+    Dimensions and their weights:
+      - weight (0.20)           — source-level importance / editorial weighting
+      - confidence (0.15)       — LLM confidence in the extracted fact
+      - authority (0.15)        — source credibility tier (gov=1.0, official=0.85, media=0.7, forum=0.5)
+      - timeliness (0.15)       — freshness decay (today=1.0, 30d=0.9, 1y=0.5, 3y+=0.2)
+      - review_confidence (0.20)— admin review verdict confidence
+      - historical_quality (0.15)— long-term accuracy track record of the source
+    """
     return (
-        item.weight * 0.35
-        + item.confidence * 0.2
-        + item.review_confidence * 0.25
-        + item.historical_quality * 0.2
+        item.weight * 0.20
+        + item.confidence * 0.15
+        + item.authority * 0.15
+        + item.timeliness * 0.15
+        + item.review_confidence * 0.20
+        + item.historical_quality * 0.15
     )
 
 

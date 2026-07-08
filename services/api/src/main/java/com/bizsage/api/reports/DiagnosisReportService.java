@@ -115,6 +115,19 @@ public class DiagnosisReportService {
         response.disclaimer());
   }
 
+  /**
+   * V2: Build a diagnosis report and generate it as a PDF byte array.
+   *
+   * <p>This method delegates to the AI worker for the answer (same as
+   * {@link #build}), then renders the result into a formatted PDF document.
+   *
+   * @throws AiWorkerException if the worker is unavailable or LLM is not configured
+   */
+  public byte[] buildPdf(String question, UserAccount user, PdfReportGenerator generator) {
+    DiagnosisReport report = build(question, user);
+    return generator.generate(report);
+  }
+
   // ── Knowledge loading ───────────────────────────────────────────
 
   private List<Map<String, Object>> loadKnowledgeForReport(

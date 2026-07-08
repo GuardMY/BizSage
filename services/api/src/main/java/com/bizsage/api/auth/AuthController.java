@@ -4,6 +4,7 @@ import com.bizsage.api.common.ApiResponse;
 import com.bizsage.api.common.RequestIds;
 import com.bizsage.api.users.UserStore;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -25,13 +26,26 @@ public class AuthController {
   }
 
   @PostMapping("/login")
-  ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+  ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request,
+                                   HttpServletRequest httpRequest,
+                                   HttpServletResponse httpResponse) {
     var user = userStore.findByUsername(request.username())
         .filter(candidate -> passwordMatches(request.password(), candidate.password()))
         .orElseThrow(() -> new IllegalArgumentException("invalid username or password"));
+
+    String token = jwtService.issue(user);
+
+    // Set httpOnly cookie so JavaScript cannot read the token (XSS protection).
+    jakarta.servlet.http.Cookie cookie = new jakarta.servlet.http.Cookie("bizsage_token", token);
+    cookie.setHttpOnly(true);
+    cookie.setSecure(false); // Set true when TLS is enabled
+    cookie.setPath("/");
+    cookie.setMaxAge(3600); // 1 hour, matches JWT expiry
+    cookie.setAttribute("SameSite", "Strict");
+    httpResponse.addCookie(cookie);
+
     return ApiResponse.ok(
         new LoginResponse(
-            jwtService.issue(user),
             user.username(),
             user.role(),
             user.regionId(),
@@ -55,8 +69,20 @@ public class AuthController {
   record LoginRequest(@NotBlank String username, @NotBlank String password) {
   }
 
+  /** V2: Clear the httpOnly cookie to log out. */
+  @PostMapping("/logout")
+  ApiResponse<String> logout(HttpServletResponse httpResponse, HttpServletRequest httpRequest) {
+    jakarta.servlet.http.Cookie cookie = new jakarta.servlet.http.Cookie("bizsage_token", "");
+    cookie.setHttpOnly(true);
+    cookie.setSecure(false);
+    cookie.setPath("/");
+    cookie.setMaxAge(0); // expire immediately
+    cookie.setAttribute("SameSite", "Strict");
+    httpResponse.addCookie(cookie);
+    return ApiResponse.ok("logged out", requestId(httpRequest));
+  }
+
   record LoginResponse(
-      String token,
       String username,
       Role role,
       String regionId,

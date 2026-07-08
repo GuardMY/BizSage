@@ -16,6 +16,7 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -52,6 +53,45 @@ public class AdminStore {
         listTickets(null).items().stream().limit(5).toList(),
         listReviews("PENDING").items().stream().limit(5).toList(),
         listAuditLogs(null).items().stream().limit(5).toList());
+  }
+
+  /** V2: Aggregate collection telemetry for monitoring dashboards. */
+  Map<String, Object> getCollectionTelemetry() {
+    int totalSources = countWhere("admin_collection_sources", "1 = 1");
+    int enabledSources = countWhere("admin_collection_sources", "status = 'ENABLED'");
+    int openCircuits = countWhere("admin_collection_sources", "circuit_state = 'OPEN'");
+    int deadLetterCount = countWhere("dead_letter_records", "1 = 1");
+
+    Integer totalRuns24h = jdbcTemplate.queryForObject(
+        "select count(*) from admin_collection_job_runs where start_time >= date_sub(current_timestamp, interval 24 hour)",
+        Integer.class);
+    Integer successRuns24h = jdbcTemplate.queryForObject(
+        "select count(*) from admin_collection_job_runs where status = 'SUCCESS' and start_time >= date_sub(current_timestamp, interval 24 hour)",
+        Integer.class);
+    double successRate24h = totalRuns24h != null && totalRuns24h > 0
+        ? (double) successRuns24h / totalRuns24h : -1.0;
+
+    Integer records24h = jdbcTemplate.queryForObject(
+        "select coalesce(sum(records_collected), 0) from admin_collection_job_runs where start_time >= date_sub(current_timestamp, interval 24 hour)",
+        Integer.class);
+
+    List<Map<String, Object>> recentRuns = jdbcTemplate.queryForList("""
+        select r.status, r.records_collected, r.start_time, s.name as source_name
+          from admin_collection_job_runs r
+          left join admin_collection_sources s on s.id = r.source_config_id
+         order by r.id desc limit 10
+        """);
+
+    Map<String, Object> result = new LinkedHashMap<>();
+    result.put("totalSources", totalSources);
+    result.put("enabledSources", enabledSources);
+    result.put("openCircuits", openCircuits);
+    result.put("deadLetterCount", deadLetterCount);
+    result.put("totalRuns24h", totalRuns24h != null ? totalRuns24h : 0);
+    result.put("successRate24h", String.format("%.1f%%", successRate24h * 100));
+    result.put("recordsCollected24h", records24h != null ? records24h : 0);
+    result.put("recentRuns", recentRuns);
+    return result;
   }
 
   AdminList<AlertItem> listAlerts(String status) {

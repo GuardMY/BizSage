@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 
 from fastapi import FastAPI
+
+logger = logging.getLogger(__name__)
 from pydantic import BaseModel, Field
 import redis
 
@@ -79,8 +82,8 @@ def dedupe_records(records: list[dict], state_store: RedisStateStore | None) -> 
         if state_store is not None:
             try:
                 state_store.save_fingerprint(fingerprint.fingerprint, ttl_seconds=86400)
-            except Exception:  # noqa: BLE001 - Redis degradation should not block collection.
-                pass
+            except Exception:
+                logger.warning("Redis fingerprint save failed — deduplication may be degraded", exc_info=True)
         deduped.append(record)
     return deduped
 

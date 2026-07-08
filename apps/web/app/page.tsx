@@ -17,10 +17,13 @@ import {
   createConversation,
   deleteConversation,
   fetchConversations,
+  downloadDiagnosisPdf,
   fetchDiagnosisReport,
+  fetchMe,
   fetchMessages,
   fetchPaidIntelligence,
   login,
+  logout,
   streamDiagnosisEvents,
   WorkerError,
   type Conversation,
@@ -194,8 +197,8 @@ const messages: Record<Locale, WorkspaceMessages> = {
 
 export default function Home() {
   const [locale, setLocale] = useState<Locale>("zh-CN");
-  const [username, setUsername] = useState("operator");
-  const [password, setPassword] = useState("password");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [profile, setProfile] = useState<LoginProfile | null>(null);
   const [activeSection, setActiveSection] = useState<WorkspaceSection>("diagnosis");
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
@@ -213,20 +216,21 @@ export default function Home() {
 
   const t = messages[locale];
 
+  // V2: Restore profile from httpOnly cookie via /api/users/me
   useEffect(() => {
-    try {
-      const rawProfile = window.localStorage.getItem(PROFILE_STORAGE_KEY);
-      if (!rawProfile) return;
-      const savedProfile = JSON.parse(rawProfile) as LoginProfile;
-      setProfile(savedProfile);
-    } catch {
-      window.localStorage.removeItem(PROFILE_STORAGE_KEY);
-    }
+    let cancelled = false;
+    fetchMe()
+      .then((restoredProfile) => {
+        if (!cancelled) setProfile(restoredProfile);
+      })
+      .catch(() => {
+        // Not logged in — that's fine, user will see the login form
+      });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
     if (!profile) {
-      window.localStorage.removeItem(PROFILE_STORAGE_KEY);
       setPaidRows([]);
       setConversations([]);
       setMessageHistory([]);
@@ -234,12 +238,10 @@ export default function Home() {
       return;
     }
 
-    window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
-
     let cancelled = false;
     Promise.allSettled([
-      fetchPaidIntelligence(profile.token),
-      fetchConversations(profile.token)
+      fetchPaidIntelligence(),
+      fetchConversations(),
     ]).then(([nextPaidRows, nextConversations]) => {
       if (cancelled) return;
       const failures = [nextPaidRows, nextConversations].filter(
@@ -251,7 +253,8 @@ export default function Home() {
       }
 
       setPaidRows(nextPaidRows.status === "fulfilled" ? nextPaidRows.value : []);
-      setConversations(nextConversations.status === "fulfilled" ? nextConversations.value : []);
+      // V2: Paginated response — extract items array
+      setConversations(nextConversations.status === "fulfilled" ? nextConversations.value.items : []);
     });
 
     return () => {
@@ -288,7 +291,7 @@ export default function Home() {
     }
 
     let cancelled = false;
-    fetchMessages(profile.token, resolvedSelectedConversationId)
+    fetchMessages(resolvedSelectedConversationId)
       .then((messagesResult) => {
         if (!cancelled) setMessageHistory(messagesResult);
       })
@@ -324,7 +327,8 @@ export default function Home() {
   }
 
   function handleLogout() {
-    window.localStorage.removeItem(PROFILE_STORAGE_KEY);
+    // V2: httpOnly cookie is cleared by the server; no localStorage to manage.
+    logout().catch(() => {});
     setProfile(null);
     setActiveSection("diagnosis");
     setConversations([]);
@@ -340,7 +344,6 @@ export default function Home() {
   }
 
   function handleSessionExpired() {
-    window.localStorage.removeItem(PROFILE_STORAGE_KEY);
     setProfile(null);
     setActiveSection("diagnosis");
     setConversations([]);
@@ -370,7 +373,7 @@ export default function Home() {
   async function handleNewConversation() {
     if (!profile) return;
     try {
-      const created = await createConversation(profile.token, t.newConversationTitle);
+      const created = await createConversation(t.newConversationTitle);
       setConversations((previous) => [created, ...previous]);
       setSelectedConversationId(created.id);
       setActiveSection("diagnosis");
@@ -388,7 +391,7 @@ export default function Home() {
     if (!profile || selectedConversation == null) return;
 
     try {
-      const archivedConversation = await archiveConversation(profile.token, selectedConversation.id);
+      const archivedConversation = await archiveConversation(selectedConversation.id);
       const updatedConversations = conversations.map((conversation) =>
         conversation.id === archivedConversation.id ? archivedConversation : conversation
       );
@@ -414,7 +417,7 @@ export default function Home() {
     if (!profile) return;
 
     try {
-      const archivedConversation = await archiveConversation(profile.token, conversationId);
+      const archivedConversation = await archiveConversation(conversationId);
       const updatedConversations = conversations.map((conversation) =>
         conversation.id === archivedConversation.id ? archivedConversation : conversation
       );
@@ -442,7 +445,7 @@ export default function Home() {
     if (!profile) return;
 
     try {
-      await deleteConversation(profile.token, conversationId);
+      await deleteConversation(conversationId);
       setConversations((previous) => previous.filter((conversation) => conversation.id !== conversationId));
       if (selectedConversation?.id === conversationId) {
         resetConversationOutputs();
@@ -469,14 +472,14 @@ export default function Home() {
     setReport(null);
 
     try {
-      const created = selectedConversationId ? null : await createConversation(profile.token, t.newConversationTitle);
+      const created = selectedConversationId ? null : await createConversation(t.newConversationTitle);
       const conversationId = selectedConversationId ?? created!.id;
       if (created) {
         setSelectedConversationId(conversationId);
         setConversations((previous) => [created, ...previous]);
       }
 
-      const nextDiagnosis = await streamDiagnosisEvents(profile.token, conversationId, message, {
+      const nextDiagnosis = await streamDiagnosisEvents(conversationId, message, {
         onPartialAnswer(answer) {
           setStreamingDiagnosis((previous) => ({
             answer,
@@ -492,7 +495,7 @@ export default function Home() {
       setDiagnosis(nextDiagnosis);
 
       try {
-        const updatedMessages = await fetchMessages(profile.token, conversationId);
+        const updatedMessages = await fetchMessages(conversationId);
         setMessageHistory(updatedMessages);
       } catch (error) {
         if (error instanceof AuthExpiredError) {
@@ -538,8 +541,11 @@ export default function Home() {
     if (!profile) return;
     setReportBusy(true);
     try {
-      const nextReport = await fetchDiagnosisReport(profile.token, message);
+      // Load report metadata for the sidebar display
+      const nextReport = await fetchDiagnosisReport(message);
       setReport(nextReport);
+      // Trigger PDF binary download
+      await downloadDiagnosisPdf(message);
     } catch (error) {
       if (error instanceof AuthExpiredError) {
         handleSessionExpired();

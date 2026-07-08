@@ -1,23 +1,33 @@
-// @ts-nocheck
-/** @typedef {import("./api-client").Conversation} Conversation */
+import type { Conversation } from "./api-client";
 
 export type WorkspaceSection = "diagnosis" | "intelligence" | "users" | "archive";
+
 export type ConversationSidebarDescriptor = {
   titleKey: "diagnosisConversationList" | "archiveConversationList";
   actionKey: "archiveConversation" | "deleteConversation";
 };
 
-/**
- * @param {Conversation[]} conversations
- */
-export function sortConversationsNewestFirst(conversations) {
+export type WorkspaceSelectionInput = {
+  section: WorkspaceSection;
+  conversations: Conversation[];
+  selectedConversationId: number | null;
+};
+
+export type WorkspaceSelectionResult = {
+  visibleConversations: Conversation[];
+  selectedConversationId: number | null;
+};
+
+export type ArchiveSelectionInput = {
+  selectedConversationId: number | null;
+  conversations: Conversation[];
+};
+
+export function sortConversationsNewestFirst(conversations: Conversation[]): Conversation[] {
   return [...conversations].sort((left, right) => right.id - left.id);
 }
 
-/**
- * @param {Conversation[]} conversations
- */
-export function partitionConversations(conversations) {
+export function partitionConversations(conversations: Conversation[]) {
   const ordered = sortConversationsNewestFirst(conversations);
   const visible = ordered.filter((conversation) => conversation.status !== "DELETED");
 
@@ -41,10 +51,7 @@ export function describeConversationSidebar(section: WorkspaceSection): Conversa
   };
 }
 
-/**
- * @param {{ section: WorkspaceSection; conversations: Conversation[]; selectedConversationId: number | null }} input
- */
-export function resolveWorkspaceSelection(input) {
+export function resolveWorkspaceSelection(input: WorkspaceSelectionInput): WorkspaceSelectionResult {
   const { active, archived } = partitionConversations(input.conversations);
   const visibleConversations = input.section === "archive" ? archived : active;
   const selectedConversationId = visibleConversations.some(
@@ -59,10 +66,7 @@ export function resolveWorkspaceSelection(input) {
   };
 }
 
-/**
- * @param {{ selectedConversationId: number | null; conversations: Conversation[] }} input
- */
-export function nextSelectionAfterArchive(input) {
+export function nextSelectionAfterArchive(input: ArchiveSelectionInput): number | null {
   const { active } = partitionConversations(input.conversations);
   if (input.selectedConversationId == null) {
     return active[0]?.id ?? null;

@@ -45,7 +45,12 @@ public class DataIsolationService {
         .orElseThrow(() -> new IllegalArgumentException("user not found: " + principal.getName()));
 
     Role role = user.role();
-    boolean isAdmin = role == Role.SUPER_ADMIN || role == Role.OPERATOR;
+    boolean isAdmin = role == Role.SUPER_ADMIN || role == Role.OPERATOR || role == Role.INTERNAL;
+
+    // V2: LEGAL_FREEZE users are blocked from all data access
+    if (role == Role.LEGAL_FREEZE) {
+      return DataScope.blocked();
+    }
 
     if (isAdmin) {
       return new DataScope(null, null, user.membershipLevel(), true);

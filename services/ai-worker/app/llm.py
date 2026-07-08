@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import logging
+import warnings
 
 logger = logging.getLogger(__name__)
 
@@ -64,11 +65,14 @@ def _get_router():
 def generate_answer(question: str, context: str) -> str:
     """Backward-compatible wrapper. Delegates to ModelRouter (BALANCED tier).
 
-    Note: the system prompt is NOT injected here. The caller (agent.py)
-    should build it via PromptAssembler and include it in the messages.
-    For legacy callers that don't set a system prompt, the ModelRouter
-    sends the user message as-is.
+    .. deprecated::
+        Use ModelRouter directly with PromptAssembler. This wrapper bypasses
+        the system-prompt layer and will be removed in a future version.
     """
+    warnings.warn(
+        "generate_answer() is deprecated — use ModelRouter + PromptAssembler directly",
+        DeprecationWarning, stacklevel=2,
+    )
     router = _get_router()
     messages = [
         {"role": "user", "content": f"问题：{question}\n\n参考证据：\n{context}"},
@@ -84,8 +88,15 @@ def generate_answer(question: str, context: str) -> str:
 
 def generate_answer_learning(question: str, context: str) -> str:
     """Backward-compatible wrapper for learning mode.
-    Delegates to ModelRouter (BALANCED tier, temperature 0.5).
+
+    .. deprecated::
+        Use ModelRouter directly with the learning-mode prompt assembler.
+        This wrapper will be removed in a future version.
     """
+    warnings.warn(
+        "generate_answer_learning() is deprecated — use ModelRouter + PromptAssembler directly",
+        DeprecationWarning, stacklevel=2,
+    )
     router = _get_router()
     messages = [
         {"role": "user", "content": context},

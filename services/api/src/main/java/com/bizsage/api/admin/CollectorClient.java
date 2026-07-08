@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -36,6 +37,9 @@ public class CollectorClient {
     this.restClient = RestClient.builder().baseUrl(collectorUrl).build();
   }
 
+  /** V2: Collect and govern with crawlerPages cache (15-min TTL) to avoid redundant
+   *  re-crawling of the same URLs within a short window. */
+  @Cacheable(value = "crawlerPages", key = "#sourceType + ':' + T(java.util.Objects).hash(#payload)")
   public List<Map<String, Object>> collectAndGovern(String sourceType, Map<String, Object> payload) {
     List<Map<String, Object>> collected = collect(sourceType, payload);
     return govern(collected);

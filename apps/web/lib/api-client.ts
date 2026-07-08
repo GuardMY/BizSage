@@ -54,7 +54,6 @@ export type Conversation = {
 };
 
 export type LoginProfile = {
-  token: string;
   username: string;
   role: string;
   regionId: string;
@@ -209,6 +208,15 @@ export type AdminDashboard = {
   pendingReviews: AdminIntelligenceReview[];
   recentAuditLogs: AdminAuditLog[];
 };
+/** V2: Paginated response from list endpoints. */
+export type PagedResponse<T> = {
+  items: T[];
+  page: number;
+  size: number;
+  total: number;
+  hasMore: boolean;
+};
+
 export class WorkerError extends Error {
   readonly code: DiagnosisError["error"];
 
@@ -272,6 +280,7 @@ export async function login(username: string, password: string) {
   const response = await fetch(`${API_BASE}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",  // V2: accept httpOnly cookie
     body: JSON.stringify({ username, password })
   });
   if (!response.ok) throw new Error("Login failed");
@@ -279,45 +288,66 @@ export async function login(username: string, password: string) {
   return envelope.data;
 }
 
-export async function createConversation(token: string, title: string) {
+/** V2: Restore user profile from httpOnly cookie via the /me endpoint.
+ *  Replaces localStorage-based profile restoration. */
+export async function fetchMe() {
+  const response = await fetch(`${API_BASE}/users/me`, {
+    headers: authHeaders(),
+    credentials: "include",
+  });
+  const envelope = await readProtectedEnvelope<LoginProfile>(response, "Fetch profile failed");
+  return envelope.data;
+}
+
+/** V2: Log out by clearing the httpOnly cookie server-side. */
+export async function logout() {
+  await fetch(`${API_BASE}/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+  });
+}
+
+export async function createConversation(title: string) {
   const response = await fetch(`${API_BASE}/conversations`, {
     method: "POST",
-    headers: authHeaders(token),
+    headers: authHeaders(),
+    credentials: "include",
     body: JSON.stringify({ title })
   });
   const envelope = await readProtectedEnvelope<Conversation>(response, "Create conversation failed");
   return envelope.data;
 }
 
-export async function fetchConversations(token: string) {
-  const response = await fetch(`${API_BASE}/conversations`, {
-    headers: authHeaders(token)
+export async function fetchConversations(page = 1, size = 50) {
+  const response = await fetch(`${API_BASE}/conversations?page=${page}&size=${size}`, {
+    headers: authHeaders(),
+    credentials: "include",
   });
-  const envelope = await readProtectedEnvelope<Conversation[]>(response, "Fetch conversations failed");
+  const envelope = await readProtectedEnvelope<PagedResponse<Conversation>>(response, "Fetch conversations failed");
   return envelope.data;
 }
 
-export async function archiveConversation(token: string, conversationId: number) {
+export async function archiveConversation(conversationId: number) {
   const response = await fetch(`${API_BASE}/conversations/${conversationId}/archive`, {
     method: "POST",
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<Conversation>(response, "Archive conversation failed");
   return envelope.data;
 }
 
-export async function deleteConversation(token: string, conversationId: number) {
+export async function deleteConversation(conversationId: number) {
   const response = await fetch(`${API_BASE}/conversations/${conversationId}/delete`, {
     method: "POST",
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<Conversation>(response, "Delete conversation failed");
   return envelope.data;
 }
 
-export async function fetchMessages(token: string, conversationId: number) {
+export async function fetchMessages(conversationId: number) {
   const response = await fetch(`${API_BASE}/conversations/${conversationId}/messages`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<ConversationMessage[]>(response, "Fetch messages failed");
   return envelope.data;
@@ -345,28 +375,30 @@ export function parseDiagnosisEvent(raw: string): Diagnosis {
   };
 }
 
-export async function streamDiagnosisEvents(
-  token: string,
-  conversationId: number,
-  question: string,
+async function streamSse<T>(
+  url: string,
+  body: unknown,
+  parseResult: (raw: string) => T,
+  errorContext: string,
   options: StreamDiagnosisOptions = {}
-) {
-  const response = await fetch(`${API_BASE}/conversations/${conversationId}/messages/stream`, {
+): Promise<T> {
+  const response = await fetch(url, {
     method: "POST",
     headers: {
-      ...authHeaders(token),
+      ...authHeaders(),
       Accept: "text/event-stream"
     },
-    body: JSON.stringify({ question })
+    credentials: "include",
+    body: JSON.stringify(body)
   });
 
   if (!response.ok) {
-    throw new WorkerError("WORKER_UNREACHABLE", `Diagnosis stream returned HTTP ${response.status}`);
+    throw new WorkerError("WORKER_UNREACHABLE", `${errorContext} stream returned HTTP ${response.status}`);
   }
 
   const reader = response.body?.getReader();
   if (!reader) {
-    throw new WorkerError("WORKER_ERROR", "Diagnosis stream body is unavailable");
+    throw new WorkerError("WORKER_ERROR", `${errorContext} stream body is unavailable`);
   }
 
   const decoder = new TextDecoder();
@@ -379,7 +411,6 @@ export async function streamDiagnosisEvents(
       text += decoder.decode();
       break;
     }
-
     text += decoder.decode(value, { stream: true });
     const partialAnswer = readPartialAnswer(text);
     if (partialAnswer != null && partialAnswer !== lastPartialAnswer) {
@@ -388,32 +419,47 @@ export async function streamDiagnosisEvents(
     }
   }
 
+  // Check for SSE error events (scans the last event first for efficiency)
   if (text.includes("event: error")) {
     const errorPayload = findLatestErrorPayload(text);
     if (errorPayload) {
       throw new WorkerError(errorPayload.error, errorPayload.message);
     }
-    throw new WorkerError("WORKER_ERROR", "Diagnosis service returned an unknown streaming error");
+    throw new WorkerError("WORKER_ERROR", `${errorContext} service returned an unknown streaming error`);
   }
 
-  return parseDiagnosisEvent(text);
+  return parseResult(text);
 }
 
-export async function streamDiagnosis(token: string, conversationId: number, question: string) {
-  return streamDiagnosisEvents(token, conversationId, question);
+export async function streamDiagnosisEvents(
+  conversationId: number,
+  question: string,
+  options: StreamDiagnosisOptions = {}
+) {
+  return streamSse(
+    `${API_BASE}/conversations/${conversationId}/messages/stream`,
+    { question },
+    parseDiagnosisEvent,
+    "Diagnosis",
+    options
+  );
 }
 
-export async function fetchPaidIntelligence(token: string) {
+export async function streamDiagnosis(conversationId: number, question: string) {
+  return streamDiagnosisEvents(conversationId, question);
+}
+
+export async function fetchPaidIntelligence() {
   const response = await fetch(`${API_BASE}/paid-intelligence`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<PaidIntelligence[]>(response, "Fetch paid intelligence failed");
   return envelope.data;
 }
 
-export async function fetchDiagnosisReport(token: string, question: string) {
+export async function fetchDiagnosisReport(question: string) {
   const response = await fetch(`${API_BASE}/reports/diagnosis?question=${encodeURIComponent(question)}`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
 
   if (!response.ok) {
@@ -431,100 +477,168 @@ export async function fetchDiagnosisReport(token: string, question: string) {
   return envelope.data;
 }
 
-export async function fetchOpsMetrics(token: string) {
+/** V2: Download a diagnosis report as a PDF file. Triggers a browser download. */
+export async function downloadDiagnosisPdf(question: string) {
+  const response = await fetch(`${API_BASE}/reports/diagnosis/pdf?question=${encodeURIComponent(question)}`, {
+    headers: authHeaders()
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new AuthExpiredError("authentication required");
+    }
+    if (response.status === 503) {
+      throw new WorkerError("WORKER_UNREACHABLE", "PDF generation failed because AI is unavailable");
+    }
+    throw new Error(`PDF download failed (HTTP ${response.status})`);
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = "BizSage-Diagnosis-Report.pdf";
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  window.URL.revokeObjectURL(url);
+}
+
+export async function fetchOpsMetrics() {
   const response = await fetch(`${API_BASE}/ops/metrics`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<OpsMetrics>(response, "Fetch ops metrics failed");
   return envelope.data;
 }
 
+export type CacheStats = {
+  caches: Record<string, { hits: number; misses: number; total: number; hitRate: string }>;
+  aggregateHitRate: string;
+  targetHitRate: number;
+  meetsTarget: boolean;
+};
 
-export async function fetchAdminDashboard(token: string) {
+export async function fetchOpsCacheStats() {
+  const response = await fetch(`${API_BASE}/ops/cache-stats`, {
+    headers: authHeaders()
+  });
+  const envelope = await readProtectedEnvelope<CacheStats>(response, "Fetch cache stats failed");
+  return envelope.data;
+}
+
+export type SlaStats = {
+  window: string;
+  from: string;
+  to: string;
+  dataPoints: number;
+  uptime: string;
+  uptimePercent: string;
+  errorRate: string;
+  errorRatePercent: string;
+  latencyP50Ms: string;
+  latencyP95Ms: string;
+  latencyP99Ms: string;
+  targetUptime: string;
+  slaMet: boolean;
+};
+
+export async function fetchOpsSla(window: string = "24h") {
+  const response = await fetch(`${API_BASE}/ops/sla?window=${encodeURIComponent(window)}`, {
+    headers: authHeaders()
+  });
+  const envelope = await readProtectedEnvelope<SlaStats>(response, "Fetch SLA stats failed");
+  return envelope.data;
+}
+
+
+export async function fetchAdminDashboard() {
   const response = await fetch(`${API_BASE}/admin/dashboard`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<AdminDashboard>(response, "Fetch admin dashboard failed");
   return envelope.data;
 }
 
-export async function fetchAdminAlerts(token: string, status?: string) {
+export async function fetchAdminAlerts(status?: string) {
   const query = status ? `?status=${encodeURIComponent(status)}` : "";
   const response = await fetch(`${API_BASE}/admin/alerts${query}`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<AdminList<AdminAlert>>(response, "Fetch admin alerts failed");
   return envelope.data;
 }
 
-export async function updateAdminAlert(token: string, alertId: number, action: "acknowledge" | "claim" | "close") {
+export async function updateAdminAlert(alertId: number, action: "acknowledge" | "claim" | "close") {
   const response = await fetch(`${API_BASE}/admin/alerts/${alertId}/${action}`, {
     method: "POST",
-    headers: authHeaders(token),
+    headers: authHeaders(),
+    credentials: "include",
     body: JSON.stringify({ notes: action })
   });
   const envelope = await readProtectedEnvelope<AdminAlert>(response, "Update admin alert failed");
   return envelope.data;
 }
 
-export async function fetchAdminAuditLogs(token: string, query = "") {
+export async function fetchAdminAuditLogs(query = "") {
   const suffix = query ? `?q=${encodeURIComponent(query)}` : "";
   const response = await fetch(`${API_BASE}/admin/audit-logs${suffix}`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<AdminList<AdminAuditLog>>(response, "Fetch admin audit logs failed");
   return envelope.data;
 }
 
-export async function fetchAdminIntelligenceReviews(token: string, status?: string) {
+export async function fetchAdminIntelligenceReviews(status?: string) {
   const query = status ? `?status=${encodeURIComponent(status)}` : "";
   const response = await fetch(`${API_BASE}/admin/intelligence-reviews${query}`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<AdminList<AdminIntelligenceReview>>(response, "Fetch admin reviews failed");
   return envelope.data;
 }
 
-export async function decideAdminReview(token: string, reviewId: number, verdict: "PASS" | "REJECT" | "FLAG" | "SUSPICIOUS" | "COMPLIANCE" | "PAID_INTEL" | "ARCHIVE", notes: string) {
+export async function decideAdminReview(reviewId: number, verdict: "PASS" | "REJECT" | "FLAG" | "SUSPICIOUS" | "COMPLIANCE" | "PAID_INTEL" | "ARCHIVE", notes: string) {
   const response = await fetch(`${API_BASE}/admin/intelligence-reviews/${reviewId}/verdict`, {
     method: "POST",
-    headers: authHeaders(token),
+    headers: authHeaders(),
+    credentials: "include",
     body: JSON.stringify({ verdict, notes })
   });
   const envelope = await readProtectedEnvelope<AdminIntelligenceReview>(response, "Decide admin review failed");
   return envelope.data;
 }
 
-export async function fetchAdminTickets(token: string, status?: string) {
+export async function fetchAdminTickets(status?: string) {
   const query = status ? `?status=${encodeURIComponent(status)}` : "";
   const response = await fetch(`${API_BASE}/admin/tickets${query}`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<AdminList<AdminTicket>>(response, "Fetch admin tickets failed");
   return envelope.data;
 }
 
-export async function transitionAdminTicket(token: string, ticketId: number, status: string, nextAction: string) {
+export async function transitionAdminTicket(ticketId: number, status: string, nextAction: string) {
   const response = await fetch(`${API_BASE}/admin/tickets/${ticketId}/transition`, {
     method: "POST",
-    headers: authHeaders(token),
+    headers: authHeaders(),
+    credentials: "include",
     body: JSON.stringify({ status, nextAction, notes: nextAction })
   });
   const envelope = await readProtectedEnvelope<AdminTicket>(response, "Transition admin ticket failed");
   return envelope.data;
 }
 
-export async function fetchAdminHumanIntelligence(token: string, status?: string) {
+export async function fetchAdminHumanIntelligence(status?: string) {
   const query = status ? `?status=${encodeURIComponent(status)}` : "";
   const response = await fetch(`${API_BASE}/admin/human-intelligence${query}`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<AdminList<AdminHumanIntelligence>>(response, "Fetch human intelligence failed");
   return envelope.data;
 }
 
 export async function createAdminHumanIntelligence(
-  token: string,
   payload: Pick<AdminHumanIntelligence, "city" | "industryId" | "linkId" | "content" | "sourceType" | "collector" | "entitlement" | "regionId" | "sourceId"> & {
     eventTime: string;
     confidence: number;
@@ -532,17 +646,19 @@ export async function createAdminHumanIntelligence(
 ) {
   const response = await fetch(`${API_BASE}/admin/human-intelligence`, {
     method: "POST",
-    headers: authHeaders(token),
+    headers: authHeaders(),
+    credentials: "include",
     body: JSON.stringify(payload)
   });
   const envelope = await readProtectedEnvelope<AdminHumanIntelligence>(response, "Create human intelligence failed");
   return envelope.data;
 }
 
-export async function reviewAdminHumanIntelligence(token: string, id: number, verdict: "PASS" | "REJECT", notes: string) {
+export async function reviewAdminHumanIntelligence(id: number, verdict: "PASS" | "REJECT", notes: string) {
   const response = await fetch(`${API_BASE}/admin/human-intelligence/${id}/review`, {
     method: "POST",
-    headers: authHeaders(token),
+    headers: authHeaders(),
+    credentials: "include",
     body: JSON.stringify({ verdict, notes })
   });
   const envelope = await readProtectedEnvelope<AdminHumanIntelligence>(response, "Review human intelligence failed");
@@ -637,75 +753,80 @@ export type AdminKnowledgeDraftInput = {
   changeNotes: string;
 };
 
-export async function fetchAdminKnowledgeNodes(token: string) {
+export async function fetchAdminKnowledgeNodes() {
   const response = await fetch(`${API_BASE}/admin/knowledge/nodes`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<AdminKnowledgeNode[]>(response, "Fetch admin knowledge nodes failed");
   return envelope.data;
 }
 
-export async function fetchAdminKnowledgeDetail(token: string, nodeId: number) {
+export async function fetchAdminKnowledgeDetail(nodeId: number) {
   const response = await fetch(`${API_BASE}/admin/knowledge/nodes/${nodeId}`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<AdminKnowledgeDetail>(response, "Fetch admin knowledge detail failed");
   return envelope.data;
 }
 
-export async function saveAdminKnowledgeDraft(token: string, payload: AdminKnowledgeDraftInput) {
+export async function saveAdminKnowledgeDraft(payload: AdminKnowledgeDraftInput) {
   const response = await fetch(`${API_BASE}/admin/knowledge/drafts`, {
     method: "POST",
-    headers: authHeaders(token),
+    headers: authHeaders(),
+    credentials: "include",
     body: JSON.stringify(payload)
   });
   const envelope = await readProtectedEnvelope<AdminKnowledgeDetail>(response, "Save admin knowledge draft failed");
   return envelope.data;
 }
 
-export async function submitAdminKnowledgeReview(token: string, nodeId: number, versionId: number, notes: string) {
+export async function submitAdminKnowledgeReview(nodeId: number, versionId: number, notes: string) {
   const response = await fetch(`${API_BASE}/admin/knowledge/nodes/${nodeId}/versions/${versionId}/submit-review`, {
     method: "POST",
-    headers: authHeaders(token),
+    headers: authHeaders(),
+    credentials: "include",
     body: JSON.stringify({ notes })
   });
   const envelope = await readProtectedEnvelope<AdminKnowledgeDetail>(response, "Submit admin knowledge review failed");
   return envelope.data;
 }
 
-export async function approveAdminKnowledgeReview(token: string, nodeId: number, versionId: number, notes: string) {
+export async function approveAdminKnowledgeReview(nodeId: number, versionId: number, notes: string) {
   const response = await fetch(`${API_BASE}/admin/knowledge/nodes/${nodeId}/versions/${versionId}/approve`, {
     method: "POST",
-    headers: authHeaders(token),
+    headers: authHeaders(),
+    credentials: "include",
     body: JSON.stringify({ notes })
   });
   const envelope = await readProtectedEnvelope<AdminKnowledgeDetail>(response, "Approve admin knowledge review failed");
   return envelope.data;
 }
 
-export async function publishAdminKnowledgeVersion(token: string, nodeId: number, versionId: number, notes: string) {
+export async function publishAdminKnowledgeVersion(nodeId: number, versionId: number, notes: string) {
   const response = await fetch(`${API_BASE}/admin/knowledge/nodes/${nodeId}/versions/${versionId}/publish`, {
     method: "POST",
-    headers: authHeaders(token),
+    headers: authHeaders(),
+    credentials: "include",
     body: JSON.stringify({ notes })
   });
   const envelope = await readProtectedEnvelope<AdminKnowledgeDetail>(response, "Publish admin knowledge version failed");
   return envelope.data;
 }
 
-export async function rollbackAdminKnowledgeNode(token: string, nodeId: number, targetVersionId: number, notes: string) {
+export async function rollbackAdminKnowledgeNode(nodeId: number, targetVersionId: number, notes: string) {
   const response = await fetch(`${API_BASE}/admin/knowledge/nodes/${nodeId}/rollback`, {
     method: "POST",
-    headers: authHeaders(token),
+    headers: authHeaders(),
+    credentials: "include",
     body: JSON.stringify({ targetVersionId, notes })
   });
   const envelope = await readProtectedEnvelope<AdminKnowledgeDetail>(response, "Rollback admin knowledge node failed");
   return envelope.data;
 }
 
-export async function fetchAdminKnowledgeDiff(token: string, leftVersionId: number, rightVersionId: number) {
+export async function fetchAdminKnowledgeDiff(leftVersionId: number, rightVersionId: number) {
   const response = await fetch(`${API_BASE}/admin/knowledge/diff?leftVersionId=${leftVersionId}&rightVersionId=${rightVersionId}`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<AdminKnowledgeDiff>(response, "Fetch admin knowledge diff failed");
   return envelope.data;
@@ -726,9 +847,9 @@ export type InspectionReport = {
   criticalNodes: number;
 };
 
-export async function fetchAdminKnowledgeInspect(token: string) {
+export async function fetchAdminKnowledgeInspect() {
   const response = await fetch(`${API_BASE}/admin/knowledge/inspect`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<InspectionReport>(response, "Fetch admin knowledge inspection failed");
   return envelope.data;
@@ -829,90 +950,112 @@ export type AdminCollectionKeywordInput = {
   notes: string;
 };
 
-export async function fetchAdminCollectionSources(token: string) {
+export async function fetchAdminCollectionSources() {
   const response = await fetch(`${API_BASE}/admin/collection/sources`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<AdminCollectionSource[]>(response, "Fetch admin collection sources failed");
   return envelope.data;
 }
 
-export async function fetchAdminCollectionSourceDetail(token: string, sourceConfigId: number) {
+export async function fetchAdminCollectionSourceDetail(sourceConfigId: number) {
   const response = await fetch(`${API_BASE}/admin/collection/sources/${sourceConfigId}`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<AdminCollectionSourceDetail>(response, "Fetch admin collection source detail failed");
   return envelope.data;
 }
 
-export async function saveAdminCollectionSource(token: string, payload: AdminCollectionSourceInput) {
+export async function saveAdminCollectionSource(payload: AdminCollectionSourceInput) {
   const response = await fetch(`${API_BASE}/admin/collection/sources`, {
     method: "POST",
-    headers: authHeaders(token),
+    headers: authHeaders(),
+    credentials: "include",
     body: JSON.stringify(payload)
   });
   const envelope = await readProtectedEnvelope<AdminCollectionSourceDetail>(response, "Save admin collection source failed");
   return envelope.data;
 }
 
-export async function fetchAdminCollectionKeywords(token: string, sourceConfigId?: number) {
+export async function fetchAdminCollectionKeywords(sourceConfigId?: number) {
   const suffix = sourceConfigId ? `?sourceConfigId=${sourceConfigId}` : "";
   const response = await fetch(`${API_BASE}/admin/collection/keywords${suffix}`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<AdminCollectionKeyword[]>(response, "Fetch admin collection keywords failed");
   return envelope.data;
 }
 
-export async function saveAdminCollectionKeyword(token: string, payload: AdminCollectionKeywordInput) {
+export async function saveAdminCollectionKeyword(payload: AdminCollectionKeywordInput) {
   const response = await fetch(`${API_BASE}/admin/collection/keywords`, {
     method: "POST",
-    headers: authHeaders(token),
+    headers: authHeaders(),
+    credentials: "include",
     body: JSON.stringify(payload)
   });
   const envelope = await readProtectedEnvelope<AdminCollectionKeyword>(response, "Save admin collection keyword failed");
   return envelope.data;
 }
 
-export async function runAdminCollectionSource(token: string, sourceConfigId: number) {
+export async function runAdminCollectionSource(sourceConfigId: number) {
   const response = await fetch(`${API_BASE}/admin/collection/sources/${sourceConfigId}/run`, {
     method: "POST",
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<AdminCollectionJobRun>(response, "Run admin collection source failed");
   return envelope.data;
 }
 
-export async function fetchAdminCollectionJobs(token: string, status?: string) {
+export async function fetchAdminCollectionJobs(status?: string) {
   const suffix = status ? `?status=${encodeURIComponent(status)}` : "";
   const response = await fetch(`${API_BASE}/admin/collection/jobs${suffix}`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<AdminCollectionJobRun[]>(response, "Fetch admin collection jobs failed");
   return envelope.data;
 }
 
-export async function fetchAdminCollectionDeadLetters(token: string) {
+export async function fetchAdminCollectionDeadLetters() {
   const response = await fetch(`${API_BASE}/admin/collection/dead-letters`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<AdminCollectionDeadLetter[]>(response, "Fetch admin collection dead letters failed");
   return envelope.data;
 }
 
-export async function archiveCollectionSource(token: string, sourceConfigId: number) {
+/** V2: Collection telemetry for monitoring dashboards. */
+export type CollectionTelemetry = {
+  totalSources: number;
+  enabledSources: number;
+  openCircuits: number;
+  deadLetterCount: number;
+  totalRuns24h: number;
+  successRate24h: string;
+  recordsCollected24h: number;
+  recentRuns: { status: string; records_collected: number; start_time: string; source_name: string }[];
+};
+
+export async function fetchAdminCollectionTelemetry() {
+  const response = await fetch(`${API_BASE}/admin/collection/telemetry`, {
+    headers: authHeaders()
+  });
+  const envelope = await readProtectedEnvelope<CollectionTelemetry>(response, "Fetch collection telemetry failed");
+  return envelope.data;
+}
+
+export async function archiveCollectionSource(sourceConfigId: number) {
   const response = await fetch(`${API_BASE}/admin/collection/sources/${sourceConfigId}/archive`, {
     method: "POST",
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<string>(response, "Archive collection source failed");
   return envelope.data;
 }
 
-export async function restoreCollectionSource(token: string, sourceConfigId: number) {
+export async function restoreCollectionSource(sourceConfigId: number) {
   const response = await fetch(`${API_BASE}/admin/collection/sources/${sourceConfigId}/restore`, {
     method: "POST",
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<string>(response, "Restore collection source failed");
   return envelope.data;
@@ -945,28 +1088,29 @@ export type RiskRuleUpsertInput = {
   changeMode: string;
 };
 
-export async function fetchAdminRiskRules(token: string) {
+export async function fetchAdminRiskRules() {
   const response = await fetch(`${API_BASE}/admin/risk-rules`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<RiskRule[]>(response, "Fetch risk rules failed");
   return envelope.data;
 }
 
-export async function upsertAdminRiskRule(token: string, payload: RiskRuleUpsertInput) {
+export async function upsertAdminRiskRule(payload: RiskRuleUpsertInput) {
   const response = await fetch(`${API_BASE}/admin/risk-rules`, {
     method: "POST",
-    headers: authHeaders(token),
+    headers: authHeaders(),
+    credentials: "include",
     body: JSON.stringify(payload)
   });
   const envelope = await readProtectedEnvelope<RiskRule>(response, "Upsert risk rule failed");
   return envelope.data;
 }
 
-export async function toggleAdminRiskRule(token: string, ruleId: number) {
+export async function toggleAdminRiskRule(ruleId: number) {
   const response = await fetch(`${API_BASE}/admin/risk-rules/${ruleId}/toggle`, {
     method: "POST",
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<RiskRule>(response, "Toggle risk rule failed");
   return envelope.data;
@@ -1012,125 +1156,56 @@ export type AgentOutput = {
  * Follows the same SSE pattern as streamDiagnosisEvents.
  */
 export async function streamLearningEvents(
-  token: string,
   conversationId: number,
   payload: LearnMessageRequest,
   options: StreamDiagnosisOptions = {}
 ) {
-  const response = await fetch(`${API_BASE}/conversations/${conversationId}/messages/learn/stream`, {
-    method: "POST",
-    headers: {
-      ...authHeaders(token),
-      Accept: "text/event-stream"
-    },
-    body: JSON.stringify(payload)
-  });
-
-  if (!response.ok) {
-    throw new WorkerError("WORKER_UNREACHABLE", `Learning stream returned HTTP ${response.status}`);
-  }
-
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new WorkerError("WORKER_ERROR", "Learning stream body is unavailable");
-  }
-
-  const decoder = new TextDecoder();
-  let text = "";
-  let lastPartialAnswer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) { text += decoder.decode(); break; }
-    text += decoder.decode(value, { stream: true });
-    const partialAnswer = readPartialAnswer(text);
-    if (partialAnswer != null && partialAnswer !== lastPartialAnswer) {
-      lastPartialAnswer = partialAnswer;
-      options.onPartialAnswer?.(partialAnswer);
-    }
-  }
-
-  if (text.includes("event: error")) {
-    const errorPayload = findLatestErrorPayload(text);
-    if (errorPayload) throw new WorkerError(errorPayload.error, errorPayload.message);
-    throw new WorkerError("WORKER_ERROR", "Learning service returned an unknown streaming error");
-  }
-
-  return parseDiagnosisEvent(text) as unknown as AgentOutput;
+  return streamSse(
+    `${API_BASE}/conversations/${conversationId}/messages/learn/stream`,
+    payload,
+    (raw) => parseDiagnosisEvent(raw) as unknown as AgentOutput,
+    "Learning",
+    options
+  );
 }
 
 export async function streamLearning(
-  token: string,
   conversationId: number,
   payload: LearnMessageRequest
 ) {
-  return streamLearningEvents(token, conversationId, payload);
+  return streamLearningEvents(conversationId, payload);
 }
 
 /**
  * Stream a dual-Agent mode transition through the Java API.
  */
 export async function streamTransitionEvents(
-  token: string,
   conversationId: number,
   payload: TransitionMessageRequest,
   options: StreamDiagnosisOptions = {}
 ) {
-  const response = await fetch(`${API_BASE}/conversations/${conversationId}/messages/transition/stream`, {
-    method: "POST",
-    headers: {
-      ...authHeaders(token),
-      Accept: "text/event-stream"
-    },
-    body: JSON.stringify(payload)
-  });
-
-  if (!response.ok) {
-    throw new WorkerError("WORKER_UNREACHABLE", `Transition stream returned HTTP ${response.status}`);
-  }
-
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new WorkerError("WORKER_ERROR", "Transition stream body is unavailable");
-  }
-
-  const decoder = new TextDecoder();
-  let text = "";
-  let lastPartialAnswer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) { text += decoder.decode(); break; }
-    text += decoder.decode(value, { stream: true });
-    const partialAnswer = readPartialAnswer(text);
-    if (partialAnswer != null && partialAnswer !== lastPartialAnswer) {
-      lastPartialAnswer = partialAnswer;
-      options.onPartialAnswer?.(partialAnswer);
-    }
-  }
-
-  if (text.includes("event: error")) {
-    const errorPayload = findLatestErrorPayload(text);
-    if (errorPayload) throw new WorkerError(errorPayload.error, errorPayload.message);
-    throw new WorkerError("WORKER_ERROR", "Transition service returned an unknown streaming error");
-  }
-
-  return parseDiagnosisEvent(text) as unknown as AgentOutput;
+  return streamSse(
+    `${API_BASE}/conversations/${conversationId}/messages/transition/stream`,
+    payload,
+    (raw) => parseDiagnosisEvent(raw) as unknown as AgentOutput,
+    "Transition",
+    options
+  );
 }
 
 export async function streamTransition(
-  token: string,
   conversationId: number,
   payload: TransitionMessageRequest
 ) {
-  return streamTransitionEvents(token, conversationId, payload);
+  return streamTransitionEvents(conversationId, payload);
 }
 
 /** @deprecated — use streamLearning() which routes through the Java API with proper session management */
-export async function fetchAgentLearn(token: string, payload: LearnMessageRequest & { knowledge?: Record<string, unknown>[]; recentMessages?: Record<string, unknown>[]; conversationSummary?: string; longTermMemories?: Record<string, unknown>[]; regionId?: string; industryId?: string; membershipLevel?: string }) {
+export async function fetchAgentLearn(payload: LearnMessageRequest & { knowledge?: Record<string, unknown>[]; recentMessages?: Record<string, unknown>[]; conversationSummary?: string; longTermMemories?: Record<string, unknown>[]; regionId?: string; industryId?: string; membershipLevel?: string }) {
   const response = await fetch(`${API_BASE}/conversations/0/messages/learn/stream`, {
     method: "POST",
-    headers: authHeaders(token),
+    headers: authHeaders(),
+    credentials: "include",
     body: JSON.stringify(payload)
   });
   if (!response.ok) throw new WorkerError("WORKER_UNREACHABLE", `Learning request failed: HTTP ${response.status}`);
@@ -1139,10 +1214,11 @@ export async function fetchAgentLearn(token: string, payload: LearnMessageReques
 }
 
 /** @deprecated — use streamTransition() which routes through the Java API with proper session management */
-export async function fetchAgentTransition(token: string, payload: TransitionMessageRequest & { knowledge?: Record<string, unknown>[]; recentMessages?: Record<string, unknown>[]; conversationSummary?: string; longTermMemories?: Record<string, unknown>[]; regionId?: string; industryId?: string; membershipLevel?: string }) {
+export async function fetchAgentTransition(payload: TransitionMessageRequest & { knowledge?: Record<string, unknown>[]; recentMessages?: Record<string, unknown>[]; conversationSummary?: string; longTermMemories?: Record<string, unknown>[]; regionId?: string; industryId?: string; membershipLevel?: string }) {
   const response = await fetch(`${API_BASE}/conversations/0/messages/transition/stream`, {
     method: "POST",
-    headers: authHeaders(token),
+    headers: authHeaders(),
+    credentials: "include",
     body: JSON.stringify(payload)
   });
   if (!response.ok) throw new WorkerError("WORKER_UNREACHABLE", `Transition request failed: HTTP ${response.status}`);
@@ -1183,19 +1259,19 @@ export type FalseLedgerItem = {
   createTime: string;
 };
 
-export async function fetchAdminConflicts(token: string, region = "cn-default", industry = "general") {
+export async function fetchAdminConflicts(region = "cn-default", industry = "general") {
   const response = await fetch(
     `${API_BASE}/admin/governance/conflicts?region=${region}&industry=${industry}&limit=50`,
-    { headers: authHeaders(token) }
+    { headers: authHeaders(), credentials: "include" }
   );
   const envelope = await readProtectedEnvelope<AdminList<ConflictResolutionRecord>>(response, "Fetch conflicts failed");
   return envelope.data;
 }
 
-export async function fetchAdminFalseLedger(token: string, region = "cn-default", industry = "general") {
+export async function fetchAdminFalseLedger(region = "cn-default", industry = "general") {
   const response = await fetch(
     `${API_BASE}/admin/governance/false-ledger?region=${region}&industry=${industry}&limit=50`,
-    { headers: authHeaders(token) }
+    { headers: authHeaders(), credentials: "include" }
   );
   const envelope = await readProtectedEnvelope<AdminList<FalseLedgerItem>>(response, "Fetch false ledger failed");
   return envelope.data;
@@ -1229,39 +1305,37 @@ export type SnapshotCompareResult = {
 };
 
 export async function fetchAdminSnapshots(
-  token: string,
   type = "DAILY",
   region = "cn-default",
   industry = "general"
 ) {
   const response = await fetch(
     `${API_BASE}/admin/snapshots?type=${type}&region=${region}&industry=${industry}&limit=50`,
-    { headers: authHeaders(token) }
+    { headers: authHeaders(), credentials: "include" }
   );
   const envelope = await readProtectedEnvelope<SnapshotSummary[]>(response, "Fetch snapshots failed");
   return envelope.data;
 }
 
-export async function fetchAdminSnapshotDetail(token: string, id: number) {
+export async function fetchAdminSnapshotDetail(id: number) {
   const response = await fetch(`${API_BASE}/admin/snapshots/${id}`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<SnapshotDetail>(response, "Fetch snapshot detail failed");
   return envelope.data;
 }
 
-export async function fetchAdminSnapshotDiff(token: string, id: number, compare: number) {
+export async function fetchAdminSnapshotDiff(id: number, compare: number) {
   const response = await fetch(`${API_BASE}/admin/snapshots/${id}/diff?compare=${compare}`, {
-    headers: authHeaders(token)
+    headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<SnapshotCompareResult>(response, "Fetch snapshot diff failed");
   return envelope.data;
 }
 
-function authHeaders(token: string) {
+function authHeaders(): Record<string, string> {
   return {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`
+    "Content-Type": "application/json"
   };
 }
 

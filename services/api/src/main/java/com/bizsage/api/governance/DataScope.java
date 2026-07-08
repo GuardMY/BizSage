@@ -40,4 +40,14 @@ public record DataScope(
   public static DataScope unrestricted() {
     return new DataScope(null, null, "INTERNAL", false);
   }
+
+  /** V2: Returns a scope that blocks all data access (LEGAL_FREEZE). */
+  public static DataScope blocked() {
+    return new DataScope("__blocked__", "__blocked__", "LEGAL_FREEZE", true);
+  }
+
+  /** V2: Returns true when this scope blocks all access. */
+  public boolean isBlocked() {
+    return "__blocked__".equals(regionId) && "__blocked__".equals(industryId);
+  }
 }

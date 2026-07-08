@@ -1,5 +1,6 @@
 package com.bizsage.api.ops;
 
+import com.bizsage.api.cache.CacheMetrics;
 import com.bizsage.api.common.ApiResponse;
 import com.bizsage.api.common.RequestIds;
 import jakarta.servlet.http.HttpServletRequest;
@@ -10,6 +11,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -17,12 +19,18 @@ import org.springframework.web.bind.annotation.RestController;
 @PreAuthorize("hasAnyRole('SUPER_ADMIN','OPERATOR')")
 public class OpsController {
   private final JdbcTemplate jdbcTemplate;
+  private final CacheMetrics cacheMetrics;
+  private final SlaService slaService;
   private final String grayCohort;
 
   public OpsController(
       JdbcTemplate jdbcTemplate,
+      CacheMetrics cacheMetrics,
+      SlaService slaService,
       @Value("${bizsage.gray-release.cohort:internal-operators-and-seed-paid-users}") String grayCohort) {
     this.jdbcTemplate = jdbcTemplate;
+    this.cacheMetrics = cacheMetrics;
+    this.slaService = slaService;
     this.grayCohort = grayCohort;
   }
 
@@ -34,6 +42,40 @@ public class OpsController {
         "crawlerRtoMinutesTarget", 10,
         "databaseRecoveryDataLossHoursTarget", 6,
         "environment", "prod-gray"), requestId(request));
+  }
+
+  /** V2: Returns per-cache hit/miss/rate statistics for monitoring dashboards. */
+  @GetMapping("/cache-stats")
+  ApiResponse<Map<String, Object>> cacheStats(HttpServletRequest request) {
+    Map<String, Object> allMetrics = cacheMetrics.allMetrics();
+    double aggregateHitRate = computeAggregateHitRate(allMetrics);
+    return ApiResponse.ok(Map.of(
+        "caches", allMetrics,
+        "aggregateHitRate", String.format("%.2f", aggregateHitRate),
+        "targetHitRate", 0.7,
+        "meetsTarget", aggregateHitRate >= 0.7), requestId(request));
+  }
+
+  /** V2: Returns SLA statistics (uptime, error rate, latency percentiles). */
+  @GetMapping("/sla")
+  ApiResponse<Map<String, Object>> sla(
+      @RequestParam(defaultValue = "24h") String window,
+      HttpServletRequest request) {
+    return ApiResponse.ok(slaService.computeSla(window), requestId(request));
+  }
+
+  private double computeAggregateHitRate(Map<String, Object> allMetrics) {
+    long totalHits = 0, totalMisses = 0;
+    for (Object val : allMetrics.values()) {
+      if (val instanceof Map<?, ?> m) {
+        Object hits = m.get("hits");
+        Object misses = m.get("misses");
+        if (hits instanceof Number h) totalHits += h.longValue();
+        if (misses instanceof Number mis) totalMisses += mis.longValue();
+      }
+    }
+    long total = totalHits + totalMisses;
+    return total > 0 ? (double) totalHits / total : -1.0;
   }
 
   @GetMapping("/alerts")

@@ -8,7 +8,10 @@ import org.springframework.context.annotation.Configuration;
 public class PrivacyConfiguration {
   @Bean
   PrivacyService privacyService(
-      @Value("${bizsage.privacy.key:0123456789abcdef0123456789abcdef}") String key) {
+      @Value("${bizsage.privacy.key}") String key) {
+    if (key == null || key.isBlank()) {
+      throw new IllegalArgumentException("bizsage.privacy.key must be set (32 UTF-8 bytes)");
+    }
     return new PrivacyService(key);
   }
 }

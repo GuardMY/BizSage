@@ -36,6 +36,7 @@ import com.bizsage.api.common.RequestIds;
 import jakarta.servlet.http.HttpServletRequest;
 import java.security.Principal;
 import java.util.List;
+import java.util.Map;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -65,6 +66,12 @@ public class AdminController {
   @GetMapping("/dashboard")
   ApiResponse<Dashboard> dashboard(HttpServletRequest request) {
     return ApiResponse.ok(store.dashboard(), requestId(request));
+  }
+
+  /** V2: Collection telemetry for monitoring dashboards. */
+  @GetMapping("/collection/telemetry")
+  ApiResponse<Map<String, Object>> collectionTelemetry(HttpServletRequest request) {
+    return ApiResponse.ok(store.getCollectionTelemetry(), requestId(request));
   }
 
   @GetMapping("/alerts")

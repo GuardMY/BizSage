@@ -105,6 +105,8 @@ def build_memory_context(
 # LLM-based memory extraction (V2)
 # ---------------------------------------------------------------------------
 
+_memory_router = None
+
 _MEMORY_EXTRACTION_SYSTEM_PROMPT = """你是一个用户记忆分析器。从对话中提取值得长期记忆的用户信息。
 
 ## 记忆类别
@@ -146,7 +148,10 @@ def _extract_memories_via_llm(
         A list of memory candidate dicts.
     """
     try:
-        from app.model_routing.router import ModelRouter
+        global _memory_router
+        if _memory_router is None:
+            from app.model_routing.router import ModelRouter
+            _memory_router = ModelRouter()
 
         # Build context about what we already know
         known_context = ""
@@ -166,8 +171,7 @@ def _extract_memories_via_llm(
             f"\n\n请提取值得长期记忆的用户信息（JSON数组格式）："
         )
 
-        router = ModelRouter()
-        result = router.call(
+        result = _memory_router.call(
             messages=[
                 {"role": "system", "content": _MEMORY_EXTRACTION_SYSTEM_PROMPT},
                 {"role": "user", "content": user_prompt},
@@ -252,47 +256,72 @@ def extract_diagnosis_memories(
     # ── Fallback: regex-based keyword extraction ──
     logger.debug("Falling back to regex-based memory extraction for diagnosis")
     candidates: list[dict] = []
+    import re as _re
 
     # ── PREFERENCE ──
-    if "先给结论再给证据" in question:
+    if _re.search(r"先给结论|结论先行|先说结论|直接说结果", question):
         candidates.append({
             "category": MemoryCategory.PREFERENCE,
-            "key": "response_style", "value": "先给结论再给证据",
-            "confidence": 0.95, "structured": True,
-        })
-
-    # ── BUSINESS_FACT ──
-    if "两家门店" in question:
-        candidates.append({
-            "category": MemoryCategory.BUSINESS_FACT,
-            "key": "store_count", "value": "两家门店",
+            "key": "response_style", "value": "结论优先",
             "confidence": 0.88, "structured": True,
         })
-    if "外卖" in question:
+    if _re.search(r"详细|深入|具体|展开|多说", question):
         candidates.append({
-            "category": MemoryCategory.BUSINESS_FACT,
-            "key": "channel_mix", "value": "主要依赖外卖平台",
-            "confidence": 0.90, "structured": True,
-        })
-    if "堂食波动" in question:
-        candidates.append({
-            "category": MemoryCategory.BUSINESS_FACT,
-            "key": "narrative_constraint", "value": "堂食波动很大且受平台佣金影响",
-            "confidence": 0.80, "structured": False,
+            "category": MemoryCategory.PREFERENCE,
+            "key": "answer_depth", "value": "详细分析",
+            "confidence": 0.82, "structured": True,
         })
 
-    # ── PAIN_POINT — recurring operating problems ──
-    pain_keywords = [
-        ("现金流紧张", "cashflow_tight", "现金流紧张"),
-        ("资金周转困难", "capital_turnover", "资金周转困难"),
-        ("利润太低", "low_profit", "利润太低"),
-        ("客户流失", "customer_churn", "客户流失"),
-        ("招工难", "staffing_difficulty", "招工难"),
-        ("租金压力", "rent_pressure", "租金压力"),
-        ("平台抽成高", "platform_commission", "平台抽成高"),
+    # ── BUSINESS_FACT — generic numeric + keyword patterns ──
+    store_match = _re.search(r"(\d+)\s*[家个间]\s*[门店店铺]", question)
+    if store_match:
+        candidates.append({
+            "category": MemoryCategory.BUSINESS_FACT,
+            "key": "store_count", "value": f"{store_match.group(1)}家门店",
+            "confidence": 0.85, "structured": True,
+        })
+    revenue_match = _re.search(r"[月年]?营收\s*(\d+)\s*万", question)
+    if revenue_match:
+        candidates.append({
+            "category": MemoryCategory.BUSINESS_FACT,
+            "key": "revenue_range", "value": f"月营收约{revenue_match.group(1)}万",
+            "confidence": 0.82, "structured": True,
+        })
+    if _re.search(r"外卖|美团|饿了么|平台订单|线上渠道", question):
+        candidates.append({
+            "category": MemoryCategory.BUSINESS_FACT,
+            "key": "channel_mix", "value": "依赖外卖/线上平台渠道",
+            "confidence": 0.85, "structured": True,
+        })
+    if _re.search(r"堂食|到店|线下客流|门店客流|进店", question):
+        candidates.append({
+            "category": MemoryCategory.BUSINESS_FACT,
+            "key": "offline_channel", "value": "堂食/线下到店渠道存在波动",
+            "confidence": 0.80, "structured": False,
+        })
+    employee_match = _re.search(r"(\d+)\s*[个名位]\s*(员工|雇员|人)", question)
+    if employee_match:
+        candidates.append({
+            "category": MemoryCategory.BUSINESS_FACT,
+            "key": "employee_count", "value": f"{employee_match.group(1)}名员工",
+            "confidence": 0.83, "structured": True,
+        })
+
+    # ── PAIN_POINT — recurring operating problems (regex word boundaries) ──
+    pain_patterns = [
+        (r"现金流|资金链|现金不足|回款慢|账期", "cashflow_tight", "现金流紧张"),
+        (r"周转困难|资金[周压]|垫资|压款", "capital_turnover", "资金周转困难"),
+        (r"利润[太低薄少]|不赚钱|亏损|毛利[太低]", "low_profit", "利润过低"),
+        (r"客户流失|复购[率低]|留不住[客客]|回头客少", "customer_churn", "客户流失"),
+        (r"招[工人]难|用工[荒难]|找不到[人工]|招聘", "staffing_difficulty", "招工困难"),
+        (r"租金[高压力贵涨]|房租[高压力贵涨]", "rent_pressure", "租金压力大"),
+        (r"平台抽[成佣]|佣金[高升涨]|平台[费扣]", "platform_commission", "平台抽成压力"),
+        (r"库存积压|滞销|库存周转|囤货", "inventory_pressure", "库存积压"),
+        (r"竞争[激大]|同行|价格战|卷", "competition", "行业竞争激烈"),
+        (r"合规|监管|政策[风限]|红线|罚款", "compliance_risk", "合规监管风险"),
     ]
-    for keyword, key, value in pain_keywords:
-        if keyword in question and not any(
+    for pattern, key, value in pain_patterns:
+        if _re.search(pattern, question) and not any(
             c.get("key") == key for c in candidates
         ):
             candidates.append({

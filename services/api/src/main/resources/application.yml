@@ -13,15 +13,73 @@ spring:
   sql:
     init:
       mode: never
+  # V2: Redis cache (Lettuce client)
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:16379}
+      timeout: 5s
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+  cache:
+    type: redis
+    redis:
+      time-to-live: 5m
+      cache-null-values: false
 
 bizsage:
   jwt:
-    secret: ${JWT_SECRET:change-me-v1-dev-secret-change-me}
+    secret: ${JWT_SECRET}
   privacy:
-    key: ${DATA_ENCRYPTION_KEY:0123456789abcdef0123456789abcdef}
+    key: ${DATA_ENCRYPTION_KEY}
   gray-release:
     cohort: ${GRAY_RELEASE_COHORT:internal-operators-and-seed-paid-users}
     support-window: ${GRAY_RELEASE_SUPPORT_WINDOW:09:00-21:00 Asia/Shanghai}
+    # V2: Per-feature gray-release flags
+    features:
+      paid-intelligence:
+        enabled: true
+        traffic-percent: 10
+        allowed-memberships: SEED_PAID,INTERNAL
+      pdf-export:
+        enabled: true
+        traffic-percent: 10
+        allowed-memberships: SEED_PAID,INTERNAL
+      advanced-rag:
+        enabled: false
+        traffic-percent: 0
+        allowed-memberships:
+  # V2: Alert evaluation thresholds
+  alerts:
+    api-error-rate-threshold: 0.05
+    collector-failure-rate-threshold: 0.20
+    knowledge-staleness-days: 30
+    evaluation-interval-seconds: 60
+  # V2: SLA window configuration
+  sla:
+    aggregation-window-minutes: 1
+    retention-days: 90
+
+# V2: Expose Prometheus metrics and health endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: bizsage-api
 
 ---
 spring:

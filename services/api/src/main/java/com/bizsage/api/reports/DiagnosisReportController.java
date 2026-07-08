@@ -2,6 +2,7 @@ package com.bizsage.api.reports;
 
 import com.bizsage.api.common.ApiResponse;
 import com.bizsage.api.common.RequestIds;
+import com.bizsage.api.grayrelease.GrayReleaseService;
 import com.bizsage.api.users.UserAccount;
 import com.bizsage.api.users.UserStore;
 import com.bizsage.api.worker.AiWorkerException;
@@ -9,7 +10,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.security.Principal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,11 +30,17 @@ public class DiagnosisReportController {
   private static final Logger log = LoggerFactory.getLogger(DiagnosisReportController.class);
 
   private final DiagnosisReportService reportService;
+  private final PdfReportGenerator pdfGenerator;
   private final UserStore userStore;
+  private final GrayReleaseService grayRelease;
 
-  public DiagnosisReportController(DiagnosisReportService reportService, UserStore userStore) {
+  public DiagnosisReportController(DiagnosisReportService reportService,
+      PdfReportGenerator pdfGenerator, UserStore userStore,
+      GrayReleaseService grayRelease) {
     this.reportService = reportService;
+    this.pdfGenerator = pdfGenerator;
     this.userStore = userStore;
+    this.grayRelease = grayRelease;
   }
 
   @GetMapping("/diagnosis")
@@ -40,6 +51,26 @@ public class DiagnosisReportController {
     return ApiResponse.ok(
         reportService.build(question, currentUser(principal)),
         requestId(request));
+  }
+
+  /** V2: Returns a formatted PDF binary for the diagnosis report (gray-release gated). */
+  @GetMapping("/diagnosis/pdf")
+  ResponseEntity<byte[]> diagnosisPdf(
+      @RequestParam(defaultValue = "operating diagnosis") String question,
+      Principal principal,
+      HttpServletRequest request) {
+    UserAccount user = currentUser(principal);
+    if (!grayRelease.isFeatureEnabled(GrayReleaseService.FEATURE_PDF_EXPORT, user)) {
+      throw new AiWorkerException("PDF export is not available for your account tier");
+    }
+    byte[] pdfBytes = reportService.buildPdf(question, user, pdfGenerator);
+    HttpHeaders headers = new HttpHeaders();
+    headers.setContentType(MediaType.APPLICATION_PDF);
+    headers.setContentDisposition(ContentDisposition.attachment()
+        .filename("BizSage-Diagnosis-Report.pdf")
+        .build());
+    headers.set("X-Request-Id", requestId(request));
+    return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
   }
 
   private UserAccount currentUser(Principal principal) {

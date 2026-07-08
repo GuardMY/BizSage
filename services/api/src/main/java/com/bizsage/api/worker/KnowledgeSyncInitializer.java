@@ -23,6 +23,9 @@ import org.springframework.stereotype.Component;
  * first diagnosis request.  Subsequent publishes and rollbacks are synced
  * incrementally via {@link AdminKnowledgeStore#publish}.
  *
+ * <p>V2: Also supports real-time single-item sync when intelligence is
+ * approved — see {@link #syncSingle(IntelligenceItem)}.
+ *
  * <p>Failures are logged but do not prevent application startup — the
  * knowledge will be synced on the next publish event or the next restart.
  */
@@ -67,6 +70,32 @@ public class KnowledgeSyncInitializer {
     }
   }
 
+  /**
+   * V2: Sync a single approved intelligence item into the live RAG corpus.
+   *
+   * <p>Called immediately when an operator approves intelligence via
+   * {@code POST /api/intelligence/{id}/approve}. This enables dynamic
+   * real-time knowledge base — newly approved intelligence becomes
+   * searchable without waiting for a restart or batch sync.
+   */
+  public void syncSingle(IntelligenceItem item) {
+    if (!"APPROVED".equals(item.status())) {
+      log.debug("Skipping syncSingle for non-approved intelligence #{} (status={})",
+          item.id(), item.status());
+      return;
+    }
+    try {
+      Map<String, Object> payload = intelligenceToMap(item);
+      // Upsert via the batch endpoint (single-item batch)
+      int count = aiWorkerClient.syncAllKnowledge(List.of(payload));
+      log.info("Real-time KB sync: intelligence #{} \"{}\" indexed ({} items)",
+          item.id(), item.title(), count);
+    } catch (Exception ex) {
+      log.error("Real-time KB sync failed for intelligence #{} (will retry on next batch): {}",
+          item.id(), ex.getMessage(), ex);
+    }
+  }
+
   private List<Map<String, Object>> loadAllKnowledge() {
     List<Map<String, Object>> combined = new ArrayList<>();
 
@@ -95,9 +124,11 @@ public class KnowledgeSyncInitializer {
     map.put("source_id", item.sourceId() != null ? item.sourceId() : "knowledge");
     map.put("weight", item.weight());
     map.put("confidence", item.confidence());
+    map.put("authority", 0.85);    // V2: default authority for knowledge items
+    map.put("timeliness", 0.85);   // V2: default timeliness
     map.put("industry_id", item.industryId() != null ? item.industryId() : "general");
     map.put("region_id", item.regionId() != null ? item.regionId() : "cn-default");
-    map.put("entitlement", "FREE");
+    map.put("entitlement", item.entitlement() != null ? item.entitlement() : "FREE");
     return map;
   }
 
@@ -110,9 +141,11 @@ public class KnowledgeSyncInitializer {
     map.put("source_id", item.sourceId() != null ? item.sourceId() : "intelligence");
     map.put("weight", item.weight());
     map.put("confidence", item.confidence());
+    map.put("authority", 0.85);    // V2: default authority for intelligence items
+    map.put("timeliness", 0.85);   // V2: default timeliness
     map.put("industry_id", item.industryId() != null ? item.industryId() : "general");
     map.put("region_id", item.regionId() != null ? item.regionId() : "cn-default");
-    map.put("entitlement", "FREE");
+    map.put("entitlement", item.entitlement() != null ? item.entitlement() : "FREE");
     return map;
   }
 }

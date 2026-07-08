@@ -243,28 +243,9 @@ def diagnose_endpoint(request: DiagnoseRequest) -> dict:
             compress_config=compress_cfg,
         )
 
-        from app.agent import LLM_NOT_CONFIGURED, LLM_CALL_FAILED
-
-        status = result.get("selfCheckStatus", "")
-        if status == LLM_NOT_CONFIGURED:
-            from fastapi.responses import JSONResponse
-            return JSONResponse(
-                status_code=503,
-                content={
-                    "error": "LLM_NOT_CONFIGURED",
-                    "message": "OPENAI_COMPATIBLE_API_KEY is not set. The AI worker cannot generate answers without a configured LLM.",
-                },
-            )
-        if status == LLM_CALL_FAILED:
-            from fastapi.responses import JSONResponse
-            return JSONResponse(
-                status_code=503,
-                content={
-                    "error": "LLM_CALL_FAILED",
-                    "message": "The upstream LLM provider returned an error or empty response.",
-                },
-            )
-
+        llm_err = _check_llm_error(result)
+        if llm_err is not None:
+            return llm_err
         return result
     finally:
         cleanup_request_collection(vector_store, request_knowledge)
@@ -305,26 +286,9 @@ def learn_endpoint(request: LearnRequest) -> dict:
             compress_config=compress_cfg,
         )
 
-        status = result.get("selfCheckStatus", "")
-        if status == LLM_NOT_CONFIGURED:
-            from fastapi.responses import JSONResponse
-            return JSONResponse(
-                status_code=503,
-                content={
-                    "error": "LLM_NOT_CONFIGURED",
-                    "message": "OPENAI_COMPATIBLE_API_KEY is not set. The AI worker cannot generate answers without a configured LLM.",
-                },
-            )
-        if status == LLM_CALL_FAILED:
-            from fastapi.responses import JSONResponse
-            return JSONResponse(
-                status_code=503,
-                content={
-                    "error": "LLM_CALL_FAILED",
-                    "message": "The upstream LLM provider returned an error or empty response.",
-                },
-            )
-
+        llm_err = _check_llm_error(result)
+        if llm_err is not None:
+            return llm_err
         return result
     finally:
         cleanup_request_collection(vector_store, request_knowledge)
@@ -354,26 +318,9 @@ def transition_endpoint(request: TransitionRequest) -> dict:
             restrict_to_knowledge_ids=True,
         )
 
-        status = result.get("selfCheckStatus", "")
-        if status == LLM_NOT_CONFIGURED:
-            from fastapi.responses import JSONResponse
-            return JSONResponse(
-                status_code=503,
-                content={
-                    "error": "LLM_NOT_CONFIGURED",
-                    "message": "OPENAI_COMPATIBLE_API_KEY is not set.",
-                },
-            )
-        if status == LLM_CALL_FAILED:
-            from fastapi.responses import JSONResponse
-            return JSONResponse(
-                status_code=503,
-                content={
-                    "error": "LLM_CALL_FAILED",
-                    "message": "The upstream LLM provider returned an error.",
-                },
-            )
-
+        llm_err = _check_llm_error(result)
+        if llm_err is not None:
+            return llm_err
         return result
     finally:
         cleanup_request_collection(vector_store, request_knowledge)
@@ -499,6 +446,25 @@ def build_request_collection_name(knowledge: list[KnowledgeItem]) -> str | None:
         ).encode("utf-8")
     ).hexdigest()[:16]
     return f"{base_collection}_{fingerprint}"
+
+
+def _check_llm_error(result: dict):
+    """Return a 503 JSONResponse if the LLM is not configured or the call failed, else None."""
+    from app.agent import LLM_NOT_CONFIGURED, LLM_CALL_FAILED
+    from fastapi.responses import JSONResponse
+
+    status = result.get("selfCheckStatus", "")
+    if status == LLM_NOT_CONFIGURED:
+        return JSONResponse(status_code=503, content={
+            "error": "LLM_NOT_CONFIGURED",
+            "message": "OPENAI_COMPATIBLE_API_KEY is not set. The AI worker cannot generate answers without a configured LLM.",
+        })
+    if status == LLM_CALL_FAILED:
+        return JSONResponse(status_code=503, content={
+            "error": "LLM_CALL_FAILED",
+            "message": "The upstream LLM provider returned an error or empty response.",
+        })
+    return None
 
 
 def cleanup_request_collection(vector_store: QdrantVectorStore, request_knowledge: list[KnowledgeItem]) -> None:
