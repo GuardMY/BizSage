@@ -1,6 +1,11 @@
 package com.bizsage.api.messages;
 
 import com.bizsage.api.conversations.Conversation;
+import com.bizsage.api.governance.DataScope;
+import com.bizsage.api.intelligence.IntelligenceItem;
+import com.bizsage.api.intelligence.IntelligenceStore;
+import com.bizsage.api.knowledge.KnowledgeItem;
+import com.bizsage.api.knowledge.KnowledgeStore;
 import com.bizsage.api.memory.UserMemoryEmbeddingStore;
 import com.bizsage.api.memory.UserMemoryProfile;
 import com.bizsage.api.memory.UserMemoryStore;
@@ -11,6 +16,7 @@ import com.bizsage.api.worker.DiagnoseRequest;
 import com.bizsage.api.worker.DiagnoseResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +36,8 @@ public class DiagnosisService {
   private final ConversationSummaryStore summaryStore;
   private final UserMemoryStore userMemoryStore;
   private final UserMemoryEmbeddingStore embeddingStore;
+  private final KnowledgeStore knowledgeStore;
+  private final IntelligenceStore intelligenceStore;
 
   public DiagnosisService(
       AiWorkerClient aiWorkerClient,
@@ -37,13 +45,17 @@ public class DiagnosisService {
       ConversationMessageStore messageStore,
       ConversationSummaryStore summaryStore,
       UserMemoryStore userMemoryStore,
-      UserMemoryEmbeddingStore embeddingStore) {
+      UserMemoryEmbeddingStore embeddingStore,
+      KnowledgeStore knowledgeStore,
+      IntelligenceStore intelligenceStore) {
     this.aiWorkerClient = aiWorkerClient;
     this.objectMapper = objectMapper;
     this.messageStore = messageStore;
     this.summaryStore = summaryStore;
     this.userMemoryStore = userMemoryStore;
     this.embeddingStore = embeddingStore;
+    this.knowledgeStore = knowledgeStore;
+    this.intelligenceStore = intelligenceStore;
   }
 
   /**
@@ -73,9 +85,14 @@ public class DiagnosisService {
     List<ConversationMessage> recentMessages = messageStore.recentActiveMessages(conversation.id(), 6);
     ConversationSummary summary = summaryStore.latestActive(conversation.id()).orElse(null);
 
-    // 3. Assemble the worker request
+    // 3. Load knowledge base for the worker
+    List<Map<String, Object>> knowledgeItems = loadKnowledgeForDiagnosis(
+        conversation.regionId(), conversation.industryId(), user.membershipLevel());
+
+    // 4. Assemble the worker request
     DiagnoseRequest request = DiagnoseRequest.builder()
         .question(question)
+        .knowledge(knowledgeItems)
         .recentMessages(toRecentMessageMaps(recentMessages))
         .conversationSummary(summary != null ? summary.summaryText() : null)
         .longTermMemories(toMemoryMaps(memories))
@@ -84,7 +101,7 @@ public class DiagnosisService {
         .membershipLevel(user.membershipLevel())
         .build();
 
-    // 4. Call the AI worker — strict failure on error
+    // 5. Call the AI worker — strict failure on error
     DiagnoseResponse response;
     try {
       response = aiWorkerClient.diagnose(request);
@@ -98,7 +115,7 @@ public class DiagnosisService {
           "AI worker returned an unsuccessful diagnosis: selfCheckStatus=" + response.selfCheckStatus());
     }
 
-    // 5. Build the payload for SSE / persistence
+    // 6. Build the payload for SSE / persistence
     List<Map<String, Object>> sources = toSourceMaps(response);
 
     Map<String, Object> payload = new LinkedHashMap<>();
@@ -111,7 +128,7 @@ public class DiagnosisService {
 
     String payloadJson = serialize(payload);
 
-    // 6. Persist the assistant message
+    // 7. Persist the assistant message
     long assistantMessageId = messageStore.append(
         conversation.id(),
         "ASSISTANT",
@@ -124,14 +141,14 @@ public class DiagnosisService {
         conversation.regionId(),
         conversation.industryId());
 
-    // 7. Persist memory candidates from the worker
+    // 8. Persist memory candidates from the worker
     if (response.memoryCandidates() != null) {
       for (Map<String, Object> candidate : response.memoryCandidates()) {
         persistCandidate(user, conversation, userMessageId, assistantMessageId, candidate);
       }
     }
 
-    // 8. Mark memories as used and maintain summaries
+    // 9. Mark memories as used and maintain summaries
     userMemoryStore.markUsed(memories.stream().map(UserMemoryProfile::id).toList());
     summarizeIfNeeded(conversation.id());
 
@@ -162,6 +179,62 @@ public class DiagnosisService {
           return map;
         })
         .collect(Collectors.toList());
+  }
+
+  // ── Knowledge loading ───────────────────────────────────────────
+
+  /**
+   * Load knowledge items from the knowledge base and approved intelligence
+   * for use as the RAG search corpus in the AI worker.
+   *
+   * <p>Admin users (null region/industry) receive all knowledge items;
+   * scoped users receive only items matching their region and industry.
+   */
+  private List<Map<String, Object>> loadKnowledgeForDiagnosis(
+      String regionId, String industryId, String membershipLevel) {
+    DataScope scope = new DataScope(regionId, industryId, membershipLevel, false);
+
+    List<KnowledgeItem> knowledgeItems = knowledgeStore.listScoped(regionId, industryId);
+    List<IntelligenceItem> intelligenceItems = intelligenceStore.listApprovedScoped(scope);
+
+    List<Map<String, Object>> combined = new ArrayList<>();
+    for (KnowledgeItem item : knowledgeItems) {
+      combined.add(knowledgeToMap(item));
+    }
+    for (IntelligenceItem item : intelligenceItems) {
+      combined.add(intelligenceToMap(item));
+    }
+    return combined;
+  }
+
+  private Map<String, Object> knowledgeToMap(KnowledgeItem item) {
+    Map<String, Object> map = new LinkedHashMap<>();
+    map.put("id", "kb-" + item.id());
+    map.put("title", item.title());
+    map.put("content", item.content());
+    map.put("source_url", item.sourceUrl() != null ? item.sourceUrl() : "");
+    map.put("source_id", item.sourceId() != null ? item.sourceId() : "knowledge");
+    map.put("weight", item.weight());
+    map.put("confidence", item.confidence());
+    map.put("industry_id", item.industryId() != null ? item.industryId() : "general");
+    map.put("region_id", item.regionId() != null ? item.regionId() : "cn-default");
+    map.put("entitlement", "FREE");
+    return map;
+  }
+
+  private Map<String, Object> intelligenceToMap(IntelligenceItem item) {
+    Map<String, Object> map = new LinkedHashMap<>();
+    map.put("id", "intel-" + item.id());
+    map.put("title", item.title());
+    map.put("content", item.content());
+    map.put("source_url", item.url() != null ? item.url() : "");
+    map.put("source_id", item.sourceId() != null ? item.sourceId() : "intelligence");
+    map.put("weight", item.weight());
+    map.put("confidence", item.confidence());
+    map.put("industry_id", item.industryId() != null ? item.industryId() : "general");
+    map.put("region_id", item.regionId() != null ? item.regionId() : "cn-default");
+    map.put("entitlement", "FREE");
+    return map;
   }
 
   // ── Response mappers ────────────────────────────────────────────

@@ -40,7 +40,8 @@ body {
 }
 
 button,
-input {
+input,
+textarea {
   font: inherit;
 }
 
@@ -53,7 +54,8 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
-input {
+input,
+textarea {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -64,7 +66,8 @@ input {
   font-size: 14px;
 }
 
-input:focus {
+input:focus,
+textarea:focus {
   border-color: var(--mint);
   box-shadow: 0 0 0 3px var(--mint-glow);
 }
@@ -653,13 +656,15 @@ small {
   background: #fafcfa;
 }
 
-.composer input {
+.composer input,
+textarea {
   border: 0;
   background: transparent;
   padding: 6px 0;
 }
 
-.composer input:focus {
+.composer input:focus,
+textarea:focus {
   box-shadow: none;
 }
 
@@ -1194,4 +1199,929 @@ dd {
   .adminDecision {
     justify-content: flex-start;
   }
+}
+
+.knowledgeFormGrid textarea {
+  width: 100%;
+  min-height: 96px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--ink);
+  padding: 10px 12px;
+  resize: vertical;
+  font: inherit;
+}
+
+.adminKnowledgeShell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 340px;
+  gap: 16px;
+  align-items: start;
+}
+
+.knowledgeListPanel,
+.knowledgeVersionPanel {
+  min-height: 720px;
+}
+
+.knowledgeNodeList,
+.knowledgeVersionList {
+  display: grid;
+}
+
+.knowledgeNodeItem,
+.knowledgeVersionSelect {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.knowledgeNodeItem {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.knowledgeNodeItem.active {
+  background: #f7fbf9;
+}
+
+.knowledgeNodeMeta,
+.knowledgeVersionMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.knowledgeEditorPanel {
+  overflow: hidden;
+}
+
+.knowledgeVersionItem {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.knowledgeVersionItem.active {
+  background: #f7fbf9;
+}
+
+.knowledgeDiffPanel {
+  border-top: 1px solid var(--line);
+}
+
+.knowledgeDiffGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.knowledgeDiffGrid article {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfb;
+}
+
+.knowledgeDiffGrid pre {
+  margin: 0;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: #f4f6f2;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.knowledgePublicationList {
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 1400px) {
+  .adminKnowledgeShell {
+    grid-template-columns: 1fr;
+  }
+
+  .knowledgeListPanel,
+  .knowledgeVersionPanel {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .knowledgeDiffGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.adminCollectionShell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 340px;
+  gap: 16px;
+  align-items: start;
+}
+
+.collectionEditorPanel .nestedPanel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.collectionOpsStack {
+  display: grid;
+  gap: 16px;
+}
+
+.collectionFormGrid textarea {
+  width: 100%;
+  min-height: 120px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--ink);
+  padding: 10px 12px;
+  resize: vertical;
+  font: inherit;
+}
+
+@media (max-width: 1400px) {
+  .adminCollectionShell {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Admin V3-1: nav groups ── */
+.navGroup {
+  display: grid;
+  gap: 2px;
+}
+.navGroup + .navGroup {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.navGroupLabel {
+  display: block;
+  padding: 2px 12px 6px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(214, 243, 232, 0.45);
+}
+.navGroupPlaceholder {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: rgba(214, 243, 232, 0.3);
+  font-style: italic;
+}
+
+/* ── Admin V3-1: badge counts ── */
+.navBadge {
+  margin-left: auto;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: 11px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.navBadge.zero {
+  background: rgba(214, 243, 232, 0.1);
+  color: rgba(214, 243, 232, 0.5);
+}
+
+/* ── Admin V3-1: collapsible rail ── */
+.adminWorkspace.rail-collapsed {
+  grid-template-columns: 72px 1fr;
+}
+.adminRail {
+  position: relative;
+}
+.railToggle {
+  position: absolute;
+  top: 18px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: #c6dbd3;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2;
+}
+.railToggle:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.rail-collapsed .adminRail .navGroupLabel,
+.rail-collapsed .adminRail .navGroupPlaceholder,
+.rail-collapsed .adminRail .navItemLabel,
+.rail-collapsed .adminRail .adminContext,
+.rail-collapsed .adminRail .brand div,
+.rail-collapsed .adminRail .navBadge {
+  display: none;
+}
+.rail-collapsed .adminRail .navItem {
+  justify-content: center;
+  padding: 10px 0;
+}
+.rail-collapsed .adminRail {
+  padding: 22px 10px;
+}
+.rail-collapsed .adminRail .railToggle {
+  right: 6px;
+}
+
+/* ── Admin V3-1: environment badge ── */
+.envBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--mint-light);
+  color: var(--mint-dark);
+  flex-shrink: 0;
+}
+
+/* ── Admin V3-1: global search ── */
+.adminSearchBar {
+  position: relative;
+}
+.adminSearchBar input {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  padding: 6px 10px 6px 32px;
+  font-size: 13px;
+  width: 240px;
+}
+.adminSearchIcon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+.adminSearchDropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 50;
+}
+.adminSearchItem {
+  display: grid;
+  gap: 2px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  background: transparent;
+  font: inherit;
+}
+.adminSearchItem:last-child {
+  border-bottom: 0;
+}
+.adminSearchItem:hover {
+  background: #f7fbf9;
+}
+.adminSearchItem strong {
+  font-size: 13px;
+  color: var(--ink);
+}
+.adminSearchItem small {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ── Admin V3-1: enriched dashboard ── */
+.adminDashboardSection {
+  display: grid;
+  gap: 12px;
+}
+.dashboardRow {
+  display: grid;
+  gap: 4px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  border-left: 3px solid transparent;
+}
+.dashboardRow:first-child {
+  border-top: 0;
+}
+.dashboardRow.status-critical {
+  border-left-color: var(--red-border);
+  background: #fefafa;
+}
+.dashboardRow.status-warning {
+  border-left-color: var(--amber);
+  background: #fefdf9;
+}
+.dashboardRow.status-healthy {
+  border-left-color: var(--mint);
+}
+.dashboardRowMain {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.dashboardRowMain strong {
+  flex: 1;
+  font-size: 14px;
+}
+.dashboardRowMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* ── Admin V3-1: monitoring view ── */
+.adminMonitoringGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.monitoringMetricStack {
+  display: grid;
+  gap: 6px;
+}
+.monitoringMetricRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--line);
+}
+.monitoringMetricRow:first-child {
+  border-top: 0;
+}
+.monitoringMetricRow strong {
+  font-size: 13px;
+}
+.monitoringSummary {
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  background: #f9fbf9;
+  grid-column: 1 / -1;
+}
+.monitoringCardEmpty {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--muted);
+}
+@media (max-width: 1200px) {
+  .adminMonitoringGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Admin V3-3: knowledge tree ── */
+.knowledgeTreeNav {
+  display: grid;
+}
+.treeGroup {
+  display: grid;
+}
+.treeGroup + .treeGroup {
+  border-top: 1px solid var(--line);
+}
+.treeGroupHeader,
+.treeSubHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+.treeGroupHeader:hover,
+.treeSubHeader:hover {
+  background: #f7fbf9;
+}
+.treeToggle {
+  width: 14px;
+  font-size: 10px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.treeIndustryLabel {
+  font-weight: 700;
+  color: var(--steel);
+  flex: 1;
+}
+.treeSubHeader {
+  padding-left: 28px;
+}
+.treeLinkLabel {
+  font-weight: 600;
+  color: var(--ink);
+  flex: 1;
+}
+.treeLeaf {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px 6px 42px;
+  border: 0;
+  border-top: 1px solid #f0f4f1;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--ink);
+  width: 100%;
+}
+.treeLeaf:hover {
+  background: #f7fbf9;
+}
+.treeLeaf.active {
+  background: var(--mint-light);
+  border-left: 3px solid var(--mint);
+}
+.treeLeaf span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+/* ── Admin V3-3: editor tabs ── */
+.knowledgeEditorTabs {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+  background: #f9fbf9;
+}
+.knowledgeTab {
+  padding: 10px 18px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.knowledgeTab.active {
+  color: var(--mint-dark);
+  border-bottom-color: var(--mint);
+}
+.knowledgeTab:hover:not(.active) {
+  color: var(--ink);
+  background: #f0f5f2;
+}
+.tabBadge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+/* ── Admin V3-3: JSON editor ── */
+.knowledgeJsonEditor {
+  display: grid;
+}
+.jsonTextarea {
+  width: 100%;
+  min-height: 480px;
+  border: 0;
+  border-radius: 0;
+  background: #fafcfa;
+  color: var(--ink);
+  padding: 16px;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  outline: none;
+  tab-size: 2;
+}
+.jsonTextarea:focus {
+  box-shadow: inset 0 0 0 2px var(--mint-glow);
+}
+.jsonError {
+  padding: 8px 16px;
+  margin: 0;
+  background: var(--red-soft);
+  color: var(--red-border);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ── Admin V3-4: risk rules ── */
+.riskTabs {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+  background: #f6f8f6;
+  overflow-x: auto;
+}
+.riskTab {
+  padding: 10px 18px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.riskTab.active {
+  color: var(--mint-dark);
+  border-bottom-color: var(--mint);
+}
+.riskTab:hover:not(.active) {
+  color: var(--ink);
+  background: #eef3ef;
+}
+.riskRuleList {
+  display: grid;
+}
+.riskRuleItem {
+  display: grid;
+  border-top: 1px solid var(--line);
+}
+.riskRuleItem:first-child {
+  border-top: 0;
+}
+.riskRuleItem.rule-disabled {
+  opacity: 0.6;
+  background: #fafafa;
+}
+.riskRuleView {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 14px 16px;
+  align-items: start;
+}
+.riskRuleInfo {
+  display: grid;
+  gap: 6px;
+}
+.riskRuleHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.riskRuleHead strong {
+  font-size: 14px;
+}
+.riskRuleInfo p {
+  color: var(--muted);
+  font-size: 13px;
+}
+.riskRuleMeta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.riskRuleMeta small {
+  font-size: 11px;
+  color: #8a9a90;
+  font-family: var(--font-mono);
+  background: #f4f6f2;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.riskRuleEdit {
+  display: grid;
+  padding-top: 4px;
+}
+.riskRuleEdit .adminFormGrid {
+  padding: 12px 16px 4px;
+}
+
+/* ── Admin V3-4: collection lifecycle ── */
+.collectionLifecycleActions {
+  display: flex;
+  gap: 6px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--line);
+}
+.collectionLifecycleActions button {
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.collectionLifecycleActions button:hover:not(:disabled) {
+  border-color: #9fc7bb;
+  background: #f7fbf9;
+}
+.collectionLifecycleActions button.danger {
+  color: var(--red-border);
+  border-color: var(--red-border);
+}
+.collectionLifecycleActions button.danger:hover:not(:disabled) {
+  background: var(--red-soft);
+}
+
+/* ── Admin V3-3: inspection panel ── */
+.knowledgeInspectPanel {
+  display: grid;
+}
+.inspectSummary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.inspectFindingsList {
+  display: grid;
+}
+.inspectFindingItem {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--line);
+  border-left: 3px solid var(--amber);
+}
+.inspectFindingItem:first-child {
+  border-top: 0;
+}
+.inspectFindingItem.type-stale_draft,
+.inspectFindingItem.type-duplicate_approved {
+  border-left-color: var(--red-border);
+  background: #fefafa;
+}
+.inspectFindingItem.type-no_source {
+  border-left-color: var(--amber);
+}
+.inspectFindingItem.type-low_confidence {
+  border-left-color: #9bafc2;
+}
+.inspectFindingHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.inspectFindingHead strong {
+  flex: 1;
+  font-size: 14px;
+}
+.findingIcon {
+  font-size: 16px;
+}
+.inspectFindingItem p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.inspectNavButton {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--mint-dark);
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.inspectNavButton:hover {
+  background: var(--mint-light);
+}
+
+/* ── Admin V3-1: responsive metric grid ── */
+.adminMetricGrid {
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+}
+
+/* ── Admin V3-2: filter bar ── */
+.adminFilterBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.adminFilterLabel {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.adminFilterSelect {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  padding: 5px 8px;
+  font-size: 13px;
+  outline: none;
+  min-width: 120px;
+}
+.adminFilterSelect:focus {
+  border-color: var(--mint);
+}
+
+/* ── Admin V3-2: expandable content ── */
+.expandToggle {
+  display: inline;
+  background: none;
+  border: 0;
+  color: var(--mint-dark);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  margin-top: 4px;
+}
+.expandToggle:hover {
+  text-decoration: underline;
+}
+
+/* ── Admin V3-2: review items ── */
+.reviewMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.reviewReason {
+  display: block;
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: #f7f9f8;
+  border-radius: 4px;
+  font-style: italic;
+  color: var(--muted);
+  font-size: 12px;
+}
+.adminReviewItem.review-completed {
+  background: #fafcfa;
+}
+.adminReviewItem.review-completed .adminDecision {
+  opacity: 0.7;
+}
+
+/* ── Admin V3-2: ticket SLA ── */
+.slaCell {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.slaCell.sla-fresh {
+  color: var(--mint-dark);
+  background: var(--mint-light);
+}
+.slaCell.sla-warn {
+  color: var(--amber);
+  background: var(--amber-soft);
+}
+.slaCell.sla-overdue {
+  color: var(--red-border);
+  background: var(--red-soft);
+}
+.ticketHead {
+  grid-template-columns: 90px minmax(220px, 1fr) 100px 120px 80px 210px;
+}
+.ticketRow {
+  grid-template-columns: 90px minmax(220px, 1fr) 100px 120px 80px 210px;
+}
+.ticketRow div strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ticketRow div small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Admin V3-2: human intelligence ── */
+.humanQueueRow {
+  grid-template-columns: 1fr;
+  gap: 4px;
+  padding: 12px 16px;
+}
+.humanQueueRow.human-pending {
+  border-left: 3px solid var(--amber);
+  background: #fefdf9;
+}
+.humanQueueMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.humanQueueContent {
+  display: block;
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.5;
+  margin: 4px 0;
+}
+.humanReviewer {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 11px;
+}
+.entBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.entBadge.ent-free {
+  background: #eef2f5;
+  color: #6b8299;
+}
+.entBadge.ent-seed {
+  background: var(--mint-light);
+  color: var(--mint-dark);
+}
+.entBadge.ent-paid {
+  background: #e8f0fe;
+  color: #1a56db;
+}
+.entBadge.ent-internal {
+  background: #f3e8ff;
+  color: #7c3aed;
+}
+.entBadge.ent-frozen {
+  background: var(--red-soft);
+  color: var(--red-border);
+}
+.confidenceRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.confidenceRow input[type="range"] {
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  accent-color: var(--mint);
+}
+.humanQueueTable .row {
+  grid-template-columns: 1fr;
+  gap: 4px;
 }

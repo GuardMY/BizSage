@@ -1,5 +1,6 @@
 package com.bizsage.api.knowledge;
 
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -40,6 +41,26 @@ public class KnowledgeStore {
     return jdbcTemplate.query(baseSelect() + " order by id", mapper());
   }
 
+  /**
+   * Returns knowledge items scoped to the given region and industry.
+   * When regionId or industryId is null (admin scope), no filter is applied
+   * for that dimension.
+   */
+  public List<KnowledgeItem> listScoped(String regionId, String industryId) {
+    StringBuilder sql = new StringBuilder(baseSelect()).append(" where 1=1");
+    List<Object> params = new ArrayList<>();
+    if (regionId != null) {
+      sql.append(" and region_id = ?");
+      params.add(regionId);
+    }
+    if (industryId != null) {
+      sql.append(" and industry_id = ?");
+      params.add(industryId);
+    }
+    sql.append(" order by id");
+    return jdbcTemplate.query(sql.toString(), mapper(), params.toArray());
+  }
+
   private KnowledgeItem find(long id) {
     return jdbcTemplate.query(baseSelect() + " where id = ?", mapper(), id).stream()
         .findFirst()
@@ -48,7 +69,8 @@ public class KnowledgeStore {
 
   private String baseSelect() {
     return """
-        select id, title, content, industry_id, region_id, link_id, source_id, confidence, weight
+        select id, title, content, industry_id, region_id, link_id, source_id,
+               coalesce(source_url, '') as source_url, confidence, weight
           from knowledge_items
         """;
   }
@@ -62,6 +84,7 @@ public class KnowledgeStore {
         rs.getString("region_id"),
         rs.getString("link_id"),
         rs.getString("source_id"),
+        rs.getString("source_url"),
         rs.getDouble("confidence"),
         rs.getDouble("weight"));
   }

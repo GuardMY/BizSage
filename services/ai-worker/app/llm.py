@@ -3,8 +3,6 @@ from __future__ import annotations
 import os
 import logging
 
-import httpx
-
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -18,15 +16,10 @@ logger = logging.getLogger(__name__)
 #
 # STRICT MODE: 严格模式 — 不配置真实 LLM 或调用失败时必须显式失败，
 # 绝不回退到 mock 回答。
+#
+# V2: generate_answer() and generate_answer_learn() are now thin wrappers
+#     that delegate to ModelRouter for backward compatibility.
 # ---------------------------------------------------------------------------
-
-SYSTEM_PROMPT = (
-    "你是一个企业经营诊断助手（BizSage）。"
-    "请基于提供的知识库证据，给出结构化的经营分析建议。"
-    "如果证据不足以支撑确定结论，请明确指出信息缺口。"
-    "回答应包含：1) 关键发现 2) 风险提示 3) 可行动建议。"
-    "请用简洁专业的商务中文回答，控制在 500 字以内。"
-)
 
 
 class LLMNotConfiguredError(Exception):
@@ -55,55 +48,52 @@ def _get_config() -> tuple[str, str, str]:
     return base_url, api_key, model
 
 
+# ── Backward-compatible wrappers (delegate to ModelRouter) ──────────
+
+_router = None
+
+
+def _get_router():
+    global _router
+    if _router is None:
+        from app.model_routing.router import ModelRouter
+        _router = ModelRouter()
+    return _router
+
+
 def generate_answer(question: str, context: str) -> str:
-    """Generate a diagnostic answer using the configured LLM provider.
+    """Backward-compatible wrapper. Delegates to ModelRouter (BALANCED tier).
 
-    Calls the OpenAI‑compatible /chat/completions endpoint via httpx.
-    Raises LLMNotConfiguredError or LLMCallError on failure —
-    no mock fallback in strict mode.
+    Note: the system prompt is NOT injected here. The caller (agent.py)
+    should build it via PromptAssembler and include it in the messages.
+    For legacy callers that don't set a system prompt, the ModelRouter
+    sends the user message as-is.
     """
-    provider = os.getenv("LLM_PROVIDER", "deepseek").lower()
+    router = _get_router()
+    messages = [
+        {"role": "user", "content": f"问题：{question}\n\n参考证据：\n{context}"},
+    ]
+    result = router.call(
+        messages=messages,
+        task_hint="balanced",
+        temperature=0.3,
+        max_tokens=1024,
+    )
+    return result.response_text
 
-    base_url, api_key, model = _get_config()
-    url = f"{base_url.rstrip('/')}/chat/completions"
 
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"问题：{question}\n\n参考证据：\n{context}"},
-        ],
-        "temperature": 0.3,
-        "max_tokens": 1024,
-    }
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-
-    try:
-        response = httpx.post(url, json=payload, headers=headers, timeout=30.0)
-        response.raise_for_status()
-        body = response.json()
-        content = body["choices"][0]["message"]["content"]
-        if not content:
-            raise LLMCallError(
-                f"LLM returned empty response (provider={provider}, model={model})"
-            )
-        return content.strip()
-
-    except (LLMNotConfiguredError, LLMCallError):
-        raise
-
-    except httpx.HTTPStatusError as exc:
-        raise LLMCallError(
-            f"LLM HTTP {exc.response.status_code} (provider={provider}, model={model}): "
-            f"{exc.response.text[:500]}",
-            status_code=exc.response.status_code,
-        ) from exc
-
-    except Exception as exc:
-        raise LLMCallError(
-            f"LLM call failed (provider={provider}, model={model}): {exc}"
-        ) from exc
+def generate_answer_learning(question: str, context: str) -> str:
+    """Backward-compatible wrapper for learning mode.
+    Delegates to ModelRouter (BALANCED tier, temperature 0.5).
+    """
+    router = _get_router()
+    messages = [
+        {"role": "user", "content": context},
+    ]
+    result = router.call(
+        messages=messages,
+        task_hint="balanced",
+        temperature=0.5,
+        max_tokens=1024,
+    )
+    return result.response_text

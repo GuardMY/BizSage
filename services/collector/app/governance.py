@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import re
 
-RUMOR_KEYWORDS = ("网传", "未经证实", "小道消息", "据说")
+RUMOR_KEYWORDS = ("网传", "未经证实", "小道消息", "据说", "rumor", "unverified", "allegedly")
 
 FIXED_WEIGHTS = {
     "user-private": 1.0,
@@ -11,6 +11,8 @@ FIXED_WEIGHTS = {
     "public-page": 0.6,
     "mock-api": 0.35,
 }
+
+BLOCKED_SOURCE_IDS: set[str] = set()
 
 
 def govern_records(records: list[dict]) -> list[dict]:

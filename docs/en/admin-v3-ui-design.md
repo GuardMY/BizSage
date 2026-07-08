@@ -214,4 +214,31 @@ Implemented tables include `admin_intelligence_reviews`, `admin_tickets`, and `a
 
 Implemented frontend capabilities include the standalone `/admin` route, admin sign-in and role gate, control center, alert center, audit logs, intelligence review, ticket ledger, and human-intelligence entry/review. The page calls `/api/admin/**` directly and does not use frontend mock data.
 
+Admin-V3-1 enhancements (2026-07): On top of the base framework, the following were completed — navigation grouping (six groups: Overview / Knowledge & Intel / Collection / Ops & Security / Commercial / Compliance, with placeholders for unimplemented groups), nav badge counts (real-time pending counts on Reviews / Alerts / Tickets / Human Intel), collapsible sidebar (72px icon mode with localStorage persistence), dashboard restructuring (four categorized card sections: Risk & Alerts / Production Health / Intelligence Production / Commercial, with backend dashboard metrics expanded from 5 to 10), top-bar environment badge (dev/prod) and global search (client-side real-time search across alerts/tickets/reviews/audit-logs/knowledge with dropdown results), and a Monitoring view (new nav section with four real-time panels: Service Health / Collection Pipeline / Data Summary / Alert Summary).
+
 Verification note: the current execution environment does not provide `mvn`, `node`, or `npm`, so Maven and Web test commands cannot run here. `AdminV3ApiTest` and Web source regression tests were added and should be run in an environment with the required toolchain.
+## 12. Current Admin-V3-3 Implementation Status
+
+Admin-V3-3 has now been connected as a real closed loop rather than a mock-only design slice. Scope includes formal knowledge-management tables, startup auto-migration, MySQL bootstrap definitions, `services/api` knowledge workflow endpoints, `/admin` knowledge-management UI, and regression coverage additions.
+
+Implemented backend capabilities include knowledge-node listing, node detail retrieval, draft creation, submit-for-review, second-person approval enforcement, publish, rollback, version diff, publication history, audit-log writes, and synchronization of published knowledge back into the existing `knowledge_items` table for user-side retrieval continuity.
+
+Implemented persistence includes `admin_knowledge_nodes`, `admin_knowledge_versions`, and `admin_knowledge_publications`. These definitions were added to the MySQL initialization script, the H2 test schema, and the API startup migration so existing databases can auto-create the missing tables on boot.
+
+Implemented frontend capabilities include a dedicated Knowledge workspace inside `/admin` with node navigation, draft editing, version history, compare baseline selection, diff display, review actions, publish actions, rollback actions, and publication log visibility. The page calls the real `/api/admin/knowledge/**` endpoints and does not use frontend mock knowledge data.
+
+Verification note: the current execution environment still does not provide `mvn`, `node`, or `npm`, so Maven and Web test commands could not be executed here. Backend lifecycle tests and Web source regression checks were updated and should be run in an environment with the required toolchain.
+
+## 13. Current Admin-V3-4 Implementation Status
+
+Admin-V3-4 has implemented the core collection scheduling engine, including data source management, keyword filtering, scheduled execution, manual triggering, circuit breaker, and dead-letter queue. Risk control rule configuration and data lifecycle management have not yet begun.
+
+Implemented backend capabilities include: data source CRUD (`admin_collection_sources` table), keyword CRUD (`admin_collection_keywords` table, supporting INCLUDE/EXCLUDE match modes), collection job execution (manual trigger and `AdminCollectionScheduler` scheduled runs at a configurable default interval of 15s), circuit breaker (failure_count reaching failure_threshold → circuit_state switches to OPEN → recovers to CLOSED after cooldown_minutes), dead-letter queue (failed jobs written to `dead_letter_records`), keyword filtering (collected records filtered by include/exclude keywords before being persisted to `raw_records`), and `CollectorClient` (supporting HTTP remote mode and embedded fallback mode; embedded mode handles PUBLIC_PAGE / MOCK_API / FORM source types with HTML parsing and normalized record output).
+
+Implemented persistence includes: `admin_collection_sources`, `admin_collection_keywords`, `admin_collection_job_runs`, while reusing the existing `collection_jobs`, `dead_letter_records`, and `raw_records` tables. These table definitions were added to the MySQL initialization script, the H2 test schema, and the API startup migration logic.
+
+Implemented frontend capabilities include: a dedicated Collection workspace (`collection-workspace.tsx`) inside `/admin` with a three-column layout — source list on the left, source configuration editor (with keyword sub-panel) in the center, and run history plus dead-letter queue on the right. The workspace supports creating/editing data sources, creating/editing keywords, manual collection run triggering, and viewing recent run records and dead-letter records. The page calls the real `/api/admin/collection/**` endpoints.
+
+Not yet implemented from the design scope: risk control rules (the six tabs described in Section 5.7 — rumor detection, conflict judgment, gray content, AI output self-check, API abuse protection, and paid-content protection), data lifecycle management (hot/warm/cold archiving), proxy pool health monitoring, and compliance/robots/request-strategy display in the detail drawer. These belong to the latter half of the Admin-V3-4 delivery scope.
+
+Verification note: `AdminV3ApiTest` includes the `collectionLifecycleSupportsSourceKeywordRunAndPersistence` test method covering end-to-end verification of source creation, keyword creation, collection run execution, raw record persistence, and audit log writes. Tests should be run in an environment with the Maven toolchain available.

@@ -5,6 +5,8 @@ import com.bizsage.api.admin.AdminDtos.AlertItem;
 import com.bizsage.api.admin.AdminDtos.AuditLogItem;
 import com.bizsage.api.admin.AdminDtos.Dashboard;
 import com.bizsage.api.admin.AdminDtos.HumanIntelligenceCreateRequest;
+import com.bizsage.api.admin.AdminDtos.RiskRule;
+import com.bizsage.api.admin.AdminDtos.RiskRuleUpsertRequest;
 import com.bizsage.api.admin.AdminDtos.HumanIntelligenceItem;
 import com.bizsage.api.admin.AdminDtos.IntelligenceReviewItem;
 import com.bizsage.api.admin.AdminDtos.Metric;
@@ -37,7 +39,12 @@ public class AdminStore {
         new Metric("openTickets", "Open tickets", String.valueOf(countWhere("admin_tickets", "status not in ('CLOSED','ARCHIVED')")), "warning", "Operational ledger items still active"),
         new Metric("openAlerts", "Open alerts", String.valueOf(countWhere("alert_events", "status <> 'CLOSED'")), "critical", "Alerts that still require acknowledgement"),
         new Metric("auditLogs", "Audit logs", String.valueOf(countWhere("audit_logs", "1 = 1")), "healthy", "Recorded administrator operations"),
-        new Metric("humanIntel", "Human intelligence", String.valueOf(countWhere("admin_human_intelligence", "1 = 1")), "healthy", "Submitted local intelligence records"));
+        new Metric("humanIntel", "Human intelligence", String.valueOf(countWhere("admin_human_intelligence", "1 = 1")), "healthy", "Submitted local intelligence records"),
+        new Metric("p0Alerts", "P0 alerts", String.valueOf(countWhere("alert_events", "alert_level = 'P0' and status <> 'CLOSED'")), "critical", "Highest severity open alerts"),
+        new Metric("collectionSources", "Collection sources", String.valueOf(countWhere("admin_collection_sources", "status = 'ENABLED'")), "healthy", "Active data source configurations"),
+        new Metric("collectionSuccessRate", "Collection success", collectionSuccessRate(), "healthy", "Recent collection run success rate"),
+        new Metric("knowledgeNodes", "Knowledge nodes", String.valueOf(countWhere("admin_knowledge_nodes", "1 = 1")), "healthy", "Maintained knowledge records"),
+        new Metric("crawlerHealth", "Crawler circuits", crawlerHealth(), "healthy", "Open circuit breaker states"));
 
     return new Dashboard(
         metrics,
@@ -122,17 +129,39 @@ public class AdminStore {
       case "PASS" -> "APPROVED";
       case "REJECT" -> "REJECTED";
       case "FLAG" -> "NEEDS_REVIEW";
+      case "SUSPICIOUS" -> "SUSPICIOUS";
+      case "COMPLIANCE" -> "COMPLIANCE_HOLD";
+      case "PAID_INTEL" -> "PAID_REVIEW";
+      case "ARCHIVE" -> "ARCHIVED";
       default -> "PENDING";
     };
     jdbcTemplate.update("update intelligence set status = ?, update_time = current_timestamp where id = ?",
         intelligenceStatus, item.intelligenceId());
 
-    if ("FLAG".equals(normalizedVerdict)) {
+    if ("FLAG".equals(normalizedVerdict) || "SUSPICIOUS".equals(normalizedVerdict)) {
+      String ticketType = "FLAG".equals(normalizedVerdict) ? "review_escalation" : "suspicious_review";
       jdbcTemplate.update("""
           insert into admin_tickets
             (ticket_type, severity, target_type, target_id, title, description, status, owner, next_action, region_id, industry_id)
-          values ('review_escalation', 'P1', 'intelligence', ?, ?, ?, 'NEW', ?, 'Assign second reviewer and confirm source conflict.', ?, ?)
-          """, item.intelligenceId(), "Escalated intelligence review: " + item.title(), notes, actor, item.regionId(), item.industryId());
+          values (?, 'P1', 'intelligence', ?, ?, ?, 'NEW', ?, ?, ?, ?)
+          """,
+          ticketType, item.intelligenceId(),
+          normalizedVerdict.equals("SUSPICIOUS") ? "Suspicious intelligence review: " + item.title() : "Escalated intelligence review: " + item.title(),
+          notes, actor,
+          "FLAG".equals(normalizedVerdict) ? "Assign second reviewer and confirm source conflict." : "Investigate suspicious signal and verify evidence.",
+          item.regionId(), item.industryId());
+    }
+    if ("COMPLIANCE".equals(normalizedVerdict)) {
+      jdbcTemplate.update("""
+          insert into admin_tickets
+            (ticket_type, severity, target_type, target_id, title, description, status, owner, next_action, region_id, industry_id)
+          values ('compliance_review', 'P1', 'intelligence', ?, ?, ?, 'NEW', ?, 'Route to legal/compliance for content review.', ?, ?)
+          """,
+          item.intelligenceId(), "Compliance review: " + item.title(), notes, actor, item.regionId(), item.industryId());
+    }
+    if ("PAID_INTEL".equals(normalizedVerdict)) {
+      jdbcTemplate.update("update intelligence set entitlement = 'PAID', update_time = current_timestamp where id = ?",
+          item.intelligenceId());
     }
 
     writeAudit(actor, "ADMIN_INTELLIGENCE_" + normalizedVerdict, "intelligence", String.valueOf(item.intelligenceId()), "SUCCESS", item.regionId(), item.industryId());
@@ -282,9 +311,124 @@ public class AdminStore {
         """, actor, action, targetType, targetId, result, regionId, industryId);
   }
 
+  // ── Risk Rules ──
+  List<RiskRule> listRiskRules() {
+    return jdbcTemplate.query("""
+        select id, rule_type, name, description, enabled, threshold_value, scope_json,
+               risk_level, change_mode, version, create_time, update_time
+          from admin_risk_rules
+         order by rule_type, name
+        """, riskRuleMapper());
+  }
+
+  RiskRule upsertRiskRule(RiskRuleUpsertRequest request, String actor) {
+    if (request.id() == null) {
+      KeyHolder keyHolder = new GeneratedKeyHolder();
+      jdbcTemplate.update(connection -> {
+        PreparedStatement ps = connection.prepareStatement("""
+            insert into admin_risk_rules
+              (rule_type, name, description, enabled, threshold_value, scope_json, risk_level, change_mode, version)
+            values (?, ?, ?, ?, ?, ?, ?, ?, 1)
+            """, Statement.RETURN_GENERATED_KEYS);
+        ps.setString(1, blankToDefault(request.ruleType(), "general"));
+        ps.setString(2, blankToDefault(request.name(), "Untitled rule"));
+        ps.setString(3, request.description());
+        ps.setBoolean(4, request.enabled() == null || request.enabled());
+        ps.setBigDecimal(5, request.thresholdValue());
+        ps.setString(6, request.scopeJson());
+        ps.setString(7, blankToDefault(request.riskLevel(), "MEDIUM"));
+        ps.setString(8, blankToDefault(request.changeMode(), "IMMEDIATE"));
+        return ps;
+      }, keyHolder);
+      long id = generatedId(keyHolder);
+      writeAudit(actor, "ADMIN_RISK_RULE_CREATE", "risk_rule", String.valueOf(id), "SUCCESS", "global", "global");
+      return findRiskRule(id);
+    }
+    long id = request.id();
+    jdbcTemplate.update("""
+        update admin_risk_rules
+           set rule_type = ?, name = ?, description = ?, enabled = ?, threshold_value = ?,
+               scope_json = ?, risk_level = ?, change_mode = ?, version = version + 1, update_time = current_timestamp
+         where id = ?
+        """,
+        blankToDefault(request.ruleType(), "general"),
+        blankToDefault(request.name(), "Untitled rule"),
+        request.description(),
+        request.enabled() == null || request.enabled(),
+        request.thresholdValue(),
+        request.scopeJson(),
+        blankToDefault(request.riskLevel(), "MEDIUM"),
+        blankToDefault(request.changeMode(), "IMMEDIATE"),
+        id);
+    writeAudit(actor, "ADMIN_RISK_RULE_UPDATE", "risk_rule", String.valueOf(id), "SUCCESS", "global", "global");
+    return findRiskRule(id);
+  }
+
+  RiskRule toggleRiskRule(long id, String actor) {
+    RiskRule rule = findRiskRule(id);
+    boolean next = !rule.enabled();
+    jdbcTemplate.update("update admin_risk_rules set enabled = ?, update_time = current_timestamp where id = ?", next, id);
+    writeAudit(actor, next ? "ADMIN_RISK_RULE_ENABLE" : "ADMIN_RISK_RULE_DISABLE", "risk_rule", String.valueOf(id), "SUCCESS", "global", "global");
+    return findRiskRule(id);
+  }
+
+  // ── Collection Lifecycle ──
+  void archiveCollectionSource(long sourceConfigId, String actor) {
+    var source = jdbcTemplate.query("select id from admin_collection_sources where id = ?",
+        (rs, rn) -> rs.getLong("id"), sourceConfigId).stream().findFirst();
+    if (source.isEmpty()) throw new IllegalArgumentException("source not found");
+    jdbcTemplate.update("update admin_collection_sources set status = 'ARCHIVED', update_time = current_timestamp where id = ?", sourceConfigId);
+    writeAudit(actor, "ADMIN_COLLECTION_ARCHIVE", "collection_source", String.valueOf(sourceConfigId), "SUCCESS", "global", "global");
+  }
+
+  void restoreCollectionSource(long sourceConfigId, String actor) {
+    var source = jdbcTemplate.query("select id from admin_collection_sources where id = ?",
+        (rs, rn) -> rs.getLong("id"), sourceConfigId).stream().findFirst();
+    if (source.isEmpty()) throw new IllegalArgumentException("source not found");
+    jdbcTemplate.update("update admin_collection_sources set status = 'ENABLED', update_time = current_timestamp where id = ?", sourceConfigId);
+    writeAudit(actor, "ADMIN_COLLECTION_RESTORE", "collection_source", String.valueOf(sourceConfigId), "SUCCESS", "global", "global");
+  }
+
+  private RiskRule findRiskRule(long id) {
+    return jdbcTemplate.query("""
+        select id, rule_type, name, description, enabled, threshold_value, scope_json,
+               risk_level, change_mode, version, create_time, update_time
+          from admin_risk_rules where id = ?
+        """, riskRuleMapper(), id).stream().findFirst()
+        .orElseThrow(() -> new IllegalArgumentException("risk rule not found"));
+  }
+
+  private RowMapper<RiskRule> riskRuleMapper() {
+    return (rs, rowNum) -> new RiskRule(
+        rs.getLong("id"),
+        rs.getString("rule_type"),
+        rs.getString("name"),
+        rs.getString("description"),
+        rs.getBoolean("enabled"),
+        rs.getBigDecimal("threshold_value"),
+        rs.getString("scope_json"),
+        rs.getString("risk_level"),
+        rs.getString("change_mode"),
+        rs.getInt("version"),
+        timestamp(rs.getTimestamp("create_time")),
+        timestamp(rs.getTimestamp("update_time")));
+  }
+
   private int countWhere(String table, String where) {
     Integer count = jdbcTemplate.queryForObject("select count(*) from " + table + " where " + where, Integer.class);
     return count == null ? 0 : count;
+  }
+
+  private String collectionSuccessRate() {
+    int total = countWhere("admin_collection_job_runs", "1 = 1");
+    if (total == 0) return "—";
+    int success = countWhere("admin_collection_job_runs", "status = 'SUCCESS'");
+    return Math.round(100.0 * success / total) + "%";
+  }
+
+  private String crawlerHealth() {
+    int openCircuits = countWhere("admin_collection_sources", "circuit_state = 'OPEN'");
+    return openCircuits == 0 ? "All closed" : openCircuits + " open";
   }
 
   private RowMapper<AlertItem> alertMapper() {
@@ -381,7 +525,7 @@ public class AdminStore {
       return "FLAG";
     }
     String normalized = verdict.trim().toUpperCase();
-    if (List.of("PASS", "REJECT", "FLAG").contains(normalized)) {
+    if (List.of("PASS", "REJECT", "FLAG", "SUSPICIOUS", "COMPLIANCE", "PAID_INTEL", "ARCHIVE").contains(normalized)) {
       return normalized;
     }
     return "FLAG";

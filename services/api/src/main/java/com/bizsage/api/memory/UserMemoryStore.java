@@ -114,6 +114,9 @@ public class UserMemoryStore {
     return switch (category) {
       case "BUSINESS_FACT" -> Instant.now().plus(90, ChronoUnit.DAYS);
       case "PREFERENCE" -> Instant.now().plus(180, ChronoUnit.DAYS);
+      case "PAIN_POINT" -> Instant.now().plus(90, ChronoUnit.DAYS);
+      case "INDUSTRY_CONTEXT" -> Instant.now().plus(365, ChronoUnit.DAYS);
+      case "LEARNING_PROGRESS" -> Instant.now().plus(180, ChronoUnit.DAYS);
       default -> null;
     };
   }

@@ -1,6 +1,84 @@
-# 变更日志
+﻿# 变更日志
 
 ## 2026-07-08
+
+### 双Agent业务核心：学习Agent、三级记忆、模式切换与标准化输出
+
+- 变更类型：功能开发。
+- 影响模块：`services/ai-worker`、`apps/web` 和双边变更日志。
+- 主要变更：
+  - **行业学习Agent**：新增 `services/ai-worker/app/learning_agent.py`，实现 BizSage 双Agent系统的另一半。支持意图分类（行业概览、节点学习、指标问答、风险问答、隐形规则、政策问答），通过关键词匹配覆盖全部7个链条节点。三种学习模式：FAST_START（概览）、FULL_CHAIN（系统深度学习）、NODE_DEEP_DIVE（聚焦节点研究）。使用针对通俗教学优化的学习专用系统提示词。新增 `POST /agent/learn` 端点。
+  - **三级记忆系统**：增强 `services/ai-worker/app/memory.py`，新增五种记忆类别（PREFERENCE、BUSINESS_FACT、PAIN_POINT、INDUSTRY_CONTEXT、LEARNING_PROGRESS），支持按类别的生命周期过期（90-365天），通过 `forget_expired()` 实现智能自动遗忘，通过 `extract_learning_memories()` 提取学习专用记忆，增强诊断记忆提取，支持痛点识别和行业上下文模式匹配。
+  - **双Agent模式切换**：新增 `services/ai-worker/app/agent_transition.py`，支持上下文保持的模式切换。学习→诊断切换将当前学习的链条节点带入诊断焦点。诊断→学习切换识别薄弱环节并建议针对性学习。新增 `POST /agent/transition` 统一端点和供前端展示的 `TransitionContext` 预览。
+  - **标准化双Agent输出**：新增 `services/ai-worker/app/agent_output.py`，实现两个Agent共享的统一 `AgentOutput` 格式。结构化分段（关键发现、风险提示、可行动建议、证据支撑）、来源可追溯、置信度标签、时效性说明、合规免责声明、链条节点上下文（学习模式）和建议的后续操作。支持 `render_agent_output()`（完整格式）和 `render_legacy_format()`（向后兼容的诊断格式）。
+  - **数据模型**：为 `KnowledgeItem` 新增可选的 `link_id` 字段用于链条节点过滤；更新 `parse_knowledge()` 从 API 负载中提取 `linkId`/`link_id`。
+  - **前端**：在 API 客户端中新增 `AgentLearnRequest`、`AgentTransitionRequest`、`AgentOutput`、`fetchAgentLearn()` 和 `fetchAgentTransition()`。
+- 验证结果：
+  - 三个测试文件中共 32 个新 Python 测试用例（6 个输出、18 个学习Agent、8 个模式切换），全部通过。
+  - 全部 25 个现有 ai-worker 测试用例（7 个诊断Agent + 18 个上下文压缩器）继续通过——零回归。
+  - 合计：`services/ai-worker` 中 57/57 个测试用例全部通过。
+- 未完成项：
+  - 学习→诊断→学习切换回路的浏览器级端到端验证。
+  - Web UI：专用学习模式工作区（含链条节点导航器，遵循现有 DiagnosisWorkspace 模式）。
+
+### RAG 上下文压缩
+
+- 变更类型：功能开发。
+- 影响模块：`services/ai-worker` 和双边变更日志。
+- 主要变更：
+  - 新增 `services/ai-worker/app/context_compressor.py`，实现了面向 RAG 检索结果的内容感知上下文压缩器。压缩器功能包括：(1) 通过字符三元组 Jaccard 相似度（阈值 0.70）合并近似重复的知识条目，(2) 按相关度分数比例分配 token 预算，支持可配置的每项最小/最大字符限制，(3) 在句子边界处截断长文本以保持可读性，(4) 对混合中英文文本进行保守的 token 数量估算。
+  - 将压缩器集成到 `agent.py::diagnose()` 中——原先简单的 `"\n".join(...)` 上下文拼接方式替换为 `compress_context()` 管线，支持内存感知的 token 预算分配（有记忆上下文时 2100 tokens，无记忆上下文时 2400 tokens）。
+  - 在 `DiagnoseRequest` 中暴露可选的 `compress_config` 参数，允许调用方按请求调整 `total_token_budget`、`min_chars_per_item`、`max_chars_per_item` 和 `merge_similarity_threshold`。
+- 验证结果：
+  - `test_context_compressor.py` 中 18 个新增单元测试，覆盖三元组提取、Jaccard 相似度、合并逻辑（高分优先）、token 估算、单/多项压缩、重复合并、按分分配预算、最小字符保障和句子边界截断。
+  - 全部 7 个现有 `test_agent.py` 测试在集成压缩管线后继续全部通过。
+- 未完成项：
+  - 无。压缩对现有调用方透明——默认配置在短上下文中表现与之前一致，同时在长结果场景下防止上下文窗口溢出。
+
+### 数据治理：冲突引擎、时间序列快照与四层数据隔离
+
+- 变更类型：功能开发。
+- 影响模块：`services/collector`、`services/api`、`apps/web`、`infra/mysql` 和双边变更日志。
+- 主要变更：
+  - **七层冲突引擎**：新增 `services/collector/app/conflict_engine.py`，实现基于 SimHash 距离对比、来源权重评估和谣言/黑名单检测的五分支分类（短期波动、区域例外、权威更新、可疑冲突、虚假信息）。新增 `POST /govern/conflict-check` FastAPI 端点，并在现有 `/govern` 端点中集成可选的冲突检测。
+  - **时间序列快照**：在 `services/api/.../governance/` 下新增 Java `SnapshotStore`、`SnapshotService`、`SnapshotController` 和 `SnapshotScheduler`。支持每日（完整转储，保留30天）、每周（按 link_id 聚合，保留12周）和每月（趋势数据，保留12个月）快照，具备自动定时生成和留存清理功能。新增 `GET/POST /api/admin/snapshots/**` 端点。
+  - **四层数据隔离**：新增 `DataIsolationService`、`DataScope`，并在 `IntelligenceStore` 中添加带作用域限制的查询方法（`listScoped`），实现用户私有、区域、行业和付费/免费权益四个维度的过滤。新增 `ConflictStore` 用于冲突解决结果持久化和虚假信息台账管理。新增 `GET /api/admin/governance/conflicts` 和 `GET /api/admin/governance/false-ledger` 端点。
+  - **数据库**：新增 `false_information_ledger`、`conflict_resolutions` 表，并为 `intelligence_snapshots` 扩展了 `retention_days`、`record_count`、`parent_snapshot_id`、`expires_at` 列，同步更新了 MySQL 初始化脚本、H2 测试 schema 和 `AdminSchemaMigration`。
+  - **前端**：在 `/admin` 控制台添加了快照、冲突和虚假情报导航入口，以及对应的 `api-client.ts` 类型和请求函数。
+- 验证结果：
+  - Python 冲突引擎包含13个单元测试，覆盖全部5个分支、批量检测、自定义配置和边界情况。
+  - Java `GovernanceApiTest` 覆盖快照生命周期（生成/列表/对比/清理）、冲突解决列表、虚假情报台账列表和 RBAC 权限校验。
+  - `services/collector`、`services/api` 和 `apps/web` 中的现有测试预期全部继续通过。
+- 未完成项：
+  - 在具备所需工具链的环境中运行 Python、Maven 和 npm 测试套件。
+  - 新增管理导航入口的浏览器级视觉验证。
+
+### 核心架构实现状态分析
+
+- 变更类型：文档。
+- 影响模块：`docs/en/milestones`、`docs/zh-CN/milestones` 和双边变更日志。
+- 主要变更：
+  - 新增双语实现状态分析文档（`docs/en/milestones/implementation-status-analysis.md` 和 `docs/zh-CN/milestones/implementation-status-analysis-zh-CN.md`），对比了 V4.0 目标架构与当前代码库的实现差距。
+  - 分析了全部九层架构的逐能力实现状态（V1/V2/V3），识别了五条关键未闭合链路，并按九大领域汇总了完成度。
+  - 记录了 Admin V3 分阶段交付状态（V3-1 至 V3-6）和剩余环境验证缺口。
+- 验证结果：
+  - 确认中英文文档描述了一致的发现、状态和缺口。
+  - 与五份治理架构文档、三份里程碑文档以及 `apps/web`、`services/api`、`services/ai-worker`、`services/collector`、`infra` 下的实际源码交叉比对。
+- 未完成项：
+  - 无。此为当前实现状态的文档快照。
+
+### Admin V3 中文文档修复
+
+- 变更类型：文档修复。
+- 影响模块：`docs/zh-CN/admin-v3-ui-design-zh-CN.md` 和两份变更日志。
+- 主要变更：
+  - 将 Admin V3 中文界面设计文档重新保存为 `UTF-8 with BOM`，避免常见 Windows 编辑器误判编码后出现中文乱码。
+  - 恢复中文文档中损坏的 `## 12. Admin-V3-3 当前实现状态` 段落，使其再次与配套英文文档保持一致。
+- 验证结果：
+  - 已验证修复后的文档包含 UTF-8 BOM，并可按正确中文内容读取。
+  - 已对照 `docs/en/admin-v3-ui-design.md` 末尾内容，确认恢复后的范围与实现说明一致。
+- 未完成事项：
+  - 本次仅为文档修复，无需运行服务测试套件。
 ### Admin-V3-1 与 Admin-V3-2 实现
 
 - 变更类型：功能开发。
@@ -577,3 +655,34 @@
   - 在 `services/api` 运行 `mvn -Dtest=BusinessWorkflowApiTest#archivedConversationCanBeSoftDeletedAndDisappearsFromList test`，验证已归档会话可被软删除且不会再出现在会话列表中。
 - 未完成事项：
   - 仍建议做一次真实浏览器复验，确认行级动作的可发现性以及归档/删除流程在真实数据和本地化文案下都符合预期。
+
+## 2026-07-08
+### Admin V3 中文文档修复
+
+- 变更类型：文档修复。
+- 影响模块：`docs/zh-CN/admin-v3-ui-design-zh-CN.md` 和两份变更日志。
+- 主要变更：
+  - 将 Admin V3 中文界面设计文档重新保存为 `UTF-8 with BOM`，避免常见 Windows 编辑器误判编码后出现中文乱码。
+  - 恢复中文文档中损坏的 `## 12. Admin-V3-3 当前实现状态` 段落，使其再次与配套英文文档保持一致。
+- 验证结果：
+  - 已验证修复后的文档包含 UTF-8 BOM，并可按正确中文内容读取。
+  - 已对照 `docs/en/admin-v3-ui-design.md` 末尾内容，确认恢复后的范围与实现说明一致。
+- 未完成事项：
+  - 本次仅为文档修复，无需运行服务测试套件。
+
+### Admin-V3-3 ֪ʶ������ʵ�ջ�
+
+- ������ͣ����ܿ�����
+- Ӱ��ģ�飺`services/api`��`infra/mysql`��`apps/web`��Admin ����ĵ��Լ���Ӣ�ı����־��
+- ��Ҫ�����
+  - ������ʽ֪ʶ����־û��ṹ `admin_knowledge_nodes`��`admin_knowledge_versions`��`admin_knowledge_publications`����ͬ������ MySQL ��ʼ���ű���H2 ���� schema �� API ����Զ������߼���
+  - ������ʵ `/api/admin/knowledge/**` �ӿڣ����ǽڵ��б���ڵ����顢�ݸ屣�桢�ύ���ˡ��ڶ�������������������ع��Ͱ汾�Աȡ�
+  - �����ѷ���֪ʶ��д `knowledge_items` ��ͬ���߼�����֤����Ա�������֪ʶ������������û��������·��
+  - ��չ `/admin`���������� Knowledge ��������֧�ֽڵ㵼�����ݸ�༭���汾����������鿴���ع��ͷ�����ʷ��
+  - ͬ������ Admin-V3-3 �������ڵĺ�˲�����ǰ��Դ�뼶�ع鸲�ǡ�
+- ��֤�����
+  - �ѶԱ�ṹ���塢������·�ɡ���������У�����ǰ�� API client��Admin ҳ����ߺ�Դ�뼶���Բ�����о�̬�˶ԡ�
+  - ��ǰִ�л���δ�ṩ `mvn`��`node` �� `npm`����˱����޷��ڴ˻���ʵ��ִ�� Maven �� Web �������
+- δ������
+  - ���ھ߱� Maven �� Node.js �������Ļ��������к�˲��Ժ� Web ���ԡ�
+  - ��ǰ�˹��������ú��Խ���� `/admin` ֪ʶ������ִ��һ����ʵ�������֤��

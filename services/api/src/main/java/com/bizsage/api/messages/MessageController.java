@@ -35,6 +35,7 @@ public class MessageController {
   private static final Logger log = LoggerFactory.getLogger(MessageController.class);
 
   private final DiagnosisService diagnosisService;
+  private final LearningService learningService;
   private final ConversationStore conversationStore;
   private final ConversationMessageStore messageStore;
   private final UserStore userStore;
@@ -42,11 +43,13 @@ public class MessageController {
 
   public MessageController(
       DiagnosisService diagnosisService,
+      LearningService learningService,
       ConversationStore conversationStore,
       ConversationMessageStore messageStore,
       UserStore userStore,
       ObjectMapper objectMapper) {
     this.diagnosisService = diagnosisService;
+    this.learningService = learningService;
     this.conversationStore = conversationStore;
     this.messageStore = messageStore;
     this.userStore = userStore;
@@ -67,6 +70,60 @@ public class MessageController {
         writeDiagnosisFrames(outputStream, diagnosis);
       } catch (AiWorkerException ex) {
         log.error("Diagnosis failed — worker error (conversation={}): {}", conversationId, ex.getMessage());
+        writeEvent(outputStream, "error", toErrorPayload(ex));
+      }
+    };
+  }
+
+  // ── Learning Agent endpoints ────────────────────────────────────
+
+  /**
+   * Industry Learning Agent — SSE streaming endpoint.
+   * Accepts an optional chainNodeId and learningMode for guided learning.
+   */
+  @PostMapping(value = "/learn/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+  StreamingResponseBody streamLearning(
+      @PathVariable long conversationId,
+      @Valid @RequestBody LearnMessageRequest request,
+      Principal principal) {
+    var user = userStore.findByUsername(principal.getName()).orElseThrow();
+    var conversation = conversationStore.getForOwner(principal.getName(), conversationId);
+    return outputStream -> {
+      writeEvent(outputStream, "status", "{\"state\":\"started\",\"mode\":\"LEARNING\"}");
+      try {
+        String result = learningService.learn(
+            conversation, user, request.question(),
+            request.chainNodeId(), request.learningMode());
+        writeDiagnosisFrames(outputStream, result);
+      } catch (AiWorkerException ex) {
+        log.error("Learning failed — worker error (conversation={}): {}", conversationId, ex.getMessage());
+        writeEvent(outputStream, "error", toErrorPayload(ex));
+      }
+    };
+  }
+
+  /**
+   * Dual-Agent mode transition — SSE streaming endpoint.
+   * Switches between LEARNING and DIAGNOSIS modes with preserved context.
+   */
+  @PostMapping(value = "/transition/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+  StreamingResponseBody streamTransition(
+      @PathVariable long conversationId,
+      @Valid @RequestBody TransitionMessageRequest request,
+      Principal principal) {
+    var user = userStore.findByUsername(principal.getName()).orElseThrow();
+    var conversation = conversationStore.getForOwner(principal.getName(), conversationId);
+    return outputStream -> {
+      writeEvent(outputStream, "status",
+          "{\"state\":\"started\",\"mode\":\"" + request.toMode() + "\"}");
+      try {
+        String result = learningService.transition(
+            conversation, user,
+            request.fromMode(), request.toMode(),
+            request.question(), request.chainNodeId());
+        writeDiagnosisFrames(outputStream, result);
+      } catch (AiWorkerException ex) {
+        log.error("Transition failed — worker error (conversation={}): {}", conversationId, ex.getMessage());
         writeEvent(outputStream, "error", toErrorPayload(ex));
       }
     };
@@ -149,5 +206,18 @@ public class MessageController {
   }
 
   record MessageRequest(@NotBlank String question) {
+  }
+
+  record LearnMessageRequest(
+      @NotBlank String question,
+      String chainNodeId,
+      String learningMode) {
+  }
+
+  record TransitionMessageRequest(
+      @NotBlank String fromMode,
+      @NotBlank String toMode,
+      @NotBlank String question,
+      String chainNodeId) {
   }
 }

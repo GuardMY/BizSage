@@ -8,6 +8,7 @@ public record KnowledgeItem(
     String regionId,
     String linkId,
     String sourceId,
+    String sourceUrl,
     double confidence,
     double weight) {
 }

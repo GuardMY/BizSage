@@ -7,3 +7,10 @@ spring:
     init:
       mode: always
       schema-locations: classpath:schema-test.sql
+
+bizsage:
+  admin:
+    collection:
+      scheduler-enabled: false
+
+COLLECTOR_URL: embedded://collector

@@ -21,6 +21,7 @@ class KnowledgeItem:
     entitlement: str = "FREE"
     review_confidence: float = 0.85
     historical_quality: float = 0.85
+    link_id: str = ""
 
 
 @dataclass(frozen=True)

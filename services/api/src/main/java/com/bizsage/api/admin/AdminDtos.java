@@ -126,6 +126,33 @@ public final class AdminDtos {
   public record HumanIntelligenceReviewRequest(String verdict, String notes) {
   }
 
+  public record RiskRule(
+      long id,
+      String ruleType,
+      String name,
+      String description,
+      boolean enabled,
+      BigDecimal thresholdValue,
+      String scopeJson,
+      String riskLevel,
+      String changeMode,
+      int version,
+      java.time.LocalDateTime createTime,
+      java.time.LocalDateTime updateTime) {
+  }
+
+  public record RiskRuleUpsertRequest(
+      Long id,
+      String ruleType,
+      String name,
+      String description,
+      Boolean enabled,
+      BigDecimal thresholdValue,
+      String scopeJson,
+      String riskLevel,
+      String changeMode) {
+  }
+
   public record AdminList<T>(List<T> items, int total, Map<String, Object> summary) {
   }
 }

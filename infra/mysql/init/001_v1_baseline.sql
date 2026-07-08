@@ -153,9 +153,57 @@ CREATE TABLE IF NOT EXISTS intelligence_snapshots (
   weight DECIMAL(8,4) NOT NULL DEFAULT 1.0000,
   region_id VARCHAR(64) NOT NULL,
   industry_id VARCHAR(64) NOT NULL,
+  retention_days INT NOT NULL DEFAULT 30,
+  record_count INT NOT NULL DEFAULT 0,
+  parent_snapshot_id BIGINT NULL,
+  expires_at DATETIME NULL,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_snapshots_scope (snapshot_type, industry_id, region_id)
+);
+
+CREATE TABLE IF NOT EXISTS false_information_ledger (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  original_intelligence_id BIGINT NULL,
+  title VARCHAR(255) NOT NULL,
+  content TEXT NOT NULL,
+  url VARCHAR(1024) NULL,
+  conflict_reason VARCHAR(64) NOT NULL,
+  matched_rumor_keyword VARCHAR(255) NULL,
+  source_id VARCHAR(64) NOT NULL,
+  region_id VARCHAR(64) NOT NULL,
+  industry_id VARCHAR(64) NOT NULL,
+  link_id VARCHAR(64) NOT NULL,
+  archived_by VARCHAR(64) NOT NULL DEFAULT 'system',
+  archive_reason VARCHAR(512) NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_false_ledger_reason (conflict_reason),
+  INDEX idx_false_ledger_scope (industry_id, region_id),
+  INDEX idx_false_ledger_hash (content_hash)
+);
+
+ALTER TABLE false_information_ledger ADD COLUMN content_hash VARCHAR(64) NULL AFTER content;
+
+CREATE TABLE IF NOT EXISTS conflict_resolutions (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  incoming_intelligence_id BIGINT NULL,
+  existing_intelligence_id BIGINT NULL,
+  conflict_branch VARCHAR(32) NOT NULL,
+  sim_hash_distance INT NOT NULL DEFAULT 0,
+  incoming_weight DECIMAL(8,4) NOT NULL DEFAULT 0.6000,
+  existing_weight DECIMAL(8,4) NOT NULL DEFAULT 0.6000,
+  routing_action VARCHAR(64) NOT NULL,
+  review_ticket_id BIGINT NULL,
+  resolved_by VARCHAR(64) NOT NULL DEFAULT 'system',
+  notes VARCHAR(512) NULL,
+  source_id VARCHAR(64) NOT NULL DEFAULT 'conflict-engine',
+  region_id VARCHAR(64) NOT NULL,
+  industry_id VARCHAR(64) NOT NULL,
+  link_id VARCHAR(64) NOT NULL DEFAULT 'unknown',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_conflict_branch (conflict_branch),
+  INDEX idx_conflict_scope (industry_id, region_id),
+  INDEX idx_conflict_incoming (incoming_intelligence_id)
 );
 
 CREATE TABLE IF NOT EXISTS review_work_orders (
@@ -268,6 +316,113 @@ CREATE TABLE IF NOT EXISTS admin_human_intelligence (
   INDEX idx_admin_human_status (status, entitlement),
   INDEX idx_admin_human_scope (industry_id, region_id)
 );
+
+CREATE TABLE IF NOT EXISTS admin_knowledge_nodes (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  title VARCHAR(255) NOT NULL,
+  slug VARCHAR(255) NOT NULL,
+  industry_id VARCHAR(64) NOT NULL DEFAULT 'general',
+  region_id VARCHAR(64) NOT NULL DEFAULT 'cn-default',
+  link_id VARCHAR(64) NOT NULL DEFAULT 'general',
+  status VARCHAR(32) NOT NULL DEFAULT 'DRAFT',
+  draft_version_id BIGINT NULL,
+  review_version_id BIGINT NULL,
+  published_version_id BIGINT NULL,
+  source_id VARCHAR(64) NOT NULL DEFAULT 'admin-knowledge',
+  weight DECIMAL(8,4) NOT NULL DEFAULT 1.0000,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_admin_knowledge_slug_scope (slug, industry_id, region_id, link_id),
+  INDEX idx_admin_knowledge_scope (industry_id, region_id, link_id, status)
+);
+
+CREATE TABLE IF NOT EXISTS admin_knowledge_versions (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  node_id BIGINT NOT NULL,
+  version_number INT NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  summary VARCHAR(1024) NULL,
+  content TEXT NOT NULL,
+  source_url VARCHAR(1024) NULL,
+  review_status VARCHAR(32) NOT NULL DEFAULT 'DRAFT',
+  author VARCHAR(64) NOT NULL,
+  reviewer VARCHAR(64) NULL,
+  review_notes VARCHAR(512) NULL,
+  change_notes VARCHAR(512) NULL,
+  confidence DECIMAL(8,4) NOT NULL DEFAULT 0.8500,
+  created_by_action VARCHAR(64) NOT NULL DEFAULT 'SAVE_DRAFT',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_admin_knowledge_version (node_id, version_number),
+  INDEX idx_admin_knowledge_review (node_id, review_status, version_number)
+);
+
+CREATE TABLE IF NOT EXISTS admin_knowledge_publications (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  node_id BIGINT NOT NULL,
+  version_id BIGINT NOT NULL,
+  action VARCHAR(32) NOT NULL,
+  actor VARCHAR(64) NOT NULL,
+  notes VARCHAR(512) NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_admin_knowledge_publication_node (node_id, create_time),
+  INDEX idx_admin_knowledge_publication_version (version_id, action)
+);
+
+CREATE TABLE IF NOT EXISTS admin_collection_sources (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  name VARCHAR(255) NOT NULL,
+  source_type VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'ENABLED',
+  interval_minutes INT NOT NULL DEFAULT 30,
+  max_retries INT NOT NULL DEFAULT 1,
+  failure_threshold INT NOT NULL DEFAULT 3,
+  cooldown_minutes INT NOT NULL DEFAULT 30,
+  circuit_state VARCHAR(32) NOT NULL DEFAULT 'CLOSED',
+  failure_count INT NOT NULL DEFAULT 0,
+  region_id VARCHAR(64) NOT NULL DEFAULT 'cn-default',
+  industry_id VARCHAR(64) NOT NULL DEFAULT 'general',
+  link_id VARCHAR(64) NOT NULL DEFAULT 'collection',
+  source_id VARCHAR(64) NOT NULL DEFAULT 'admin-collector',
+  payload_json JSON NULL,
+  next_run_time DATETIME NULL,
+  last_run_time DATETIME NULL,
+  last_status VARCHAR(32) NOT NULL DEFAULT 'IDLE',
+  last_error VARCHAR(1024) NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_admin_collection_source_status (status, next_run_time),
+  INDEX idx_admin_collection_source_circuit (circuit_state, failure_count)
+);
+
+CREATE TABLE IF NOT EXISTS admin_collection_keywords (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  source_config_id BIGINT NOT NULL,
+  keyword VARCHAR(255) NOT NULL,
+  match_mode VARCHAR(32) NOT NULL DEFAULT 'INCLUDE',
+  status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+  notes VARCHAR(512) NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_admin_collection_keyword_source (source_config_id, status, match_mode)
+);
+
+CREATE TABLE IF NOT EXISTS admin_collection_job_runs (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  job_id BIGINT NOT NULL,
+  source_config_id BIGINT NOT NULL,
+  source_type VARCHAR(64) NOT NULL,
+  trigger_type VARCHAR(32) NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'RUNNING',
+  records_collected INT NOT NULL DEFAULT 0,
+  records_filtered INT NOT NULL DEFAULT 0,
+  records_persisted INT NOT NULL DEFAULT 0,
+  error_message VARCHAR(1024) NULL,
+  start_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  finish_time DATETIME NULL,
+  INDEX idx_admin_collection_run_source (source_config_id, status, start_time),
+  INDEX idx_admin_collection_run_job (job_id)
+);
 CREATE TABLE IF NOT EXISTS report_jobs (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   user_id BIGINT NOT NULL,
@@ -370,18 +525,20 @@ WHERE username = 'seed_paid';
 
 INSERT INTO knowledge_items (title, content, source_url, confidence, link_id, region_id, industry_id, source_id, weight)
 VALUES
-  ('餐饮门店现金流基础诊断', '餐饮门店诊断应优先核对客单价、翻台率、食材损耗率、平台佣金、租金占营收比例和现金回款周期。若缺少经营数据，应提示信息不足并引导补充。', 'seed://v1/restaurant-cashflow', 0.9, 'sales-payment', 'cn-default', 'general', 'seed-baseline', 1.0),
-  ('实体供应链库存风险', '库存周转天数、呆滞库存占比和上游账期会共同影响现金流风险。库存积压会压占资金，并倒逼渠道低价清货。', 'seed://v1/inventory-risk', 0.85, 'warehouse', 'cn-default', 'general', 'seed-baseline', 0.85)
+  ('餐饮门店现金流基础诊断', '餐饮门店诊断应优先核对客单价、翻台率、食材损耗率、平台佣金、租金占营收比例和现金回款周期。若缺少经营数据，应提示信息不足并引导补充�?, 'seed://v1/restaurant-cashflow', 0.9, 'sales-payment', 'cn-default', 'general', 'seed-baseline', 1.0),
+  ('实体供应链库存风�?, '库存周转天数、呆滞库存占比和上游账期会共同影响现金流风险。库存积压会压占资金，并倒逼渠道低价清货�?, 'seed://v1/inventory-risk', 0.85, 'warehouse', 'cn-default', 'general', 'seed-baseline', 0.85)
 ON DUPLICATE KEY UPDATE title = VALUES(title);
 
 UPDATE knowledge_items
 SET
   title = '餐饮门店现金流基础诊断',
-  content = '餐饮门店诊断应优先核对客单价、翻台率、食材损耗率、平台佣金、租金占营收比例和现金回款周期。若缺少经营数据，应提示信息不足并引导补充。'
+  content = '餐饮门店诊断应优先核对客单价、翻台率、食材损耗率、平台佣金、租金占营收比例和现金回款周期。若缺少经营数据，应提示信息不足并引导补充�?
 WHERE source_url = 'seed://v1/restaurant-cashflow';
 
 UPDATE knowledge_items
 SET
-  title = '实体供应链库存风险',
-  content = '库存周转天数、滞销库存占比和上游账期会共同影响现金流风险。库存积压会压占资金，并倒逼渠道低价清货。'
+  title = '实体供应链库存风�?,
+  content = '库存周转天数、滞销库存占比和上游账期会共同影响现金流风险。库存积压会压占资金，并倒逼渠道低价清货�?
 WHERE source_url = 'seed://v1/inventory-risk';
+
+

@@ -1,6 +1,84 @@
 # Change Log
 
 ## 2026-07-08
+
+### Dual-Agent Business Core: Learning Agent, Three-Tier Memory, Transition, and Standardized Output
+
+- Change type: functional development.
+- Affected modules: `services/ai-worker`, `apps/web`, and both change logs.
+- Main changes:
+  - **Industry Learning Agent**: Added `services/ai-worker/app/learning_agent.py` implementing the second half of BizSage's dual-Agent system. Supports intent classification (INDUSTRY_OVERVIEW, NODE_LEARNING, METRIC_QUESTION, RISK_QUESTION, HIDDEN_RULE, POLICY_QUESTION) with keyword-based chain-node matching across all 7 nodes. Three learning modes: FAST_START (overview), FULL_CHAIN (systematic deep learning), NODE_DEEP_DIVE (focused node study). Uses a learning-specific system prompt optimized for plain-language teaching. Added `POST /agent/learn` endpoint.
+  - **Three-tier memory system**: Enhanced `services/ai-worker/app/memory.py` with five memory categories (PREFERENCE, BUSINESS_FACT, PAIN_POINT, INDUSTRY_CONTEXT, LEARNING_PROGRESS), lifecycle-aware expiry (90-365 days per category), intelligent forgetting via `forget_expired()`, learning-specific memory extraction via `extract_learning_memories()`, and enhanced diagnosis memory extraction with pain-point and industry-context pattern matching.
+  - **Dual-Agent transition**: Added `services/ai-worker/app/agent_transition.py` supporting context-preserving mode switches. Learning→Diagnosis transition carries the studied chain node as the diagnosis focus area. Diagnosis→Learning transition identifies weak areas and suggests targeted learning. Added `POST /agent/transition` unified endpoint with `TransitionContext` preview for frontend display.
+  - **Standardized dual-Agent output**: Added `services/ai-worker/app/agent_output.py` implementing a unified `AgentOutput` format used by both Agents. Structured sections (key findings, risk alerts, actionable steps, supporting evidence), source traceability, confidence labels, timeliness notes, compliance disclaimers, chain-node context (learning mode), and suggested next actions. Both `render_agent_output()` (full format) and `render_legacy_format()` (backward-compatible diagnosis format) output.
+  - **Data model**: Extended `KnowledgeItem` with optional `link_id` field for chain-node filtering; updated `parse_knowledge()` to extract `linkId`/`link_id` from API payloads.
+  - **Frontend**: Added `AgentLearnRequest`, `AgentTransitionRequest`, `AgentOutput`, `fetchAgentLearn()`, and `fetchAgentTransition()` to the API client.
+- Verification results:
+  - 32 new Python tests across 3 test files (6 output, 18 learning agent, 8 transition), all passing.
+  - All 25 existing ai-worker tests (7 agent + 18 compressor) continue to pass — zero regressions.
+  - Total: 57/57 tests passing in `services/ai-worker`.
+- Unfinished items:
+  - Browser-level end-to-end validation of Learning→Diagnosis→Learning transition loop.
+  - Web UI: dedicated learning-mode workspace with chain-node navigator (follows existing DiagnosisWorkspace pattern).
+
+### RAG Context Compression
+
+- Change type: functional development.
+- Affected modules: `services/ai-worker` and both change logs.
+- Main changes:
+  - Added `services/ai-worker/app/context_compressor.py` implementing a content-aware context compressor for RAG retrieval results. The compressor: (1) merges near-duplicate knowledge items via character-trigram Jaccard similarity (threshold 0.70), (2) distributes token budget proportionally by relevance score with configurable min/max per-item limits, (3) truncates long content at sentence boundaries preserving readability, (4) estimates token counts conservatively for mixed CJK/ASCII text.
+  - Integrated the compressor into `agent.py::diagnose()` — the naive `"\\n".join(...)` context builder is replaced with a `compress_context()` pipeline that memory-aware token budgeting (2100 tokens when memory context is present, 2400 otherwise).
+  - Exposed optional `compress_config` in `DiagnoseRequest` allowing callers to tune `total_token_budget`, `min_chars_per_item`, `max_chars_per_item`, and `merge_similarity_threshold` per request.
+- Verification results:
+  - 18 new unit tests in `test_context_compressor.py` cover trigram extraction, Jaccard similarity, merge logic (higher-score-as-primary), token estimation, single/multi-item compression, duplicate merging, score-proportional budget distribution, min-char guarantees, and sentence-boundary truncation.
+  - All 7 existing `test_agent.py` tests continue to pass with the compression-integrated pipeline.
+- Unfinished items:
+  - None. Compression is transparent to existing callers — the default config matches previous behavior for short contexts while protecting against context-window overflow for long results.
+
+### Data Governance: Conflict Engine, Snapshots, and Data Isolation
+
+- Change type: functional development.
+- Affected modules: `services/collector`, `services/api`, `apps/web`, `infra/mysql`, and both change logs.
+- Main changes:
+  - **Seven-layer conflict engine**: Added `services/collector/app/conflict_engine.py` with five-branch classification (short-term fluctuation, regional exception, authoritative update, suspicious conflict, false information) based on SimHash distance comparison, source weight evaluation, and rumor/blocklist detection. Added `POST /govern/conflict-check` FastAPI endpoint and integrated optional conflict detection into the existing `/govern` endpoint.
+  - **Time-series snapshots**: Added Java `SnapshotStore`, `SnapshotService`, `SnapshotController`, and `SnapshotScheduler` under `services/api/.../governance/`. Supports DAILY (full dump, 30-day retention), WEEKLY (aggregated by link_id, 12-week retention), and MONTHLY (trend data, 12-month retention) snapshots with automatic scheduled generation and retention cleanup. Added `GET/POST /api/admin/snapshots/**` endpoints.
+  - **Four-layer data isolation**: Added `DataIsolationService`, `DataScope`, and scoped query methods (`listScoped`) to `IntelligenceStore` for user-private, regional, industry, and paid/free entitlement filtering. Added `ConflictStore` for conflict resolution persistence and false-information ledger management. Added `GET /api/admin/governance/conflicts` and `GET /api/admin/governance/false-ledger` endpoints.
+  - **Database**: Added `false_information_ledger`, `conflict_resolutions` tables and extended `intelligence_snapshots` with `retention_days`, `record_count`, `parent_snapshot_id`, `expires_at` columns in MySQL init, H2 test schema, and `AdminSchemaMigration`.
+  - **Frontend**: Added Snapshot, Conflicts, and False Intel navigation entries to the `/admin` console plus corresponding `api-client.ts` types and fetch functions.
+- Verification results:
+  - Python conflict engine has 13 unit tests covering all 5 branches, batch detection, custom configs, and edge cases.
+  - Java `GovernanceApiTest` covers snapshot lifecycle (generate/list/compare/cleanup), conflict resolution listing, false-ledger listing, and RBAC enforcement.
+  - All existing tests in `services/collector`, `services/api`, and `apps/web` are expected to continue passing.
+- Unfinished items:
+  - Run Python, Maven, and npm test suites in environments with the required toolchains.
+  - Browser-level verification of new admin navigation entries.
+
+### Core Architecture Implementation Status Analysis
+
+- Change type: documentation.
+- Affected modules: `docs/en/milestones`, `docs/zh-CN/milestones`, and both change logs.
+- Main changes:
+  - Added bilingual implementation status analysis documents (`docs/en/milestones/implementation-status-analysis.md` and `docs/zh-CN/milestones/implementation-status-analysis-zh-CN.md`) that compare the full V4.0 target architecture against the current codebase.
+  - Analyzed all nine architecture layers with per-capability implementation status (V1/V2/V3), identified five critical unclosed links, and summarized completion rates across nine domains.
+  - Documented Admin V3 phased delivery status (V3-1 through V3-6) and recorded remaining environment verification gaps.
+- Verification results:
+  - Confirmed the English and Chinese documents describe the same findings, statuses, and gaps.
+  - Cross-referenced against the five governing architecture documents, three milestone documents, and the actual source code under `apps/web`, `services/api`, `services/ai-worker`, `services/collector`, and `infra`.
+- Unfinished items:
+  - None. This is a documentation-only snapshot of the current implementation state.
+
+### Admin V3 Chinese Documentation Repair
+
+- Change type: documentation repair.
+- Affected modules: `docs/zh-CN/admin-v3-ui-design-zh-CN.md` and both change logs.
+- Main changes:
+  - Re-saved the Admin V3 Chinese UI design document as UTF-8 with BOM so common Windows editors no longer mis-detect the file encoding and display garbled Chinese text.
+  - Restored the corrupted `## 12. Current Admin-V3-3 Implementation Status` section in the Chinese document so it matches the paired English source again.
+- Verification results:
+  - Verified the repaired document now starts with a UTF-8 BOM and reads back as valid Chinese text.
+  - Compared the repaired tail section against `docs/en/admin-v3-ui-design.md` to confirm the restored scope and implementation notes match.
+- Unfinished items:
+  - No runtime test suite was required for this documentation-only repair.
 ### Admin-V3-1 And Admin-V3-2 Implementation
 
 - Change type: functional development.
@@ -559,3 +637,34 @@
   - In `services/api`, `mvn -Dtest=BusinessWorkflowApiTest#archivedConversationCanBeSoftDeletedAndDisappearsFromList test` verifies archived conversations can be soft-deleted and no longer appear in the conversation list.
 - Unfinished items:
   - A live browser verification is still recommended to confirm the row-action affordances and archive/delete flow feel right with real user data and localized copy.
+
+## 2026-07-08
+### Admin V3 Chinese Documentation Repair
+
+- Change type: documentation repair.
+- Affected modules: `docs/zh-CN/admin-v3-ui-design-zh-CN.md` and both change logs.
+- Main changes:
+  - Re-saved the Admin V3 Chinese UI design document as UTF-8 with BOM so common Windows editors no longer mis-detect the file encoding and display garbled Chinese text.
+  - Restored the corrupted `## 12. Current Admin-V3-3 Implementation Status` section in the Chinese document so it matches the paired English source again.
+- Verification results:
+  - Verified the repaired document now starts with a UTF-8 BOM and reads back as valid Chinese text.
+  - Compared the repaired tail section against `docs/en/admin-v3-ui-design.md` to confirm the restored scope and implementation notes match.
+- Unfinished items:
+  - No runtime test suite was required for this documentation-only repair.
+
+### Admin-V3-3 Knowledge Management Closed Loop
+
+- Change type: functional development.
+- Affected modules: `services/api`, `infra/mysql`, `apps/web`, admin design docs, and both change logs.
+- Main changes:
+  - Added formal knowledge-management persistence with `admin_knowledge_nodes`, `admin_knowledge_versions`, and `admin_knowledge_publications`, and wired the same schema into MySQL bootstrap, H2 test schema, and API startup auto-migration.
+  - Added real `/api/admin/knowledge/**` endpoints for node listing, node detail, draft save, submit review, second-person approval, publish, rollback, and version diff.
+  - Added knowledge publication synchronization back into `knowledge_items` so published admin knowledge is persisted for existing user-side retrieval flows.
+  - Extended `/admin` with a dedicated Knowledge workspace covering node navigation, draft editing, version actions, diff viewing, rollback, and publication history.
+  - Extended backend and frontend source-level regression coverage for the Admin-V3-3 lifecycle.
+- Verification results:
+  - Performed static code-path verification for schema definitions, controller routes, lifecycle validation rules, API client helpers, admin page wiring, and source-test coverage additions.
+  - The current execution environment does not provide `mvn`, `node`, or `npm`, so Maven and Web test commands could not be executed here.
+- Unfinished items:
+  - Run backend tests and Web tests in an environment with Maven and Node.js installed.
+  - A live browser verification of the `/admin` knowledge workspace is still recommended after the frontend toolchain is available.

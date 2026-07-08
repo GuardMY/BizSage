@@ -1,14 +1,37 @@
 from __future__ import annotations
 
+from app.context_compressor import CompressConfig, compress_context
 from app.llm import generate_answer, LLMNotConfiguredError, LLMCallError
-from app.memory import build_memory_context, extract_memory_candidates
+from app.memory import build_memory_context, extract_diagnosis_memories
+from app.model_routing.router import ModelRouter
+from app.prompt_library.assembler import PromptAssembler
+from app.prompt_library.layers import AgentMode
 from app.rag import KnowledgeItem, search_knowledge
+from app.reasoning_checks.retry import run_with_retry
 
 DISCLAIMER = "免责声明：本诊断仅用于经营分析参考，不构成投资、法律或财务建议。"
 TIMELINESS = "基于V1静态基线知识和已入库情报生成。"
 
 LLM_NOT_CONFIGURED = "LLM_NOT_CONFIGURED"
 LLM_CALL_FAILED = "LLM_CALL_FAILED"
+
+# ── Lazy-initialized singletons ──
+_assembler: PromptAssembler | None = None
+_router: ModelRouter | None = None
+
+
+def _get_assembler() -> PromptAssembler:
+    global _assembler
+    if _assembler is None:
+        _assembler = PromptAssembler()
+    return _assembler
+
+
+def _get_router() -> ModelRouter:
+    global _router
+    if _router is None:
+        _router = ModelRouter()
+    return _router
 
 
 def diagnose(
@@ -24,7 +47,9 @@ def diagnose(
     conflict_labels: list[str] | None = None,
     vector_store: object | None = None,
     restrict_to_knowledge_ids: bool = False,
+    compress_config: CompressConfig | None = None,
 ) -> dict:
+    # ── Conflict pre-check ──
     if conflict_labels:
         return {
             "answer": "当前信息存在冲突或缺少权威支撑，需要运营复核后再给出结论。",
@@ -35,6 +60,7 @@ def diagnose(
             "disclaimer": DISCLAIMER,
         }
 
+    # ── RAG search ──
     results = search_knowledge(
         question,
         knowledge,
@@ -54,13 +80,61 @@ def diagnose(
             "disclaimer": DISCLAIMER,
         }
 
-    context = "\n".join(f"{item.title}: {item.content}" for item in results)
+    # ── Context compression ──
+    result_dicts = [
+        {
+            "id": item.id,
+            "title": item.title,
+            "content": item.content,
+            "source_url": item.source_url,
+            "source_id": item.source_id,
+            "score": item.score,
+        }
+        for item in results
+    ]
     memory_context = build_memory_context(recent_messages, conversation_summary, long_term_memories)
+    compress_cfg = compress_config or CompressConfig(
+        total_token_budget=2100 if memory_context else 2400,
+    )
+    compressed_text, compressed_items = compress_context(result_dicts, config=compress_cfg)
     if memory_context:
-        context = f"{memory_context}\n{context}"
+        context = f"{memory_context}\n\n{compressed_text}"
+    else:
+        context = compressed_text
+
+    # ── V2: Build system prompt from layered prompt library ──
+    assembler = _get_assembler()
+    system_prompt = assembler.assemble(
+        mode=AgentMode.DIAGNOSIS.value,
+        industry_id=industry_id,
+        region_id=region_id,
+    )
+
+    # ── V2: Route LLM call through ModelRouter + Self-Check Retry ──
+    router = _get_router()
+
+    def llm_call(messages: list[dict]) -> str:
+        result = router.call(
+            messages=messages,
+            task_hint="balanced",
+            temperature=0.3,
+            max_tokens=1024,
+        )
+        return result.response_text
+
+    initial_messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"问题：{question}\n\n参考证据：\n{context}"},
+    ]
 
     try:
-        answer = generate_answer(question, context)
+        answer, check_status = run_with_retry(
+            llm_call_fn=llm_call,
+            messages=initial_messages,
+            evidence=result_dicts,
+            region_id=region_id,
+            output_format=system_prompt,
+        )
     except LLMNotConfiguredError:
         return {
             "answer": "",
@@ -96,7 +170,7 @@ def diagnose(
         ],
         "confidence": "MEDIUM",
         "timeliness": TIMELINESS,
-        "selfCheckStatus": "PASSED",
+        "selfCheckStatus": check_status,
         "disclaimer": DISCLAIMER,
-        "memoryCandidates": extract_memory_candidates(question, answer),
+        "memoryCandidates": extract_diagnosis_memories(question, answer, existing_memories=long_term_memories),
     }

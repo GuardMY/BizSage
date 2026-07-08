@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 import redis
 
 from app.collectors import collect_form_business_data, collect_mock_api, collect_public_page
+from app.conflict_engine import ConflictConfig, ConflictResult, detect_conflicts
 from app.governance import govern_records
 from app.redis_state import RedisStateStore
 from app.resilience import CollectionJob, fetch_with_vendor_failover, incremental_fingerprint
@@ -47,6 +48,26 @@ class MockApiRequest(BaseModel):
 
 class GovernRequest(BaseModel):
     records: list[dict] = Field(default_factory=list)
+    with_conflicts: bool = False
+    existing_intelligence: list[dict] = Field(default_factory=list)
+    blocked_source_ids: list[str] = Field(default_factory=list)
+    conflict_config_override: dict | None = None
+
+
+class GovernResponse(BaseModel):
+    records: list[dict]
+    conflicts: list[dict] = Field(default_factory=list)
+
+
+class ConflictCheckRequest(BaseModel):
+    incoming_records: list[dict] = Field(default_factory=list)
+    existing_items: list[dict] = Field(default_factory=list)
+    config_override: dict | None = None
+    blocked_source_ids: list[str] = Field(default_factory=list)
+
+
+class ConflictCheckResponse(BaseModel):
+    conflicts: list[dict]
 
 
 def dedupe_records(records: list[dict], state_store: RedisStateStore | None) -> list[dict]:
@@ -144,4 +165,44 @@ def collect_api(request: MockApiRequest) -> dict:
 
 @app.post("/govern")
 def govern(request: GovernRequest) -> dict:
-    return {"records": govern_records(request.records)}
+    governed = govern_records(request.records)
+    conflicts: list[dict] = []
+    if request.with_conflicts and request.existing_intelligence:
+        cfg = ConflictConfig(**(request.conflict_config_override or {}))
+        blocked = set(request.blocked_source_ids)
+        results = detect_conflicts(
+            governed,
+            request.existing_intelligence,
+            config=cfg,
+            blocked_source_ids=blocked,
+        )
+        conflicts = [_conflict_result_to_dict(r) for r in results if r.has_conflict]
+    return {"records": governed, "conflicts": conflicts}
+
+
+@app.post("/govern/conflict-check")
+def conflict_check(request: ConflictCheckRequest) -> ConflictCheckResponse:
+    cfg = ConflictConfig(**(request.config_override or {}))
+    blocked = set(request.blocked_source_ids)
+    results = detect_conflicts(
+        request.incoming_records,
+        request.existing_items,
+        config=cfg,
+        blocked_source_ids=blocked,
+    )
+    return ConflictCheckResponse(
+        conflicts=[_conflict_result_to_dict(r) for r in results]
+    )
+
+
+def _conflict_result_to_dict(result: ConflictResult) -> dict:
+    return {
+        "has_conflict": result.has_conflict,
+        "conflict_branch": result.conflict_branch.value if result.conflict_branch else None,
+        "routing_action": result.routing_action.value if result.routing_action else None,
+        "sim_hash_distance": result.sim_hash_distance,
+        "incoming_weight": result.incoming_weight,
+        "existing_weight": result.existing_weight,
+        "matched_existing_id": result.matched_existing_id,
+        "notes": result.notes,
+    }
