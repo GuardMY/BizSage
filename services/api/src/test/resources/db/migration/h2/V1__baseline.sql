@@ -77,7 +77,8 @@ CREATE TABLE user_memory_profiles (
   expires_at TIMESTAMP,
   status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
   create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT uk_user_memory_profiles_natural UNIQUE (user_id, memory_category, memory_key, status)
 );
 
 CREATE TABLE user_memory_embeddings (

@@ -119,7 +119,7 @@ Analysis date: 2026-07-08
 | Short-term conversation memory | V1 | ✅ Implemented — `memory.py` |
 | Evidence + disclaimer output | V1 | ✅ Implemented — sources + disclaimer |
 | **Industry Learning Agent** | V2 | ❌ **Not implemented** — fully designed in docs, zero code written |
-| **Three-tier memory (short/long/profile)** | V2 | ⚠️ `UserMemoryProfile` + `UserMemoryStore` exist; `UserMemoryEmbeddingStore` incomplete |
+| **Three-tier memory (short/long/profile)** | V2 | ⚠️ Rolling summaries and MySQL-backed long-term memory are online; vector-memory sync code remains but is intentionally disabled in the online path until retrieval is designed end to end |
 | **Dual-Agent one-click transition** | V2 | ❌ Not implemented — requires Learning Agent to exist first |
 | **Standardized dual-Agent output templates** | V2 | ❌ Not implemented |
 | **Paid/free intelligence isolation** | V2 | ✅ Implemented — entitlement-based filtering |

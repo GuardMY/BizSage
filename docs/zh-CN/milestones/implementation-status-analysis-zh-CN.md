@@ -16,7 +16,7 @@
 - 冲突引擎五分支全部落地到代码（非仅文档层面）
 - 时间序列快照（日/周/月）调度生成已实现
 - 上下文压缩器完整实现
-- 三层记忆系统在 AI Worker 和 API 两端均闭环
+- 三层记忆系统以 API/MySQL 为真相源闭环；向量记忆同步代码保留，但在线链路默认停用，等待检索闭环设计完成后再恢复
 - 诊断主链路从 API → AI Worker → RAG → LLM 已严格闭合
 
 ---
@@ -128,7 +128,7 @@
 | 短时会话记忆 | V1 | ✅ 已实现 — `memory.py` 最近6条消息上下文 |
 | 证据+免责声明输出 | V1 | ✅ 已实现 — sources + disclaimer |
 | **行业学习 Agent** | V2 | ✅ 已实现 — `learning_agent.py` 完整实现（7 链节点 × 6 意图类型 × 3 学习模式），支持意图自动分类和节点过滤 |
-| **三级记忆（短期/长期/画像）** | V2 | ✅ 已实现 — AI Worker 端 `build_memory_context()`（最近消息+摘要+长期记忆，按置信度排序，过期过滤）+ `extract_diagnosis_memories()`/`extract_learning_memories()`；API 端 `UserMemoryStore` + `UserMemoryProfile` + `UserMemoryEmbeddingStore` 持久化 |
+| **三级记忆（短期/长期/画像）** | V2 | ⚠️ 已部分闭环 — 滚动摘要和 MySQL 长期记忆已在线启用；`UserMemoryEmbeddingStore` 与向量同步代码仍保留，但在线链路默认停用，待检索闭环补齐后再恢复 |
 | **双 Agent 一键跳转** | V2 | ✅ 已实现 — `agent_transition.py` 双向转换（学习→诊断注入节点知识，诊断→学习注入薄弱环节），含 `execute_transition()` 和前端预览 `build_transition_context()` |
 | **标准化双 Agent 输出模板** | V2 | ⚠️ 学习 Agent 已使用 `AgentOutput` 标准格式（key_findings/risk_alerts/actionable_steps/supporting_evidence）；诊断 Agent 仍使用旧版字典格式，尚未迁移 |
 | **付费/免费情报隔离** | V2 | ✅ 已实现 — 基于 entitlement 的 `DataScope.canAccessPaid()` |
@@ -228,7 +228,7 @@
 | 知识中台 | 45% | 60% | 动态情报自动采集同步 + 知识版本完整生命周期 + 启动 Qdrant 同步 |
 | RAG 检索 | 55% | 70% | **上下文压缩器完整实现**（合并/分配/截断） |
 | AI 推理 | 25% | 30% | 学习 Agent 有独立 system prompt 和温度参数（0.5 vs 0.3）；仍为单模型 |
-| 双 Agent | 20% | 60% | **学习 Agent 完整实现** + **双向转换** + **三层记忆闭环** + 标准输出（诊断待迁移） |
+| 双 Agent | 20% | 60% | **学习 Agent 完整实现** + **双向转换** + **三层记忆主链路闭环**（MySQL/摘要在线，向量记忆默认停用） + 标准输出（诊断待迁移） |
 | 商业服务 | 15% | 30% | 四层数据隔离模型落地 + 付费情报 API 隔离 + 种子付费用户灰度 |
 | 终端 | 45% | 50% | 前端新增学习/转换 SSE 流式支持；Snapshots/Conflicts/FalseLedger 有 API 无 UI 渲染 |
 
@@ -306,7 +306,7 @@
 
 | 模块 | 原 → 新 | 提升 | 关键驱动因素 |
 |------|--------|------|-------------|
-| 双 Agent | 20% → 60% | +40% | 学习 Agent + 双向转换 + 三层记忆 + 标准输出 |
+| 双 Agent | 20% → 60% | +40% | 学习 Agent + 双向转换 + 三层记忆主链路 + 标准输出 |
 | 数据治理 | 30% → 55% | +25% | 冲突引擎 + 时间序列快照 + 虚假信息台账 |
 | RAG 检索 | 55% → 70% | +15% | 上下文压缩器完整实现 |
 | 知识中台 | 45% → 60% | +15% | 动态情报自动同步 + 知识版本生命周期 + 启动同步 |

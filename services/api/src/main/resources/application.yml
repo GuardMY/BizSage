@@ -74,6 +74,8 @@ bizsage:
     collector-failure-rate-threshold: 0.20
     knowledge-staleness-days: 30
     evaluation-interval-seconds: 60
+  memory:
+    vector-sync-enabled: ${MEMORY_VECTOR_SYNC_ENABLED:false}
   # V2: SLA window configuration
   sla:
     aggregation-window-minutes: 1

@@ -2,6 +2,68 @@
 
 ## 2026-07-09
 
+### RAG 控制面重构建议归档
+
+- 变更类型：文档更新。
+- 影响模块：`docs/en`、`docs/zh-CN` 和两份变更日志。
+- 主要变更：
+  - 新增 `docs/en/rag-control-plane-and-boundary-refactor-recommendation.md`，归档当前 API 与 AI worker 的 RAG 职责拆分、推荐的控制面放置位置以及分阶段边界重构路径。
+  - 新增对应中文文档 `docs/zh-CN/rag-control-plane-and-boundary-refactor-recommendation-zh-CN.md`，保持相同的范围、结论、迁移阶段、风险与首批工作项。
+  - 明确记录推荐目标形态为 `API = 控制面`、`AI worker = RAG 执行面`，并指出当前在线链路在内联知识装配和 worker 自带业务过滤语义上的边界漂移。
+- 验证结果：
+  - 已核对新增中英文文档在事实、建议、迁移阶段、风险和后续动作上保持一致。
+- 未完成事项：
+  - 本次仅归档重构建议，尚未修改运行时代码；在线 diagnosis 与 learning 主链仍需后续调整契约并补齐回归测试后，才能真正收紧边界。
+  - 仓库后续仍需补一份面向具体 Java 与 Python 代码路径的实施计划，将本文建议映射为可执行改造任务。
+
+### 用户记忆 Upsert 加固
+
+- 变更类型：功能修复。
+- 影响模块：`services/api`、`infra/mysql` 和两份变更日志。
+- 主要变更：
+  - 为 `user_memory_profiles` 增加了 `(user_id, memory_category, memory_key, status)` 自然键唯一约束，并同步更新 MySQL 基线与 H2 测试基线。
+  - 新增 Flyway 迁移 `V3__user_memory_profile_uniqueness.sql`，在已有 MySQL 环境中先按确定性规则折叠同自然键重复数据，再施加新的唯一约束。
+  - 将 `UserMemoryStore.saveOrRefresh()` 重构为“优先更新、其次插入、遇到重复键再重试更新”的流程，使重复或并发写入同一 active memory 时会刷新既有记录，而不是继续新增多条。
+  - 新增回归测试，验证同一个 active memory key 被重复写入时最终仍只保留一条 active 记录，同时值会被更新。
+- 验证结果：
+  - 已在 `services/api` 中执行 `mvn -Dtest=MessageStreamApiTest test -q`，定向消息流测试在新的唯一约束和刷新语义下通过。
+- 未完成事项：
+  - 当前加固仅保证同一自然键与状态下最多一条记录，尚未引入 `SUPERSEDED`、`CONFLICTED` 等更丰富的冲突状态来表达互斥记忆值。
+  - 生产发布前仍需要一次真实 MySQL 启动验证，确认 Flyway `V3` 能在现有环境上平滑执行。
+
+### 在线向量记忆链路默认停用
+
+- 变更类型：功能修复。
+- 影响模块：`services/api`、`docs/en`、`docs/zh-CN` 和两份变更日志。
+- 主要变更：
+  - 从 `DiagnosisService` 与 `LearningService` 中移除了在线向量记忆写入职责，因此正常 Agent 交互中的非结构化记忆候选现在只会落到权威 MySQL 记忆存储，不再继续写入向量记忆队列。
+  - 为 `MemorySyncScheduler` 增加了新的 `bizsage.memory.vector-sync-enabled` 开关，并将默认值设为 `false`，保留未来重新启用所需的向量同步代码路径，但不再让它在当前在线架构中默认运行。
+  - 新增 API 回归测试，验证非结构化记忆候选仍会写入 `user_memory_profiles`，同时 `user_memory_embeddings` 保持不变。
+  - 同步更新中英文实现状态里程碑文档，明确当前在线的是滚动摘要和 MySQL 长期记忆，而向量记忆链路处于有代码骨架但默认停用的状态，等待检索闭环设计完成后再恢复。
+- 验证结果：
+  - 已在 `services/api` 中执行 `mvn -Dtest=MessageStreamApiTest test -q`，定向消息流测试通过，包含新的非结构化记忆回归用例。
+  - 已在 `services/ai-worker` 中执行 `PYTHONPATH=. pytest tests/test_memory_v2.py -q`，15 个测试通过。
+- 未完成事项：
+  - 保留下来的 `/memory/sync` 端点、embedding store 与 scheduler 代码目前默认休眠，仍需先补齐检索/读路径设计后才适合重新接入在线链路。
+  - 目前尚未对历史 `user_memory_embeddings` 数据做迁移清理，也未增加已同步向量记忆数据的治理与回收机制。
+
+### Agent 记忆摘要连续性与真相源对齐
+
+- 变更类型：功能修复。
+- 影响模块：`services/api`、`services/ai-worker` 和两份变更日志。
+- 主要变更：
+  - 重构了 `DiagnosisService`、`LearningService` 与 `ConversationSummaryStore` 的会话摘要逻辑，改为每个会话只保留一条 active 的滚动摘要，并在新摘要中持续携带此前已经压缩过的上下文，避免老轮次信息随着消息失活而丢失。
+  - 在 API 向 AI worker 传递长期记忆时补充 `mysql:user_memory_profiles` 来源标记，明确 MySQL 才是权威记忆存储，worker 只消费已筛选好的长期记忆，不再自行重新判定生命周期。
+  - 更新 AI worker 侧 `build_memory_context()` 的契约，使其信任 API 过滤后的长期记忆，并新增回归测试，确保 prompt 拼装不会再因为本地过期元数据而误删记忆。
+  - 将 `UserMemoryProfile` 的内部字段映射从保留字风格属性名调整为更稳妥的命名，避免 MyBatis-Plus 在记忆查询与刷新时生成 H2 不兼容 SQL。
+  - 新增消息流回归测试，验证滚动摘要在多次摘要后仍只保留一条 active 摘要记录，同时保留最早已摘要轮次的内容。
+- 验证结果：
+  - 已在 `services/ai-worker` 中执行 `PYTHONPATH=. pytest tests/test_agent.py -q`，24 个测试通过。
+  - 已在 `services/api` 中执行 `mvn -Dtest=MessageStreamApiTest test -q`，修复记忆查询映射后，定向 SSE/摘要集成测试通过。
+- 未完成事项：
+  - 向量记忆链路目前仍只保证异步写入与同步，尚未实现回注到在线 Agent 上下文的检索闭环，留待下一阶段处理。
+  - 记忆 upsert 语义目前仍是 `select + update/insert`，唯一约束与更强的原子性改造尚未完成。
+
 ### API MyBatis-Plus 迁移启动
 
 - 变更类型：功能开发。
@@ -733,6 +795,20 @@
   - 本次仅为文档修复，无需运行服务测试套件。
 
 ## 2026-07-09
+
+### 核心代码文件与外部交互文档补充
+
+- 变更类型：文档更新。
+- 影响模块：`docs/en`、`docs/zh-CN` 和两份变更日志。
+- 主要变更：
+  - 新增一份双语架构参考文档，按运行模块梳理核心代码文件，覆盖 Web 工作台、Admin V3 页面、API 控制器/服务/存储、AI worker 编排文件、collector 治理/韧性文件以及基础设施入口文件。
+  - 补充浏览器、API、AI worker、collector、Redis、MySQL、Qdrant 与 OpenAI-compatible 模型提供方之间的真实外部交互边界，并明确区分内部调用关系与外部依赖关系。
+  - 新增诊断 SSE、学习/模式切换 SSE、报告导出、后台采集与治理、知识发布同步、collector 去重与韧性等端到端流程摘要。
+- 验证结果：
+  - 已将新文档内容与 `.codegraph/codegraph.db`、仓库运行入口代码以及现有组件交互/系统架构文档逐项核对。
+  - 已确认英文与中文文档覆盖相同的模块范围、文件职责和交互流程。
+- 未完成事项：
+  - 本次仅为文档更新，未执行运行时测试套件。
 
 ### Alert 调度器采集运行表修复
 

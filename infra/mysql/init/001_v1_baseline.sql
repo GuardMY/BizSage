@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS user_memory_profiles (
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_user_memory_profiles_user (user_id),
+  UNIQUE KEY uk_user_memory_profiles_natural (user_id, memory_category, memory_key, status),
   INDEX idx_user_memory_profiles_lookup (user_id, memory_category, memory_key, status)
 );
 

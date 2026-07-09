@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Component;
  * On success the record is marked SYNCED; on failure it is marked FAILED.
  */
 @Component
+@ConditionalOnProperty(name = "bizsage.memory.vector-sync-enabled", havingValue = "true")
 public class MemorySyncScheduler {
 
   private static final Logger log = LoggerFactory.getLogger(MemorySyncScheduler.class);

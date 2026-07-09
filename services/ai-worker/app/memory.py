@@ -66,8 +66,9 @@ def build_memory_context(
     """Build a compact memory context string from all three tiers.
 
     Tier 1 (recent_messages) and Tier 2 (summary) are rendered as-is.
-    Tier 3 (profile) items are filtered by expiry and confidence threshold,
-    sorted by confidence descending, and capped at *max_profile_items*.
+    Tier 3 (profile) items are treated as already filtered by the API layer's
+    authoritative MySQL memory store, then sorted by confidence descending and
+    capped at *max_profile_items* for prompt efficiency.
     """
     sections: list[str] = []
 
@@ -75,9 +76,8 @@ def build_memory_context(
         sections.append(f"会话摘要: {conversation_summary}")
 
     if long_term_memories:
-        # Filter expired, filter low-confidence, sort by confidence desc, take top N
-        active = forget_expired(long_term_memories)
-        active = [m for m in active
+        # The API layer is the source of truth for lifecycle filtering.
+        active = [m for m in long_term_memories
                   if m.get("confidence", 0.0) >= MIN_CONFIDENCE_FOR_CONTEXT]
         active.sort(key=lambda m: m.get("confidence", 0.0), reverse=True)
         top = active[:max_profile_items]

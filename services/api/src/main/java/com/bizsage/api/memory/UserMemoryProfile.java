@@ -14,9 +14,9 @@ public class UserMemoryProfile {
   @TableField("memory_category")
   private String category;
   @TableField("memory_key")
-  private String key;
+  private String memoryKey;
   @TableField("memory_value")
-  private String value;
+  private String memoryValue;
   private String valueType;
   private Double confidence;
   private Long sourceConversationId;
@@ -70,19 +70,35 @@ public class UserMemoryProfile {
   }
 
   public String getKey() {
-    return key;
+    return memoryKey;
   }
 
   public void setKey(String key) {
-    this.key = key;
+    this.memoryKey = key;
+  }
+
+  public String getMemoryKey() {
+    return memoryKey;
+  }
+
+  public void setMemoryKey(String memoryKey) {
+    this.memoryKey = memoryKey;
   }
 
   public String getValue() {
-    return value;
+    return memoryValue;
   }
 
   public void setValue(String value) {
-    this.value = value;
+    this.memoryValue = value;
+  }
+
+  public String getMemoryValue() {
+    return memoryValue;
+  }
+
+  public void setMemoryValue(String memoryValue) {
+    this.memoryValue = memoryValue;
   }
 
   public String getValueType() {
@@ -154,11 +170,11 @@ public class UserMemoryProfile {
   }
 
   public String key() {
-    return key;
+    return memoryKey;
   }
 
   public String value() {
-    return value;
+    return memoryValue;
   }
 
   public String valueType() {

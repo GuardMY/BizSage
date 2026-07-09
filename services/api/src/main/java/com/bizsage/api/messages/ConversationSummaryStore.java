@@ -1,6 +1,7 @@
 package com.bizsage.api.messages;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
@@ -31,6 +32,10 @@ public class ConversationSummaryStore {
         .findFirst()
         .map(ConversationSummary::getSummaryVersion)
         .orElse(0) + 1;
+    summaryMapper.update(null, new LambdaUpdateWrapper<ConversationSummary>()
+        .eq(ConversationSummary::getConversationId, conversationId)
+        .eq(ConversationSummary::getActive, true)
+        .set(ConversationSummary::getActive, false));
     ConversationSummary summary = new ConversationSummary();
     summary.setConversationId(conversationId);
     summary.setSummaryText(summaryText);

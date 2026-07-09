@@ -5,7 +5,9 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class UserMemoryStore {
@@ -34,6 +36,7 @@ public class UserMemoryStore {
         .set(UserMemoryProfile::getLastUsedAt, now)));
   }
 
+  @Transactional
   public UserMemoryProfile saveOrRefresh(
       long userId,
       String category,
@@ -44,23 +47,20 @@ public class UserMemoryStore {
       long sourceConversationId,
       long sourceMessageId,
       boolean structured) {
-    UserMemoryProfile existing = userMemoryMapper.selectOne(new LambdaQueryWrapper<UserMemoryProfile>()
+    Instant expiresAt = expiryFor(category);
+    int updated = userMemoryMapper.update(null, new LambdaUpdateWrapper<UserMemoryProfile>()
         .eq(UserMemoryProfile::getUserId, userId)
         .eq(UserMemoryProfile::getCategory, category)
-        .eq(UserMemoryProfile::getKey, key)
+        .eq(UserMemoryProfile::getMemoryKey, key)
         .eq(UserMemoryProfile::getStatus, "ACTIVE")
-        .last("limit 1"));
-    Instant expiresAt = expiryFor(category);
-    if (existing != null) {
-      userMemoryMapper.update(null, new LambdaUpdateWrapper<UserMemoryProfile>()
-          .eq(UserMemoryProfile::getId, existing.getId())
-          .set(UserMemoryProfile::getValue, value)
-          .set(UserMemoryProfile::getValueType, valueType)
-          .set(UserMemoryProfile::getConfidence, confidence)
-          .set(UserMemoryProfile::getSourceConversationId, sourceConversationId)
-          .set(UserMemoryProfile::getSourceMessageId, sourceMessageId)
-          .set(UserMemoryProfile::getExpiresAt, expiresAt));
-      return get(existing.getId());
+        .set(UserMemoryProfile::getMemoryValue, value)
+        .set(UserMemoryProfile::getValueType, valueType)
+        .set(UserMemoryProfile::getConfidence, confidence)
+        .set(UserMemoryProfile::getSourceConversationId, sourceConversationId)
+        .set(UserMemoryProfile::getSourceMessageId, sourceMessageId)
+        .set(UserMemoryProfile::getExpiresAt, expiresAt));
+    if (updated > 0) {
+      return getActive(userId, category, key);
     }
 
     UserMemoryProfile profile = new UserMemoryProfile();
@@ -74,14 +74,42 @@ public class UserMemoryStore {
     profile.setSourceMessageId(sourceMessageId);
     profile.setExpiresAt(expiresAt);
     profile.setStatus("ACTIVE");
-    userMemoryMapper.insert(profile);
-    return get(profile.getId());
+    try {
+      userMemoryMapper.insert(profile);
+      return get(profile.getId());
+    } catch (DataIntegrityViolationException ex) {
+      userMemoryMapper.update(null, new LambdaUpdateWrapper<UserMemoryProfile>()
+          .eq(UserMemoryProfile::getUserId, userId)
+          .eq(UserMemoryProfile::getCategory, category)
+          .eq(UserMemoryProfile::getMemoryKey, key)
+          .eq(UserMemoryProfile::getStatus, "ACTIVE")
+          .set(UserMemoryProfile::getMemoryValue, value)
+          .set(UserMemoryProfile::getValueType, valueType)
+          .set(UserMemoryProfile::getConfidence, confidence)
+          .set(UserMemoryProfile::getSourceConversationId, sourceConversationId)
+          .set(UserMemoryProfile::getSourceMessageId, sourceMessageId)
+          .set(UserMemoryProfile::getExpiresAt, expiresAt));
+      return getActive(userId, category, key);
+    }
   }
 
   private UserMemoryProfile get(long id) {
     UserMemoryProfile profile = userMemoryMapper.selectById(id);
     if (profile == null) {
       throw new IllegalArgumentException("memory profile not found");
+    }
+    return profile;
+  }
+
+  private UserMemoryProfile getActive(long userId, String category, String key) {
+    UserMemoryProfile profile = userMemoryMapper.selectOne(new LambdaQueryWrapper<UserMemoryProfile>()
+        .eq(UserMemoryProfile::getUserId, userId)
+        .eq(UserMemoryProfile::getCategory, category)
+        .eq(UserMemoryProfile::getMemoryKey, key)
+        .eq(UserMemoryProfile::getStatus, "ACTIVE")
+        .last("limit 1"));
+    if (profile == null) {
+      throw new IllegalArgumentException("active memory profile not found");
     }
     return profile;
   }

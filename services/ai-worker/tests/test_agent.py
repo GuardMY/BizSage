@@ -354,6 +354,16 @@ def test_build_memory_context_filters_low_confidence():
     assert "bad" not in context
 
 
+def test_build_memory_context_uses_api_filtered_memories_without_worker_expiry_filter():
+    context = build_memory_context(
+        long_term_memories=[
+            {"category": "BUSINESS_FACT", "key": "trusted", "value": "from mysql",
+             "confidence": 0.90, "expires_at": 1},
+        ],
+    )
+    assert "trusted" in context
+
+
 def test_build_memory_context_all_tiers():
     context = build_memory_context(
         recent_messages=[

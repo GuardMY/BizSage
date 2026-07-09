@@ -6,7 +6,6 @@ import com.bizsage.api.intelligence.IntelligenceItem;
 import com.bizsage.api.intelligence.IntelligenceStore;
 import com.bizsage.api.knowledge.KnowledgeItem;
 import com.bizsage.api.knowledge.KnowledgeStore;
-import com.bizsage.api.memory.UserMemoryEmbeddingStore;
 import com.bizsage.api.memory.UserMemoryProfile;
 import com.bizsage.api.memory.UserMemoryStore;
 import com.bizsage.api.users.UserAccount;
@@ -35,7 +34,6 @@ public class DiagnosisService {
   private final ConversationMessageStore messageStore;
   private final ConversationSummaryStore summaryStore;
   private final UserMemoryStore userMemoryStore;
-  private final UserMemoryEmbeddingStore embeddingStore;
   private final KnowledgeStore knowledgeStore;
   private final IntelligenceStore intelligenceStore;
 
@@ -45,7 +43,6 @@ public class DiagnosisService {
       ConversationMessageStore messageStore,
       ConversationSummaryStore summaryStore,
       UserMemoryStore userMemoryStore,
-      UserMemoryEmbeddingStore embeddingStore,
       KnowledgeStore knowledgeStore,
       IntelligenceStore intelligenceStore) {
     this.aiWorkerClient = aiWorkerClient;
@@ -53,7 +50,6 @@ public class DiagnosisService {
     this.messageStore = messageStore;
     this.summaryStore = summaryStore;
     this.userMemoryStore = userMemoryStore;
-    this.embeddingStore = embeddingStore;
     this.knowledgeStore = knowledgeStore;
     this.intelligenceStore = intelligenceStore;
   }
@@ -176,6 +172,7 @@ public class DiagnosisService {
           map.put("key", mem.key());
           map.put("value", mem.value());
           map.put("confidence", mem.confidence());
+          map.put("source", "mysql:user_memory_profiles");
           return map;
         })
         .collect(Collectors.toList());
@@ -289,9 +286,6 @@ public class DiagnosisService {
           conversation.id(),
           userMessageId,
           structured);
-      if (!structured) {
-        embeddingStore.save(saved.id(), user.id(), value, conversation.id(), assistantMessageId);
-      }
     } catch (Exception ex) {
       log.warn("Failed to persist memory candidate for user {}: {}", user.id(), ex.getMessage());
     }
@@ -309,14 +303,18 @@ public class DiagnosisService {
       return;
     }
     List<ConversationMessage> covered = active.subList(0, coveredCount);
-    String summaryText = covered.stream()
+    ConversationSummary latestSummary = summaryStore.latestActive(conversationId).orElse(null);
+    String coveredText = covered.stream()
         .map(message -> message.sender() + ":" + message.content())
         .reduce((left, right) -> left + " | " + right)
         .orElse("");
+    String summaryText = latestSummary == null || latestSummary.summaryText().isBlank()
+        ? coveredText
+        : latestSummary.summaryText() + " | " + coveredText;
     ConversationSummary summary = summaryStore.save(
         conversationId,
         summaryText,
-        covered.getFirst().id(),
+        latestSummary != null ? latestSummary.coveredMessageStartId() : covered.getFirst().id(),
         covered.getLast().id());
     messageStore.markInactive(conversationId, summary.coveredMessageEndId(), summary.id());
   }

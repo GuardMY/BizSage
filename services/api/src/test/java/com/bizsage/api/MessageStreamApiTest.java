@@ -106,16 +106,31 @@ class MessageStreamApiTest {
         "user");
     jdbcTemplate.update(
         """
-            insert into user_memory_profiles
-              (user_id, memory_category, memory_key, memory_value, status, confidence)
-            values (?, 'PREFERENCE', 'response_style', 'CONCLUSION_FIRST', 'ACTIVE', 0.95)
+            update user_memory_profiles
+               set memory_value = 'CONCLUSION_FIRST', confidence = 0.95
+             where user_id = ? and memory_category = 'PREFERENCE'
+               and memory_key = 'response_style' and status = 'ACTIVE'
             """,
         userId);
     jdbcTemplate.update(
         """
             insert into user_memory_profiles
               (user_id, memory_category, memory_key, memory_value, status, confidence)
-            values (?, 'BUSINESS_FACT', 'channel_mix', 'DELIVERY_PLATFORM_HEAVY', 'ACTIVE', 0.90)
+            select ?, 'BUSINESS_FACT', 'channel_mix', 'DELIVERY_PLATFORM_HEAVY', 'ACTIVE', 0.90
+             where not exists (
+               select 1 from user_memory_profiles
+                where user_id = ? and memory_category = 'BUSINESS_FACT'
+                  and memory_key = 'channel_mix' and status = 'ACTIVE'
+             )
+            """,
+        userId,
+        userId);
+    jdbcTemplate.update(
+        """
+            update user_memory_profiles
+               set memory_value = 'DELIVERY_PLATFORM_HEAVY', confidence = 0.90
+             where user_id = ? and memory_category = 'BUSINESS_FACT'
+               and memory_key = 'channel_mix' and status = 'ACTIVE'
             """,
         userId);
 
@@ -183,6 +198,156 @@ class MessageStreamApiTest {
 
     assertThat(summaryCount).isGreaterThan(0);
     assertThat(inactiveMessages).isGreaterThan(0);
+  }
+
+  @Test
+  void conversationMessageStreamKeepsRollingSummaryHistoryInSingleActiveRecord() throws Exception {
+    String token = login("user");
+    long conversationId = createConversation(token);
+
+    for (int index = 0; index < 6; index++) {
+      MvcResult iteration = mvc.perform(post("/api/conversations/" + conversationId + "/messages/stream")
+          .header("Authorization", "Bearer " + token)
+          .contentType(MediaType.APPLICATION_JSON)
+          .content("{\"question\":\"round-" + index + "\"}"))
+        .andExpect(request().asyncStarted())
+        .andReturn();
+      awaitStreamBody(iteration);
+    }
+
+    Integer activeSummaryCount = jdbcTemplate.queryForObject(
+        "select count(*) from conversation_summaries where conversation_id = ? and active = true",
+        Integer.class,
+        conversationId);
+    Integer totalSummaryCount = jdbcTemplate.queryForObject(
+        "select count(*) from conversation_summaries where conversation_id = ?",
+        Integer.class,
+        conversationId);
+    String latestSummary = jdbcTemplate.queryForObject(
+        """
+            select summary_text
+            from conversation_summaries
+            where conversation_id = ? and active = true
+            """,
+        String.class,
+        conversationId);
+
+    assertThat(activeSummaryCount).isEqualTo(1);
+    assertThat(totalSummaryCount).isGreaterThan(1);
+    assertThat(latestSummary).contains("USER:round-0");
+    assertThat(latestSummary).contains("USER:round-1");
+  }
+
+  @Test
+  void conversationMessageStreamKeepsUnstructuredMemoryInMysqlWithoutCreatingVectorEmbeddings() throws Exception {
+    when(aiWorkerClient.diagnose(any(DiagnoseRequest.class)))
+        .thenReturn(new DiagnoseResponse(
+            "Narrative memory stored in MySQL only.",
+            List.of(),
+            "MEDIUM",
+            "Based on static baseline knowledge.",
+            "PASSED",
+            "Disclaimer: for business analysis only.",
+            List.of(
+                Map.of(
+                    "category", "PAIN_POINT",
+                    "key", "cashflow_story",
+                    "value", "The user repeatedly described supplier prepayment pressure.",
+                    "confidence", 0.88,
+                    "structured", false)),
+            null,
+            null,
+            List.of(),
+            Map.of()));
+
+    String token = login("user");
+    long conversationId = createConversation(token);
+
+    MvcResult result = mvc.perform(post("/api/conversations/" + conversationId + "/messages/stream")
+        .header("Authorization", "Bearer " + token)
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"question\":\"suppliers keep asking for prepayment\"}"))
+      .andExpect(request().asyncStarted())
+      .andReturn();
+    awaitStreamBody(result);
+
+    Integer profileCount = jdbcTemplate.queryForObject(
+        "select count(*) from user_memory_profiles where memory_key = 'cashflow_story'",
+        Integer.class);
+    Integer embeddingCount = jdbcTemplate.queryForObject(
+        "select count(*) from user_memory_embeddings",
+        Integer.class);
+
+    assertThat(profileCount).isEqualTo(1);
+    assertThat(embeddingCount).isEqualTo(0);
+  }
+
+  @Test
+  void conversationMessageStreamRefreshesExistingMemoryInsteadOfCreatingDuplicateActiveRows() throws Exception {
+    when(aiWorkerClient.diagnose(any(DiagnoseRequest.class)))
+        .thenReturn(new DiagnoseResponse(
+            "Updated preference memory.",
+            List.of(),
+            "MEDIUM",
+            "Based on static baseline knowledge.",
+            "PASSED",
+            "Disclaimer: for business analysis only.",
+            List.of(
+                Map.of(
+                    "category", "PREFERENCE",
+                    "key", "response_style",
+                    "value", "CONCLUSION_FIRST",
+                    "confidence", 0.81,
+                    "structured", true)),
+            null,
+            null,
+            List.of(),
+            Map.of()));
+
+    String token = login("user");
+    Long userId = jdbcTemplate.queryForObject(
+        "select id from users where username = ?",
+        Long.class,
+        "user");
+    jdbcTemplate.update(
+        """
+            update user_memory_profiles
+               set memory_value = 'CONCISE', confidence = 0.65
+             where user_id = ? and memory_category = 'PREFERENCE'
+               and memory_key = 'response_style' and status = 'ACTIVE'
+            """,
+        userId);
+    long conversationId = createConversation(token);
+
+    MvcResult result = mvc.perform(post("/api/conversations/" + conversationId + "/messages/stream")
+        .header("Authorization", "Bearer " + token)
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"question\":\"remember that I want the answer conclusion-first\"}"))
+      .andExpect(request().asyncStarted())
+      .andReturn();
+    awaitStreamBody(result);
+
+    Integer profileCount = jdbcTemplate.queryForObject(
+        """
+            select count(*)
+            from user_memory_profiles
+            where user_id = ? and memory_category = 'PREFERENCE'
+              and memory_key = 'response_style' and status = 'ACTIVE'
+            """,
+        Integer.class,
+        userId);
+    String memoryValue = jdbcTemplate.queryForObject(
+        """
+            select memory_value
+            from user_memory_profiles
+            where user_id = ? and memory_category = 'PREFERENCE'
+              and memory_key = 'response_style' and status = 'ACTIVE'
+            """,
+        String.class,
+        userId);
+
+    assertThat(profileCount).isEqualTo(1);
+    assertThat(memoryValue).isEqualTo("CONCLUSION_FIRST");
   }
 
   @Test

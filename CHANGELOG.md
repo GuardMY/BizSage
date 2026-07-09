@@ -2,6 +2,68 @@
 
 ## 2026-07-09
 
+### RAG Control-Plane Refactor Recommendation Archive
+
+- Change type: documentation.
+- Affected modules: `docs/en`, `docs/zh-CN`, and both change logs.
+- Main changes:
+  - Added `docs/en/rag-control-plane-and-boundary-refactor-recommendation.md` to capture the current API/AI-worker RAG split, the recommended control-plane placement, and a phased boundary-refactor path.
+  - Added the paired Chinese document `docs/zh-CN/rag-control-plane-and-boundary-refactor-recommendation-zh-CN.md` with the same scope, conclusions, migration phases, risks, and first work items.
+  - Recorded the recommended target shape as `API = control plane` and `AI worker = RAG execution plane`, while explicitly noting the current boundary drift around inline knowledge assembly and worker-owned business-filter semantics.
+- Verification results:
+  - Verified the new English and Chinese documents keep the same facts, recommendations, migration phases, risks, and next-step guidance.
+- Unfinished items:
+  - The recommendation is not yet implemented in runtime code; the online diagnosis and learning paths still need contract changes and regression coverage before the boundary can be tightened.
+  - The current repository still needs a follow-up implementation plan that maps the proposed boundary changes to concrete Java and Python code paths.
+
+### User Memory Upsert Hardening
+
+- Change type: functional repair.
+- Affected modules: `services/api`, `infra/mysql`, and both change logs.
+- Main changes:
+  - Added a natural-key uniqueness rule for `user_memory_profiles` on `(user_id, memory_category, memory_key, status)` in both the MySQL baseline and the H2 test baseline.
+  - Added Flyway migration `V3__user_memory_profile_uniqueness.sql` to collapse same-key duplicates deterministically before applying the new unique constraint in existing MySQL environments.
+  - Reworked `UserMemoryStore.saveOrRefresh()` into an update-first, insert-second flow with duplicate-key retry handling, so concurrent or repeated writes refresh the existing active memory instead of creating multiple rows.
+  - Added a regression test proving repeated writes to the same active memory key keep exactly one active row while updating the stored value.
+- Verification results:
+  - Verified with `mvn -Dtest=MessageStreamApiTest test -q` in `services/api`; the targeted message-stream suite passed with the new uniqueness and refresh semantics.
+- Unfinished items:
+  - The current hardening guarantees one row per natural key and status, but it does not yet introduce richer conflict states such as `SUPERSEDED` or `CONFLICTED` for mutually incompatible memory values.
+  - Production rollout still needs a real MySQL startup validation to confirm Flyway `V3` applies cleanly on top of existing environments.
+
+### Online Vector Memory Path Disabled By Default
+
+- Change type: functional repair.
+- Affected modules: `services/api`, `docs/en`, `docs/zh-CN`, and both change logs.
+- Main changes:
+  - Removed online vector-memory writes from `DiagnosisService` and `LearningService`, so unstructured memory candidates now persist only to the authoritative MySQL memory store during normal agent interactions.
+  - Put `MemorySyncScheduler` behind the new `bizsage.memory.vector-sync-enabled` switch and set the default to `false`, preserving the vector-sync code path for future reactivation without letting it run in the current online architecture.
+  - Added an API regression test proving an unstructured memory candidate is still saved into `user_memory_profiles` while `user_memory_embeddings` remains unchanged.
+  - Updated the paired implementation-status milestone documents to reflect that rolling summaries and MySQL-backed long-term memory are live, while the vector-memory path is intentionally disabled until retrieval is designed end to end.
+- Verification results:
+  - Verified with `mvn -Dtest=MessageStreamApiTest test -q` in `services/api`; the targeted message-stream suite passed, including the new unstructured-memory regression case.
+  - Verified with `PYTHONPATH=. pytest tests/test_memory_v2.py -q` in `services/ai-worker`; 15 tests passed.
+- Unfinished items:
+  - The retained `/memory/sync` endpoint, embedding store, and scheduler code are now dormant by default and still need a proper retrieval/read-path design before they should be re-enabled online.
+  - No migration has yet removed historical `user_memory_embeddings` rows or introduced cleanup/governance for already-synced vector-memory data.
+
+### Agent Memory Summary Continuity And Source-Of-Truth Alignment
+
+- Change type: functional repair.
+- Affected modules: `services/api`, `services/ai-worker`, and both change logs.
+- Main changes:
+  - Reworked conversation summarization in `DiagnosisService`, `LearningService`, and `ConversationSummaryStore` to keep a single active rolling summary per conversation while carrying forward previously summarized context instead of dropping older turns.
+  - Marked API-backed long-term memories as originating from `mysql:user_memory_profiles` before sending them to the AI worker, clarifying that MySQL is the authoritative memory store and the worker consumes pre-filtered memories rather than re-deciding lifecycle expiry.
+  - Updated the AI worker's `build_memory_context()` contract to trust API-filtered long-term memories, and added a regression test that ensures worker-side prompt assembly no longer discards memories based on stale local expiry metadata.
+  - Renamed internal `UserMemoryProfile` field mappings away from reserved-word-backed property names so MyBatis-Plus generates H2-safe SQL during memory queries and refreshes.
+  - Added a message-stream regression test that verifies rolling summaries keep only one active summary row while preserving the earliest summarized rounds across multiple summarization passes.
+- Verification results:
+  - Verified with `PYTHONPATH=. pytest tests/test_agent.py -q` in `services/ai-worker`; 24 tests passed.
+  - Verified with `mvn -Dtest=MessageStreamApiTest test -q` in `services/api`; the targeted SSE/message-summary integration suite passed after the memory query mapping fix.
+- Unfinished items:
+  - The vector-memory path still only guarantees async write/sync behavior; retrieval back into online agent context remains for a later phase.
+  - Memory upsert semantics are still `select + update/insert`; unique constraints and stronger atomicity are still pending.
+
 ### API MyBatis-Plus Migration Kickoff
 
 - Change type: functional development.
@@ -715,6 +777,20 @@
   - No runtime test suite was required for this documentation-only repair.
 
 ## 2026-07-09
+
+### Core Code Files and External Interaction Documentation
+
+- Change type: documentation update.
+- Affected modules: `docs/en`, `docs/zh-CN`, and both change logs.
+- Main changes:
+  - Added a new bilingual architecture-reference document that maps each runtime module to its core code files, including Web workspace files, Admin V3 files, API controllers/services/stores, AI worker orchestration files, collector governance/resilience files, and infrastructure entry files.
+  - Documented the actual external interaction boundaries for browser, API, AI worker, collector, Redis, MySQL, Qdrant, and OpenAI-compatible model providers, with explicit separation between internal calls and external dependencies.
+  - Added practical end-to-end flow summaries for diagnosis SSE, learning/transition SSE, report export, admin collection/governance, knowledge publication sync, and collector deduplication/resilience.
+- Verification results:
+  - Verified the new document contents against `.codegraph/codegraph.db`, repository runtime entrypoints, and the existing component-interaction and architecture documents.
+  - Confirmed the English and Chinese documents describe the same module scope, file responsibilities, and interaction flows.
+- Unfinished items:
+  - This is a documentation-only change, so no runtime test suite was executed.
 
 ### Alert Scheduler Collection Run Table Fix
 
