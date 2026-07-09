@@ -2,6 +2,20 @@
 
 ## 2026-07-09
 
+### Gray-Release YAML Binding Repair
+
+- Change type: functional repair.
+- Affected modules: `services/api` and both change logs.
+- Main changes:
+  - Replaced the `GrayReleaseService` SpEL-based `@Value("#{${...}}")` feature-flag injection with native Spring Boot configuration binding via a new `GrayReleaseProperties` class.
+  - Converted `bizsage.gray-release.features.*.allowed-memberships` in `services/api/src/main/resources/application.yml` from comma-delimited strings to standard YAML lists, so paid-intelligence and PDF-export cohorts bind safely at startup.
+  - Added a focused regression test covering gray-release property binding and feature evaluation without requiring the full database-backed application context.
+- Verification results:
+  - Verified with `mvn -Dtest=GrayReleaseServiceConfigurationTest test` in `services/api`; the targeted binding test passes and confirms standard list properties load without SpEL parsing errors.
+  - Attempted `mvn -Dtest=V2GrayReleaseApiTest test`, but the suite is currently blocked by a pre-existing `schema-test.sql` syntax/encoding failure unrelated to this gray-release change.
+- Unfinished items:
+  - Repair the malformed SQL seed content in `services/api/src/test/resources/schema-test.sql`, then re-run the full gray-release integration suite.
+
 ### API Compile Compatibility Fixes
 
 - Change type: functional repair.

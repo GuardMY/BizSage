@@ -43,15 +43,19 @@ bizsage:
       paid-intelligence:
         enabled: true
         traffic-percent: 10
-        allowed-memberships: SEED_PAID,INTERNAL
+        allowed-memberships:
+          - SEED_PAID
+          - INTERNAL
       pdf-export:
         enabled: true
         traffic-percent: 10
-        allowed-memberships: SEED_PAID,INTERNAL
+        allowed-memberships:
+          - SEED_PAID
+          - INTERNAL
       advanced-rag:
         enabled: false
         traffic-percent: 0
-        allowed-memberships:
+        allowed-memberships: []
   # V2: Alert evaluation thresholds
   alerts:
     api-error-rate-threshold: 0.05

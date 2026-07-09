@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
@@ -35,35 +34,26 @@ public class GrayReleaseService {
   private final Map<String, Integer> featureTrafficPercent;
   private final Map<String, List<String>> featureAllowedMemberships;
 
-  @SuppressWarnings("unchecked")
-  public GrayReleaseService(
-      @Value("#{${bizsage.gray-release.features.paid-intelligence.enabled:true}}") boolean paidIntelEnabled,
-      @Value("#{${bizsage.gray-release.features.paid-intelligence.traffic-percent:10}}") int paidIntelTraffic,
-      @Value("#{${bizsage.gray-release.features.paid-intelligence.allowed-memberships:{'SEED_PAID','INTERNAL'}}}")
-          List<String> paidIntelMemberships,
-      @Value("#{${bizsage.gray-release.features.pdf-export.enabled:true}}") boolean pdfExportEnabled,
-      @Value("#{${bizsage.gray-release.features.pdf-export.traffic-percent:10}}") int pdfExportTraffic,
-      @Value("#{${bizsage.gray-release.features.pdf-export.allowed-memberships:{'SEED_PAID','INTERNAL'}}}")
-          List<String> pdfExportMemberships,
-      @Value("#{${bizsage.gray-release.features.advanced-rag.enabled:false}}") boolean advancedRagEnabled,
-      @Value("#{${bizsage.gray-release.features.advanced-rag.traffic-percent:0}}") int advancedRagTraffic,
-      @Value("#{${bizsage.gray-release.features.advanced-rag.allowed-memberships:{}}}")
-          List<String> advancedRagMemberships) {
+  public GrayReleaseService(GrayReleaseProperties properties) {
+    GrayReleaseProperties.Features features = properties.getFeatures();
+    GrayReleaseProperties.FeatureConfig paidIntelligence = features.getPaidIntelligence();
+    GrayReleaseProperties.FeatureConfig pdfExport = features.getPdfExport();
+    GrayReleaseProperties.FeatureConfig advancedRag = features.getAdvancedRag();
 
     this.featureEnabled = Map.of(
-        FEATURE_PAID_INTELLIGENCE, paidIntelEnabled,
-        FEATURE_PDF_EXPORT, pdfExportEnabled,
-        FEATURE_ADVANCED_RAG, advancedRagEnabled);
+        FEATURE_PAID_INTELLIGENCE, paidIntelligence.isEnabled(),
+        FEATURE_PDF_EXPORT, pdfExport.isEnabled(),
+        FEATURE_ADVANCED_RAG, advancedRag.isEnabled());
 
     this.featureTrafficPercent = Map.of(
-        FEATURE_PAID_INTELLIGENCE, paidIntelTraffic,
-        FEATURE_PDF_EXPORT, pdfExportTraffic,
-        FEATURE_ADVANCED_RAG, advancedRagTraffic);
+        FEATURE_PAID_INTELLIGENCE, paidIntelligence.getTrafficPercent(),
+        FEATURE_PDF_EXPORT, pdfExport.getTrafficPercent(),
+        FEATURE_ADVANCED_RAG, advancedRag.getTrafficPercent());
 
     this.featureAllowedMemberships = Map.of(
-        FEATURE_PAID_INTELLIGENCE, List.copyOf(paidIntelMemberships),
-        FEATURE_PDF_EXPORT, List.copyOf(pdfExportMemberships),
-        FEATURE_ADVANCED_RAG, List.copyOf(advancedRagMemberships));
+        FEATURE_PAID_INTELLIGENCE, paidIntelligence.getAllowedMemberships(),
+        FEATURE_PDF_EXPORT, pdfExport.getAllowedMemberships(),
+        FEATURE_ADVANCED_RAG, advancedRag.getAllowedMemberships());
   }
 
   /**

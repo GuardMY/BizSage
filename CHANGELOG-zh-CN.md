@@ -2,6 +2,20 @@
 
 ## 2026-07-09
 
+### 灰度发布 YAML 绑定修复
+
+- 变更类型：功能修复。
+- 影响模块：`services/api` 和两份变更日志。
+- 主要变更：
+  - 新增 `GrayReleaseProperties`，将 `GrayReleaseService` 原先依赖 SpEL 的 `@Value("#{${...}}")` 特性开关注入改为 Spring Boot 原生配置绑定。
+  - 将 `services/api/src/main/resources/application.yml` 中 `bizsage.gray-release.features.*.allowed-memberships` 从逗号分隔字符串改为标准 YAML 列表，避免 paid-intelligence 和 PDF-export 灰度人群在启动时解析失败。
+  - 新增一个聚焦型回归测试，在不依赖完整数据库上下文的前提下验证灰度配置绑定和特性判断逻辑。
+- 验证结果：
+  - 已在 `services/api` 中运行 `mvn -Dtest=GrayReleaseServiceConfigurationTest test`，定向绑定测试通过，确认标准列表属性可正常加载，且不会再触发 SpEL 解析错误。
+  - 已尝试运行 `mvn -Dtest=V2GrayReleaseApiTest test`，但该套件当前被 `schema-test.sql` 中既有的 SQL 语法/编码问题阻塞，与本次灰度修复无直接关系。
+- 未完成事项：
+  - 修复 `services/api/src/test/resources/schema-test.sql` 中损坏的种子 SQL 内容后，重新执行完整的灰度发布集成测试。
+
 ### API 编译兼容性修复
 
 - 变更类型：功能修复。
