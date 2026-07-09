@@ -2,6 +2,20 @@
 
 ## 2026-07-09
 
+### User Memory Flyway V3 Idempotency Fix
+
+- Change type: functional repair.
+- Affected modules: `services/api` and both change logs.
+- Main changes:
+  - Made `V3__user_memory_profile_uniqueness.sql` skip the unique-constraint `ALTER TABLE` when any unique index already covers `(user_id, memory_category, memory_key, status)`.
+  - Preserved the duplicate-collapse step for existing MySQL databases while allowing fresh development databases initialized from `infra/mysql/init/001_v1_baseline.sql` to pass Flyway V3.
+- Verification results:
+  - Used CodeGraph to inspect the memory profile code path before editing.
+  - Reviewed the MySQL baseline and confirmed it already creates `uk_user_memory_profiles_natural`, matching the fresh-development startup failure.
+- Unfinished items:
+  - Docker and a live MySQL client are not installed in the current environment, so the fixed migration still needs to be run against a fresh development database.
+  - Any development database that already recorded the failed V3 migration must be reset or repaired before the API can start again.
+
 ### User Memory Profile Compile Fix
 
 - Change type: functional repair.

@@ -2,6 +2,20 @@
 
 ## 2026-07-09
 
+### 用户记忆 Flyway V3 幂等性修复
+
+- 变更类型：功能修复。
+- 影响模块：`services/api` 和两份变更日志。
+- 主要变更：
+  - 将 `V3__user_memory_profile_uniqueness.sql` 调整为当 `(user_id, memory_category, memory_key, status)` 已存在任意唯一索引时跳过唯一约束 `ALTER TABLE`。
+  - 保留已有 MySQL 数据库的重复数据归并步骤，同时让通过 `infra/mysql/init/001_v1_baseline.sql` 初始化的全新开发库能够通过 Flyway V3。
+- 验证结果：
+  - 修改前已使用 CodeGraph 查看记忆 Profile 相关代码路径。
+  - 已检查 MySQL 基线，确认其已经创建 `uk_user_memory_profiles_natural`，与全新开发库启动失败现象一致。
+- 未完成事项：
+  - 当前环境未安装 Docker 和可用 MySQL 客户端，因此仍需在全新开发数据库上实际运行修复后的迁移。
+  - 已经记录 V3 失败历史的开发库，需要先重置或 repair 后 API 才能再次启动。
+
 ### 用户记忆 Profile 编译修复
 
 - 变更类型：功能修复。

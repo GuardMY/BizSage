@@ -15,6 +15,26 @@ JOIN user_memory_profiles newer
  )
 WHERE newer.id IS NOT NULL;
 
-ALTER TABLE user_memory_profiles
-  ADD CONSTRAINT uk_user_memory_profiles_natural
-  UNIQUE (user_id, memory_category, memory_key, status);
+SET @user_memory_profiles_natural_unique_exists = (
+  SELECT COUNT(*)
+  FROM (
+    SELECT index_name
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'user_memory_profiles'
+      AND non_unique = 0
+    GROUP BY index_name
+    HAVING COUNT(*) = 4
+       AND GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') = 'user_id,memory_category,memory_key,status'
+  ) existing_unique_indexes
+);
+
+SET @uk_user_memory_profiles_natural_sql = IF(
+  @user_memory_profiles_natural_unique_exists = 0,
+  'ALTER TABLE user_memory_profiles ADD CONSTRAINT uk_user_memory_profiles_natural UNIQUE (user_id, memory_category, memory_key, status)',
+  'SELECT 1'
+);
+
+PREPARE uk_user_memory_profiles_natural_stmt FROM @uk_user_memory_profiles_natural_sql;
+EXECUTE uk_user_memory_profiles_natural_stmt;
+DEALLOCATE PREPARE uk_user_memory_profiles_natural_stmt;
