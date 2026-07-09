@@ -2,6 +2,22 @@
 
 ## 2026-07-09
 
+### API MyBatis-Plus Migration Kickoff
+
+- Change type: functional development.
+- Affected modules: `services/api` and both change logs.
+- Main changes:
+  - Replaced the API service's direct JDBC starter dependency with `mybatis-plus-spring-boot3-starter`, enabled `@MapperScan`, and added base MyBatis-Plus configuration in `services/api/src/main/resources/application.yml`.
+  - Converted core persistence records used by the user, conversation, knowledge, intelligence, review-ticket, message, summary, and memory flows into MyBatis-Plus entity classes with `@TableName`, `@TableId`, and targeted `@TableField` mappings while preserving record-style accessors for existing callers.
+  - Added first-wave mapper interfaces for the migrated entities and moved the `UserStore`, `ConversationStore`, `KnowledgeStore`, `IntelligenceStore`, `PaidIntelligenceStore`, `AdminReviewStore`, `ConversationMessageStore`, `ConversationSummaryStore`, `UserMemoryStore`, and `UserMemoryEmbeddingStore` implementations onto MyBatis-Plus query/update APIs.
+  - Restored the auth login envelope's `token` field after the entity migration exposed an existing response-shape regression, and switched test-profile caching to `simple` to avoid Redis dependency during local Maven runs.
+- Verification results:
+  - Verified with `mvn -DskipTests compile` in `services/api`; the API module compiles with the new MyBatis-Plus baseline.
+  - Verified with targeted Maven tests that the authentication response shape is restored and core CRUD paths reach runtime, but the narrowed suite still reports failures in existing paginated API assertions and unmigrated persistence areas.
+- Unfinished items:
+  - Complete the remaining JDBC-to-MyBatis migration in admin, governance, ops, and snapshot-related classes that still use `JdbcTemplate`.
+  - Reconcile API test expectations around paginated envelopes versus flat lists, then rerun the full `services/api` Maven test suite after the remaining persistence paths are migrated.
+
 ### Flyway Database Migration Adoption
 
 - Change type: functional repair.

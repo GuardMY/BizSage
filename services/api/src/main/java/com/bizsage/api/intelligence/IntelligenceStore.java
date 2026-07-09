@@ -1,12 +1,12 @@
 package com.bizsage.api.intelligence;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.bizsage.api.governance.DataScope;
 import com.bizsage.api.worker.AiWorkerClient;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.sql.PreparedStatement;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -14,79 +14,57 @@ import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Service;
 
 @Service
 public class IntelligenceStore {
   private static final Logger log = LoggerFactory.getLogger(IntelligenceStore.class);
 
-  private final JdbcTemplate jdbcTemplate;
+  private final IntelligenceMapper intelligenceMapper;
   private final AiWorkerClient aiWorkerClient;
 
-  public IntelligenceStore(JdbcTemplate jdbcTemplate, AiWorkerClient aiWorkerClient) {
-    this.jdbcTemplate = jdbcTemplate;
+  public IntelligenceStore(IntelligenceMapper intelligenceMapper, AiWorkerClient aiWorkerClient) {
+    this.intelligenceMapper = intelligenceMapper;
     this.aiWorkerClient = aiWorkerClient;
   }
 
   public IntelligenceItem create(CreateIntelligenceRequest request) {
-    KeyHolder keyHolder = new GeneratedKeyHolder();
-    jdbcTemplate.update(connection -> {
-      PreparedStatement ps = connection.prepareStatement("""
-          insert into intelligence
-            (title, content, url, status, confidence, link_id, region_id, industry_id, source_id, weight, content_hash)
-          values (?, ?, ?, 'PENDING', 0.6, ?, ?, ?, ?, 0.6, ?)
-          """, Statement.RETURN_GENERATED_KEYS);
-      ps.setString(1, request.title());
-      ps.setString(2, request.content());
-      ps.setString(3, request.url());
-      ps.setString(4, request.linkId());
-      ps.setString(5, request.regionId());
-      ps.setString(6, request.industryId());
-      ps.setString(7, request.sourceId());
-      ps.setString(8, sha256(request.content()));
-      return ps;
-    }, keyHolder);
-    return find(generatedId(keyHolder));
+    IntelligenceItem item = new IntelligenceItem();
+    item.setTitle(request.title());
+    item.setContent(request.content());
+    item.setUrl(request.url());
+    item.setStatus("PENDING");
+    item.setConfidence(0.6D);
+    item.setLinkId(request.linkId());
+    item.setRegionId(request.regionId());
+    item.setIndustryId(request.industryId());
+    item.setSourceId(request.sourceId());
+    item.setWeight(0.6D);
+    item.setEntitlement("FREE");
+    item.setContentHash(sha256(request.content()));
+    intelligenceMapper.insert(item);
+    return find(item.id());
   }
 
-  /**
-   * Create an intelligence item from a governed collector record.
-   * The item is created with status='PENDING' for operator review.
-   */
   public IntelligenceItem createFromRecord(Map<String, Object> record) {
     String content = stringField(record, "content", "");
-    KeyHolder keyHolder = new GeneratedKeyHolder();
-    jdbcTemplate.update(connection -> {
-      PreparedStatement ps = connection.prepareStatement("""
-          insert into intelligence
-            (title, content, url, status, confidence, link_id, region_id, industry_id, source_id, weight, content_hash)
-          values (?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?)
-          """, Statement.RETURN_GENERATED_KEYS);
-      ps.setString(1, stringField(record, "title", "Untitled"));
-      ps.setString(2, content);
-      ps.setString(3, stringField(record, "url", null));
-      ps.setDouble(4, doubleField(record, "confidence", 0.6));
-      ps.setString(5, stringField(record, "link_id", "collection"));
-      ps.setString(6, stringField(record, "region_id", "cn-default"));
-      ps.setString(7, stringField(record, "industry_id", "general"));
-      ps.setString(8, stringField(record, "source_id", "collector"));
-      ps.setDouble(9, doubleField(record, "weight", 0.6));
-      ps.setString(10, sha256(content));
-      return ps;
-    }, keyHolder);
-    return find(generatedId(keyHolder));
+    IntelligenceItem item = new IntelligenceItem();
+    item.setTitle(stringField(record, "title", "Untitled"));
+    item.setContent(content);
+    item.setUrl(stringField(record, "url", null));
+    item.setStatus("PENDING");
+    item.setConfidence(doubleField(record, "confidence", 0.6));
+    item.setLinkId(stringField(record, "link_id", "collection"));
+    item.setRegionId(stringField(record, "region_id", "cn-default"));
+    item.setIndustryId(stringField(record, "industry_id", "general"));
+    item.setSourceId(stringField(record, "source_id", "collector"));
+    item.setWeight(doubleField(record, "weight", 0.6));
+    item.setEntitlement("FREE");
+    item.setContentHash(sha256(content));
+    intelligenceMapper.insert(item);
+    return find(item.id());
   }
 
-  /**
-   * Bulk-create intelligence items from governed collector records.
-   * All items are created with status='PENDING'.
-   *
-   * @return the list of created intelligence items
-   */
   public List<IntelligenceItem> bulkCreateFromRecords(List<Map<String, Object>> records) {
     List<IntelligenceItem> created = new ArrayList<>();
     for (Map<String, Object> record : records) {
@@ -100,8 +78,9 @@ public class IntelligenceStore {
   }
 
   public IntelligenceItem approve(long id) {
-    int updated = jdbcTemplate.update(
-        "update intelligence set status = 'APPROVED', update_time = current_timestamp where id = ?", id);
+    int updated = intelligenceMapper.update(null, new LambdaUpdateWrapper<IntelligenceItem>()
+        .eq(IntelligenceItem::getId, id)
+        .set(IntelligenceItem::getStatus, "APPROVED"));
     if (updated == 0) {
       throw new IllegalArgumentException("intelligence not found");
     }
@@ -111,107 +90,54 @@ public class IntelligenceStore {
   }
 
   public List<IntelligenceItem> list() {
-    return jdbcTemplate.query("""
-        select id, title, content, url, status, confidence, link_id, region_id, industry_id, source_id, weight
-          from intelligence
-         order by id
-        """, mapper());
+    return intelligenceMapper.selectList(new LambdaQueryWrapper<IntelligenceItem>()
+        .orderByAsc(IntelligenceItem::getId));
   }
 
-  /**
-   * Returns intelligence scoped to the given DataScope for data isolation enforcement.
-   * Admins (null region/industry) see all records; other users only see their own scope.
-   */
   public List<IntelligenceItem> listScoped(DataScope scope) {
     if (scope.isAdmin()) {
       return list();
     }
-    StringBuilder sql = new StringBuilder("""
-        select id, title, content, url, status, confidence, link_id, region_id, industry_id, source_id, weight
-          from intelligence where 1=1
-        """);
-    List<Object> params = new ArrayList<>();
-
+    LambdaQueryWrapper<IntelligenceItem> wrapper = new LambdaQueryWrapper<>();
     if (scope.regionId() != null) {
-      sql.append(" and region_id = ?");
-      params.add(scope.regionId());
+      wrapper.eq(IntelligenceItem::getRegionId, scope.regionId());
     }
     if (scope.industryId() != null) {
-      sql.append(" and industry_id = ?");
-      params.add(scope.industryId());
+      wrapper.eq(IntelligenceItem::getIndustryId, scope.industryId());
     }
     if (!scope.canAccessPaid()) {
-      sql.append(" and (url not like '%paid%' or url is null)");
+      wrapper.and(w -> w.notLike(IntelligenceItem::getUrl, "paid").or().isNull(IntelligenceItem::getUrl));
     }
-    sql.append(" order by id");
-
-    return jdbcTemplate.query(sql.toString(), mapper(), params.toArray());
+    wrapper.orderByAsc(IntelligenceItem::getId);
+    return intelligenceMapper.selectList(wrapper);
   }
 
-  /**
-   * Returns approved intelligence scoped to the given DataScope for use in diagnosis.
-   * Only items with status='APPROVED' are included.
-   */
   public List<IntelligenceItem> listApprovedScoped(DataScope scope) {
-    if (scope.isAdmin()) {
-      return jdbcTemplate.query("""
-          select id, title, content, url, status, confidence, link_id, region_id, industry_id, source_id, weight
-            from intelligence
-           where status = 'APPROVED'
-           order by id
-          """, mapper());
+    LambdaQueryWrapper<IntelligenceItem> wrapper = new LambdaQueryWrapper<IntelligenceItem>()
+        .eq(IntelligenceItem::getStatus, "APPROVED");
+    if (!scope.isAdmin()) {
+      if (scope.regionId() != null) {
+        wrapper.eq(IntelligenceItem::getRegionId, scope.regionId());
+      }
+      if (scope.industryId() != null) {
+        wrapper.eq(IntelligenceItem::getIndustryId, scope.industryId());
+      }
+      if (!scope.canAccessPaid()) {
+        wrapper.and(w -> w.notLike(IntelligenceItem::getUrl, "paid").or().isNull(IntelligenceItem::getUrl));
+      }
     }
-    StringBuilder sql = new StringBuilder("""
-        select id, title, content, url, status, confidence, link_id, region_id, industry_id, source_id, weight
-          from intelligence where status = 'APPROVED'
-        """);
-    List<Object> params = new ArrayList<>();
-
-    if (scope.regionId() != null) {
-      sql.append(" and region_id = ?");
-      params.add(scope.regionId());
-    }
-    if (scope.industryId() != null) {
-      sql.append(" and industry_id = ?");
-      params.add(scope.industryId());
-    }
-    if (!scope.canAccessPaid()) {
-      sql.append(" and (url not like '%paid%' or url is null)");
-    }
-    sql.append(" order by id");
-
-    return jdbcTemplate.query(sql.toString(), mapper(), params.toArray());
+    wrapper.orderByAsc(IntelligenceItem::getId);
+    return intelligenceMapper.selectList(wrapper);
   }
 
   private IntelligenceItem find(long id) {
-    return jdbcTemplate.query("""
-        select id, title, content, url, status, confidence, link_id, region_id, industry_id, source_id, weight
-          from intelligence
-         where id = ?
-        """, mapper(), id).stream()
-        .findFirst()
-        .orElseThrow(() -> new IllegalArgumentException("intelligence not found"));
+    IntelligenceItem item = intelligenceMapper.selectById(id);
+    if (item == null) {
+      throw new IllegalArgumentException("intelligence not found");
+    }
+    return item;
   }
 
-  private RowMapper<IntelligenceItem> mapper() {
-    return (rs, rowNum) -> new IntelligenceItem(
-        rs.getLong("id"),
-        rs.getString("title"),
-        rs.getString("content"),
-        rs.getString("url"),
-        rs.getString("status"),
-        rs.getDouble("confidence"),
-        rs.getString("link_id"),
-        rs.getString("region_id"),
-        rs.getString("industry_id"),
-        rs.getString("source_id"),
-        rs.getDouble("weight"));
-  }
-
-  /**
-   * Sync an approved intelligence item to the AI worker's Qdrant vector store.
-   * Non-fatal — failures are logged but do not block the approval.
-   */
   private void syncToQdrant(IntelligenceItem item) {
     try {
       Map<String, Object> knowledgeItem = new LinkedHashMap<>();
@@ -222,15 +148,14 @@ public class IntelligenceStore {
       knowledgeItem.put("source_id", item.sourceId() != null ? item.sourceId() : "intelligence");
       knowledgeItem.put("weight", item.weight());
       knowledgeItem.put("confidence", item.confidence());
-      knowledgeItem.put("authority", 0.85);     // V2: six-dimension rerank
-      knowledgeItem.put("timeliness", 0.85);    // V2: six-dimension rerank
+      knowledgeItem.put("authority", 0.85);
+      knowledgeItem.put("timeliness", 0.85);
       knowledgeItem.put("industry_id", item.industryId() != null ? item.industryId() : "general");
       knowledgeItem.put("region_id", item.regionId() != null ? item.regionId() : "cn-default");
       knowledgeItem.put("entitlement", item.entitlement() != null ? item.entitlement() : "FREE");
       aiWorkerClient.syncKnowledge(List.of(knowledgeItem));
     } catch (Exception ex) {
-      log.warn("Failed to sync approved intelligence {} to Qdrant (non-fatal): {}",
-          item.id(), ex.getMessage());
+      log.warn("Failed to sync approved intelligence {} to Qdrant (non-fatal): {}", item.id(), ex.getMessage());
     }
   }
 
@@ -254,12 +179,5 @@ public class IntelligenceStore {
     } catch (NoSuchAlgorithmException exception) {
       throw new IllegalStateException("SHA-256 unavailable", exception);
     }
-  }
-
-  private long generatedId(KeyHolder keyHolder) {
-    if (keyHolder.getKeys() != null && keyHolder.getKeys().get("id") instanceof Number id) {
-      return id.longValue();
-    }
-    return keyHolder.getKey().longValue();
   }
 }

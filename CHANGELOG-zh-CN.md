@@ -2,6 +2,22 @@
 
 ## 2026-07-09
 
+### API MyBatis-Plus 迁移启动
+
+- 变更类型：功能开发。
+- 影响模块：`services/api` 和两份变更日志。
+- 主要变更：
+  - 将 API 服务的直接 JDBC starter 依赖替换为 `mybatis-plus-spring-boot3-starter`，启用 `@MapperScan`，并在 `services/api/src/main/resources/application.yml` 中补充基础 MyBatis-Plus 配置。
+  - 把用户、会话、知识、情报、审核工单、消息、摘要和记忆链路中使用的核心持久化 `record` 改造成带有 `@TableName`、`@TableId` 和必要 `@TableField` 映射的 MyBatis-Plus 实体，同时保留 record 风格访问器，尽量不打断现有调用方。
+  - 为首批迁移实体新增 Mapper 接口，并将 `UserStore`、`ConversationStore`、`KnowledgeStore`、`IntelligenceStore`、`PaidIntelligenceStore`、`AdminReviewStore`、`ConversationMessageStore`、`ConversationSummaryStore`、`UserMemoryStore` 和 `UserMemoryEmbeddingStore` 的实现切换到 MyBatis-Plus 的查询与更新 API。
+  - 修复了登录接口响应中缺失 `token` 的回归问题；同时把测试环境缓存切回 `simple`，避免本地 Maven 验证强依赖 Redis。
+- 验证结果：
+  - 已在 `services/api` 中通过 `mvn -DskipTests compile`，确认 API 模块可基于新的 MyBatis-Plus 基线完成编译。
+  - 已通过定向 Maven 测试确认认证响应结构恢复，且核心 CRUD 路径可以运行到业务层；但缩小范围后的测试仍暴露出分页响应断言和未迁移持久层区域的既有失败。
+- 未完成事项：
+  - 继续完成仍在使用 `JdbcTemplate` 的后台、治理、运维和快照相关类的 JDBC 到 MyBatis 迁移。
+  - 在剩余持久层迁移完成后，对齐分页响应与测试断言之间的差异，并重新运行 `services/api` 全量 Maven 测试。
+
 ### 引入 Flyway 数据库迁移
 
 - 变更类型：功能修复。

@@ -1,73 +1,63 @@
 package com.bizsage.api.memory;
 
-import java.sql.Timestamp;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
-import org.springframework.jdbc.core.JdbcTemplate;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 
 @Service
 public class UserMemoryEmbeddingStore {
-  private final JdbcTemplate jdbcTemplate;
+  private final UserMemoryEmbeddingMapper embeddingMapper;
 
-  public UserMemoryEmbeddingStore(JdbcTemplate jdbcTemplate) {
-    this.jdbcTemplate = jdbcTemplate;
+  public UserMemoryEmbeddingStore(UserMemoryEmbeddingMapper embeddingMapper) {
+    this.embeddingMapper = embeddingMapper;
   }
 
   public void save(long userMemoryProfileId, long userId, String memoryText, long sourceConversationId, long sourceMessageId) {
-    jdbcTemplate.update("""
-        insert into user_memory_embeddings
-          (user_memory_profile_id, user_id, memory_text, embedding_status, source_conversation_id, source_message_id, status)
-        values (?, ?, ?, 'PENDING', ?, ?, 'ACTIVE')
-        """, userMemoryProfileId, userId, memoryText, sourceConversationId, sourceMessageId);
+    UserMemoryEmbedding embedding = new UserMemoryEmbedding();
+    embedding.setUserMemoryProfileId(userMemoryProfileId);
+    embedding.setUserId(userId);
+    embedding.setMemoryText(memoryText);
+    embedding.setEmbeddingStatus("PENDING");
+    embedding.setSourceConversationId(sourceConversationId);
+    embedding.setSourceMessageId(sourceMessageId);
+    embedding.setStatus("ACTIVE");
+    embeddingMapper.insert(embedding);
   }
 
-  /**
-   * List pending memory embeddings that need to be synced to Qdrant.
-   *
-   * @param limit maximum number of records to return
-   * @return list of pending embedding records as maps
-   */
-  public List<java.util.Map<String, Object>> listPending(int limit) {
-    return jdbcTemplate.queryForList("""
-        select id, user_memory_profile_id, user_id, memory_text,
-               source_conversation_id, source_message_id
-          from user_memory_embeddings
-         where embedding_status = 'PENDING'
-           and status = 'ACTIVE'
-         order by id asc
-         limit ?
-        """, limit);
+  public List<Map<String, Object>> listPending(int limit) {
+    return embeddingMapper.selectList(new LambdaQueryWrapper<UserMemoryEmbedding>()
+        .eq(UserMemoryEmbedding::getEmbeddingStatus, "PENDING")
+        .eq(UserMemoryEmbedding::getStatus, "ACTIVE")
+        .orderByAsc(UserMemoryEmbedding::getId)
+        .last("limit " + limit)).stream()
+        .map(item -> {
+          Map<String, Object> row = new LinkedHashMap<>();
+          row.put("id", item.getId());
+          row.put("user_memory_profile_id", item.getUserMemoryProfileId());
+          row.put("user_id", item.getUserId());
+          row.put("memory_text", item.getMemoryText());
+          row.put("source_conversation_id", item.getSourceConversationId());
+          row.put("source_message_id", item.getSourceMessageId());
+          return row;
+        })
+        .toList();
   }
 
-  /**
-   * Mark an embedding record as synced after successful Qdrant upsert.
-   *
-   * @param id the embedding record ID
-   * @param qdrantPointId the assigned Qdrant point ID
-   */
   public void markSynced(long id, String qdrantPointId) {
-    jdbcTemplate.update("""
-        update user_memory_embeddings
-           set embedding_status = 'SYNCED',
-               qdrant_point_id = ?,
-               last_synced_at = ?,
-               update_time = current_timestamp
-         where id = ?
-        """, qdrantPointId, Timestamp.from(Instant.now()), id);
+    embeddingMapper.update(null, new LambdaUpdateWrapper<UserMemoryEmbedding>()
+        .eq(UserMemoryEmbedding::getId, id)
+        .set(UserMemoryEmbedding::getEmbeddingStatus, "SYNCED")
+        .set(UserMemoryEmbedding::getQdrantPointId, qdrantPointId)
+        .set(UserMemoryEmbedding::getLastSyncedAt, Instant.now()));
   }
 
-  /**
-   * Mark an embedding record as failed after a sync error.
-   *
-   * @param id the embedding record ID
-   */
   public void markFailed(long id) {
-    jdbcTemplate.update("""
-        update user_memory_embeddings
-           set embedding_status = 'FAILED',
-               update_time = current_timestamp
-         where id = ?
-        """, id);
+    embeddingMapper.update(null, new LambdaUpdateWrapper<UserMemoryEmbedding>()
+        .eq(UserMemoryEmbedding::getId, id)
+        .set(UserMemoryEmbedding::getEmbeddingStatus, "FAILED"));
   }
 }

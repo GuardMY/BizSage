@@ -1,56 +1,51 @@
 package com.bizsage.api.conversations;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.bizsage.api.users.UserAccount;
+import com.bizsage.api.users.UserMapper;
 import java.util.List;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Service;
-import java.sql.PreparedStatement;
-import java.sql.Statement;
 
 @Service
 public class ConversationStore {
-  private final JdbcTemplate jdbcTemplate;
+  private final ConversationMapper conversationMapper;
+  private final UserMapper userMapper;
 
-  public ConversationStore(JdbcTemplate jdbcTemplate) {
-    this.jdbcTemplate = jdbcTemplate;
+  public ConversationStore(ConversationMapper conversationMapper, UserMapper userMapper) {
+    this.conversationMapper = conversationMapper;
+    this.userMapper = userMapper;
   }
 
   public Conversation create(String ownerUsername, String title, String regionId, String industryId) {
-    Long userId = jdbcTemplate.queryForObject("select id from users where username = ?", Long.class, ownerUsername);
-    KeyHolder keyHolder = new GeneratedKeyHolder();
-    jdbcTemplate.update(connection -> {
-      PreparedStatement ps = connection.prepareStatement("""
-          insert into conversations (user_id, owner_username, title, status, region_id, industry_id, source_id, weight)
-          values (?, ?, ?, 'ACTIVE', ?, ?, 'user', 1.0)
-          """, Statement.RETURN_GENERATED_KEYS);
-      ps.setLong(1, userId == null ? 0 : userId);
-      ps.setString(2, ownerUsername);
-      ps.setString(3, title);
-      ps.setString(4, regionId);
-      ps.setString(5, industryId);
-      return ps;
-    }, keyHolder);
-    return findForOwner(ownerUsername, generatedId(keyHolder));
+    UserAccount user = userMapper.selectOne(new LambdaQueryWrapper<UserAccount>()
+        .eq(UserAccount::getUsername, ownerUsername)
+        .last("limit 1"));
+    Conversation conversation = new Conversation();
+    conversation.setUserId(user == null ? 0L : user.getId());
+    conversation.setOwnerUsername(ownerUsername);
+    conversation.setTitle(title);
+    conversation.setStatus("ACTIVE");
+    conversation.setRegionId(regionId);
+    conversation.setIndustryId(industryId);
+    conversation.setSourceId("user");
+    conversation.setWeight(1.0D);
+    conversationMapper.insert(conversation);
+    return findForOwner(ownerUsername, conversation.id());
   }
 
   public List<Conversation> listFor(String ownerUsername) {
-    return jdbcTemplate.query("""
-        select id, owner_username, title, status, region_id, industry_id, source_id, weight
-          from conversations
-         where owner_username = ?
-           and status <> 'DELETED'
-         order by id
-        """, mapper(), ownerUsername);
+    return conversationMapper.selectList(new LambdaQueryWrapper<Conversation>()
+        .eq(Conversation::getOwnerUsername, ownerUsername)
+        .ne(Conversation::getStatus, "DELETED")
+        .orderByAsc(Conversation::getId));
   }
 
   public Conversation archive(String ownerUsername, long id) {
-    int updated = jdbcTemplate.update("""
-        update conversations
-           set status = 'ARCHIVED', update_time = current_timestamp
-         where id = ? and owner_username = ?
-        """, id, ownerUsername);
+    int updated = conversationMapper.update(null, new LambdaUpdateWrapper<Conversation>()
+        .eq(Conversation::getId, id)
+        .eq(Conversation::getOwnerUsername, ownerUsername)
+        .set(Conversation::getStatus, "ARCHIVED"));
     if (updated == 0) {
       throw new IllegalArgumentException("conversation not found");
     }
@@ -62,11 +57,11 @@ public class ConversationStore {
   }
 
   public Conversation softDelete(String ownerUsername, long id) {
-    int updated = jdbcTemplate.update("""
-        update conversations
-           set status = 'DELETED', update_time = current_timestamp
-         where id = ? and owner_username = ? and status = 'ARCHIVED'
-        """, id, ownerUsername);
+    int updated = conversationMapper.update(null, new LambdaUpdateWrapper<Conversation>()
+        .eq(Conversation::getId, id)
+        .eq(Conversation::getOwnerUsername, ownerUsername)
+        .eq(Conversation::getStatus, "ARCHIVED")
+        .set(Conversation::getStatus, "DELETED"));
     if (updated == 0) {
       throw new IllegalArgumentException("conversation not found");
     }
@@ -74,31 +69,13 @@ public class ConversationStore {
   }
 
   private Conversation findForOwner(String ownerUsername, long id) {
-    return jdbcTemplate.query("""
-        select id, owner_username, title, status, region_id, industry_id, source_id, weight
-          from conversations
-         where id = ? and owner_username = ?
-        """, mapper(), id, ownerUsername).stream()
-        .findFirst()
-        .orElseThrow(() -> new IllegalArgumentException("conversation not found"));
-  }
-
-  private RowMapper<Conversation> mapper() {
-    return (rs, rowNum) -> new Conversation(
-        rs.getLong("id"),
-        rs.getString("owner_username"),
-        rs.getString("title"),
-        rs.getString("status"),
-        rs.getString("region_id"),
-        rs.getString("industry_id"),
-        rs.getString("source_id"),
-        rs.getDouble("weight"));
-  }
-
-  private long generatedId(KeyHolder keyHolder) {
-    if (keyHolder.getKeys() != null && keyHolder.getKeys().get("id") instanceof Number id) {
-      return id.longValue();
+    Conversation conversation = conversationMapper.selectOne(new LambdaQueryWrapper<Conversation>()
+        .eq(Conversation::getId, id)
+        .eq(Conversation::getOwnerUsername, ownerUsername)
+        .last("limit 1"));
+    if (conversation == null) {
+      throw new IllegalArgumentException("conversation not found");
     }
-    return keyHolder.getKey().longValue();
+    return conversation;
   }
 }

@@ -1,48 +1,37 @@
 package com.bizsage.api.memory;
 
-import java.sql.PreparedStatement;
-import java.sql.Statement;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Service;
 
 @Service
 public class UserMemoryStore {
-  private final JdbcTemplate jdbcTemplate;
+  private final UserMemoryMapper userMemoryMapper;
 
-  public UserMemoryStore(JdbcTemplate jdbcTemplate) {
-    this.jdbcTemplate = jdbcTemplate;
+  public UserMemoryStore(UserMemoryMapper userMemoryMapper) {
+    this.userMemoryMapper = userMemoryMapper;
   }
 
   public List<UserMemoryProfile> activeMemoriesForUser(long userId) {
-    return jdbcTemplate.query("""
-        select id, user_id, memory_category, memory_key, memory_value, value_type, confidence,
-               source_conversation_id, source_message_id, last_used_at, expires_at, status
-          from user_memory_profiles
-         where user_id = ?
-           and status = 'ACTIVE'
-           and (expires_at is null or expires_at > current_timestamp)
-         order by confidence desc, id asc
-        """, mapper(), userId);
+    return userMemoryMapper.selectList(new LambdaQueryWrapper<UserMemoryProfile>()
+        .eq(UserMemoryProfile::getUserId, userId)
+        .eq(UserMemoryProfile::getStatus, "ACTIVE")
+        .and(w -> w.isNull(UserMemoryProfile::getExpiresAt).or().gt(UserMemoryProfile::getExpiresAt, Instant.now()))
+        .orderByDesc(UserMemoryProfile::getConfidence)
+        .orderByAsc(UserMemoryProfile::getId));
   }
 
   public void markUsed(List<Long> memoryIds) {
     if (memoryIds.isEmpty()) {
       return;
     }
-    for (Long id : memoryIds) {
-      jdbcTemplate.update("""
-          update user_memory_profiles
-             set last_used_at = current_timestamp,
-                 update_time = current_timestamp
-           where id = ?
-          """, id);
-    }
+    Instant now = Instant.now();
+    memoryIds.forEach(id -> userMemoryMapper.update(null, new LambdaUpdateWrapper<UserMemoryProfile>()
+        .eq(UserMemoryProfile::getId, id)
+        .set(UserMemoryProfile::getLastUsedAt, now)));
   }
 
   public UserMemoryProfile saveOrRefresh(
@@ -55,59 +44,46 @@ public class UserMemoryStore {
       long sourceConversationId,
       long sourceMessageId,
       boolean structured) {
-    List<Long> existing = jdbcTemplate.query("""
-        select id
-          from user_memory_profiles
-         where user_id = ? and memory_category = ? and memory_key = ? and status = 'ACTIVE'
-        """, (rs, rowNum) -> rs.getLong("id"), userId, category, key);
-    if (!existing.isEmpty()) {
-      jdbcTemplate.update("""
-          update user_memory_profiles
-             set memory_value = ?,
-                 value_type = ?,
-                 confidence = ?,
-                 source_conversation_id = ?,
-                 source_message_id = ?,
-                 expires_at = ?,
-                 update_time = current_timestamp
-           where id = ?
-          """, value, valueType, confidence, sourceConversationId, sourceMessageId, expiryFor(category), existing.getFirst());
-      return get(existing.getFirst());
+    UserMemoryProfile existing = userMemoryMapper.selectOne(new LambdaQueryWrapper<UserMemoryProfile>()
+        .eq(UserMemoryProfile::getUserId, userId)
+        .eq(UserMemoryProfile::getCategory, category)
+        .eq(UserMemoryProfile::getKey, key)
+        .eq(UserMemoryProfile::getStatus, "ACTIVE")
+        .last("limit 1"));
+    Instant expiresAt = expiryFor(category);
+    if (existing != null) {
+      userMemoryMapper.update(null, new LambdaUpdateWrapper<UserMemoryProfile>()
+          .eq(UserMemoryProfile::getId, existing.getId())
+          .set(UserMemoryProfile::getValue, value)
+          .set(UserMemoryProfile::getValueType, valueType)
+          .set(UserMemoryProfile::getConfidence, confidence)
+          .set(UserMemoryProfile::getSourceConversationId, sourceConversationId)
+          .set(UserMemoryProfile::getSourceMessageId, sourceMessageId)
+          .set(UserMemoryProfile::getExpiresAt, expiresAt));
+      return get(existing.getId());
     }
-    KeyHolder keyHolder = new GeneratedKeyHolder();
-    jdbcTemplate.update(connection -> {
-      PreparedStatement ps = connection.prepareStatement("""
-          insert into user_memory_profiles
-            (user_id, memory_category, memory_key, memory_value, value_type, confidence,
-             source_conversation_id, source_message_id, expires_at, status)
-          values (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
-          """, Statement.RETURN_GENERATED_KEYS);
-      ps.setLong(1, userId);
-      ps.setString(2, category);
-      ps.setString(3, key);
-      ps.setString(4, value);
-      ps.setString(5, valueType);
-      ps.setDouble(6, confidence);
-      ps.setLong(7, sourceConversationId);
-      ps.setLong(8, sourceMessageId);
-      Instant expiresAt = expiryFor(category);
-      if (expiresAt == null) {
-        ps.setObject(9, null);
-      } else {
-        ps.setTimestamp(9, java.sql.Timestamp.from(expiresAt));
-      }
-      return ps;
-    }, keyHolder);
-    return get(generatedId(keyHolder));
+
+    UserMemoryProfile profile = new UserMemoryProfile();
+    profile.setUserId(userId);
+    profile.setCategory(category);
+    profile.setKey(key);
+    profile.setValue(value);
+    profile.setValueType(valueType);
+    profile.setConfidence(confidence);
+    profile.setSourceConversationId(sourceConversationId);
+    profile.setSourceMessageId(sourceMessageId);
+    profile.setExpiresAt(expiresAt);
+    profile.setStatus("ACTIVE");
+    userMemoryMapper.insert(profile);
+    return get(profile.getId());
   }
 
   private UserMemoryProfile get(long id) {
-    return jdbcTemplate.query("""
-        select id, user_id, memory_category, memory_key, memory_value, value_type, confidence,
-               source_conversation_id, source_message_id, last_used_at, expires_at, status
-          from user_memory_profiles
-         where id = ?
-        """, mapper(), id).stream().findFirst().orElseThrow();
+    UserMemoryProfile profile = userMemoryMapper.selectById(id);
+    if (profile == null) {
+      throw new IllegalArgumentException("memory profile not found");
+    }
+    return profile;
   }
 
   private Instant expiryFor(String category) {
@@ -119,28 +95,5 @@ public class UserMemoryStore {
       case "LEARNING_PROGRESS" -> Instant.now().plus(180, ChronoUnit.DAYS);
       default -> null;
     };
-  }
-
-  private RowMapper<UserMemoryProfile> mapper() {
-    return (rs, rowNum) -> new UserMemoryProfile(
-        rs.getLong("id"),
-        rs.getLong("user_id"),
-        rs.getString("memory_category"),
-        rs.getString("memory_key"),
-        rs.getString("memory_value"),
-        rs.getString("value_type"),
-        rs.getDouble("confidence"),
-        (Long) rs.getObject("source_conversation_id"),
-        (Long) rs.getObject("source_message_id"),
-        rs.getTimestamp("last_used_at") == null ? null : rs.getTimestamp("last_used_at").toInstant(),
-        rs.getTimestamp("expires_at") == null ? null : rs.getTimestamp("expires_at").toInstant(),
-        rs.getString("status"));
-  }
-
-  private long generatedId(KeyHolder keyHolder) {
-    if (keyHolder.getKeys() != null && keyHolder.getKeys().get("id") instanceof Number id) {
-      return id.longValue();
-    }
-    return keyHolder.getKey().longValue();
   }
 }

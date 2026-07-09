@@ -1,44 +1,36 @@
 package com.bizsage.api.knowledge;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.util.ArrayList;
 import java.util.List;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Service;
-import java.sql.PreparedStatement;
-import java.sql.Statement;
 
 @Service
 public class KnowledgeStore {
-  private final JdbcTemplate jdbcTemplate;
+  private final KnowledgeMapper knowledgeMapper;
 
-  public KnowledgeStore(JdbcTemplate jdbcTemplate) {
-    this.jdbcTemplate = jdbcTemplate;
+  public KnowledgeStore(KnowledgeMapper knowledgeMapper) {
+    this.knowledgeMapper = knowledgeMapper;
   }
 
   public KnowledgeItem importItem(ImportKnowledgeRequest request) {
-    KeyHolder keyHolder = new GeneratedKeyHolder();
-    jdbcTemplate.update(connection -> {
-      PreparedStatement ps = connection.prepareStatement("""
-          insert into knowledge_items
-            (title, content, confidence, link_id, region_id, industry_id, source_id, weight)
-          values (?, ?, 0.85, ?, ?, ?, ?, 0.85)
-          """, Statement.RETURN_GENERATED_KEYS);
-      ps.setString(1, request.title());
-      ps.setString(2, request.content());
-      ps.setString(3, request.linkId());
-      ps.setString(4, request.regionId());
-      ps.setString(5, request.industryId());
-      ps.setString(6, request.sourceId());
-      return ps;
-    }, keyHolder);
-    return find(generatedId(keyHolder));
+    KnowledgeItem item = new KnowledgeItem();
+    item.setTitle(request.title());
+    item.setContent(request.content());
+    item.setConfidence(0.85D);
+    item.setLinkId(request.linkId());
+    item.setRegionId(request.regionId());
+    item.setIndustryId(request.industryId());
+    item.setSourceId(request.sourceId());
+    item.setWeight(0.85D);
+    item.setEntitlement("FREE");
+    knowledgeMapper.insert(item);
+    return find(item.id());
   }
 
   public List<KnowledgeItem> list() {
-    return jdbcTemplate.query(baseSelect() + " order by id", mapper());
+    return knowledgeMapper.selectList(new LambdaQueryWrapper<KnowledgeItem>()
+        .orderByAsc(KnowledgeItem::getId));
   }
 
   /**
@@ -47,52 +39,22 @@ public class KnowledgeStore {
    * for that dimension.
    */
   public List<KnowledgeItem> listScoped(String regionId, String industryId) {
-    StringBuilder sql = new StringBuilder(baseSelect()).append(" where 1=1");
-    List<Object> params = new ArrayList<>();
+    LambdaQueryWrapper<KnowledgeItem> wrapper = new LambdaQueryWrapper<>();
     if (regionId != null) {
-      sql.append(" and region_id = ?");
-      params.add(regionId);
+      wrapper.eq(KnowledgeItem::getRegionId, regionId);
     }
     if (industryId != null) {
-      sql.append(" and industry_id = ?");
-      params.add(industryId);
+      wrapper.eq(KnowledgeItem::getIndustryId, industryId);
     }
-    sql.append(" order by id");
-    return jdbcTemplate.query(sql.toString(), mapper(), params.toArray());
+    wrapper.orderByAsc(KnowledgeItem::getId);
+    return knowledgeMapper.selectList(wrapper);
   }
 
   private KnowledgeItem find(long id) {
-    return jdbcTemplate.query(baseSelect() + " where id = ?", mapper(), id).stream()
-        .findFirst()
-        .orElseThrow(() -> new IllegalArgumentException("knowledge item not found"));
-  }
-
-  private String baseSelect() {
-    return """
-        select id, title, content, industry_id, region_id, link_id, source_id,
-               coalesce(source_url, '') as source_url, confidence, weight
-          from knowledge_items
-        """;
-  }
-
-  private RowMapper<KnowledgeItem> mapper() {
-    return (rs, rowNum) -> new KnowledgeItem(
-        rs.getLong("id"),
-        rs.getString("title"),
-        rs.getString("content"),
-        rs.getString("industry_id"),
-        rs.getString("region_id"),
-        rs.getString("link_id"),
-        rs.getString("source_id"),
-        rs.getString("source_url"),
-        rs.getDouble("confidence"),
-        rs.getDouble("weight"));
-  }
-
-  private long generatedId(KeyHolder keyHolder) {
-    if (keyHolder.getKeys() != null && keyHolder.getKeys().get("id") instanceof Number id) {
-      return id.longValue();
+    KnowledgeItem item = knowledgeMapper.selectById(id);
+    if (item == null) {
+      throw new IllegalArgumentException("knowledge item not found");
     }
-    return keyHolder.getKey().longValue();
+    return item;
   }
 }

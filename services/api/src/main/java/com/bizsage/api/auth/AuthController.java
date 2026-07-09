@@ -46,6 +46,7 @@ public class AuthController {
 
     return ApiResponse.ok(
         new LoginResponse(
+            token,
             user.username(),
             user.role(),
             user.regionId(),
@@ -83,6 +84,7 @@ public class AuthController {
   }
 
   record LoginResponse(
+      String token,
       String username,
       Role role,
       String regionId,

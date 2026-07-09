@@ -1,46 +1,41 @@
 package com.bizsage.api.intelligence;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.bizsage.api.users.UserAccount;
 import java.util.List;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Service;
-import java.sql.PreparedStatement;
-import java.sql.Statement;
 
 @Service
 public class PaidIntelligenceStore {
-  private final JdbcTemplate jdbcTemplate;
+  private final PaidIntelligenceMapper paidIntelligenceMapper;
 
-  public PaidIntelligenceStore(JdbcTemplate jdbcTemplate) {
-    this.jdbcTemplate = jdbcTemplate;
+  public PaidIntelligenceStore(PaidIntelligenceMapper paidIntelligenceMapper) {
+    this.paidIntelligenceMapper = paidIntelligenceMapper;
   }
 
   public PaidIntelligenceItem create(CreateIntelligenceRequest request) {
-    KeyHolder keyHolder = new GeneratedKeyHolder();
-    jdbcTemplate.update(connection -> {
-      PreparedStatement ps = connection.prepareStatement("""
-          insert into paid_intelligence
-            (title, content, url, status, confidence, entitlement, link_id, region_id, industry_id, source_id, weight, content_hash)
-          values (?, ?, ?, 'PENDING', 0.75, 'PAID', ?, ?, ?, ?, 0.9, ?)
-          """, Statement.RETURN_GENERATED_KEYS);
-      ps.setString(1, request.title());
-      ps.setString(2, request.content());
-      ps.setString(3, request.url());
-      ps.setString(4, request.linkId());
-      ps.setString(5, request.regionId());
-      ps.setString(6, request.industryId());
-      ps.setString(7, request.sourceId());
-      ps.setString(8, IntelligenceStore.sha256(request.content()));
-      return ps;
-    }, keyHolder);
-    return find(generatedId(keyHolder));
+    PaidIntelligenceItem item = new PaidIntelligenceItem();
+    item.setTitle(request.title());
+    item.setContent(request.content());
+    item.setUrl(request.url());
+    item.setStatus("PENDING");
+    item.setConfidence(0.75D);
+    item.setEntitlement("PAID");
+    item.setLinkId(request.linkId());
+    item.setRegionId(request.regionId());
+    item.setIndustryId(request.industryId());
+    item.setSourceId(request.sourceId());
+    item.setWeight(0.9D);
+    item.setContentHash(IntelligenceStore.sha256(request.content()));
+    paidIntelligenceMapper.insert(item);
+    return find(item.id());
   }
 
   public PaidIntelligenceItem approve(long id) {
-    int updated = jdbcTemplate.update("update paid_intelligence set status = 'APPROVED', update_time = current_timestamp where id = ?", id);
+    int updated = paidIntelligenceMapper.update(null, new LambdaUpdateWrapper<PaidIntelligenceItem>()
+        .eq(PaidIntelligenceItem::getId, id)
+        .set(PaidIntelligenceItem::getStatus, "APPROVED"));
     if (updated == 0) {
       throw new IllegalArgumentException("paid intelligence not found");
     }
@@ -49,52 +44,24 @@ public class PaidIntelligenceStore {
 
   public List<PaidIntelligenceItem> listFor(UserAccount user) {
     if (user.role().name().equals("SUPER_ADMIN") || user.role().name().equals("OPERATOR")) {
-      return jdbcTemplate.query(baseSelect() + " order by id", mapper());
+      return paidIntelligenceMapper.selectList(new LambdaQueryWrapper<PaidIntelligenceItem>()
+          .orderByAsc(PaidIntelligenceItem::getId));
     }
     if (!"SEED_PAID".equals(user.membershipLevel())) {
       return List.of();
     }
-    return jdbcTemplate.query(baseSelect() + """
-         where status = 'APPROVED'
-           and region_id = ?
-           and industry_id = ?
-         order by id
-        """, mapper(), user.regionId(), user.industryId());
+    return paidIntelligenceMapper.selectList(new LambdaQueryWrapper<PaidIntelligenceItem>()
+        .eq(PaidIntelligenceItem::getStatus, "APPROVED")
+        .eq(PaidIntelligenceItem::getRegionId, user.regionId())
+        .eq(PaidIntelligenceItem::getIndustryId, user.industryId())
+        .orderByAsc(PaidIntelligenceItem::getId));
   }
 
   private PaidIntelligenceItem find(long id) {
-    return jdbcTemplate.query(baseSelect() + " where id = ?", mapper(), id).stream()
-        .findFirst()
-        .orElseThrow(() -> new IllegalArgumentException("paid intelligence not found"));
-  }
-
-  private String baseSelect() {
-    return """
-        select id, title, content, url, status, confidence, link_id, region_id, industry_id, source_id, weight, entitlement
-          from paid_intelligence
-        """;
-  }
-
-  private RowMapper<PaidIntelligenceItem> mapper() {
-    return (rs, rowNum) -> new PaidIntelligenceItem(
-        rs.getLong("id"),
-        rs.getString("title"),
-        rs.getString("content"),
-        rs.getString("url"),
-        rs.getString("status"),
-        rs.getDouble("confidence"),
-        rs.getString("link_id"),
-        rs.getString("region_id"),
-        rs.getString("industry_id"),
-        rs.getString("source_id"),
-        rs.getDouble("weight"),
-        rs.getString("entitlement"));
-  }
-
-  private long generatedId(KeyHolder keyHolder) {
-    if (keyHolder.getKeys() != null && keyHolder.getKeys().get("id") instanceof Number id) {
-      return id.longValue();
+    PaidIntelligenceItem item = paidIntelligenceMapper.selectById(id);
+    if (item == null) {
+      throw new IllegalArgumentException("paid intelligence not found");
     }
-    return keyHolder.getKey().longValue();
+    return item;
   }
 }

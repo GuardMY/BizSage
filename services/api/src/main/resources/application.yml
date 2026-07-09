@@ -36,6 +36,12 @@ spring:
       time-to-live: 5m
       cache-null-values: false
 
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+
 bizsage:
   jwt:
     secret: ${JWT_SECRET}
