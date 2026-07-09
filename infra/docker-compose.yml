@@ -1,85 +1,16 @@
 name: bizsage
 
-# ═══════════════════════════════════════════════════════════
-# 生产部署：docker compose up -d
-# 前置：cp ../.env.example .env 并填入真实值
-# ═══════════════════════════════════════════════════════════
+# Production deployment:
+#   docker compose up -d
+# Prerequisite:
+#   Copy ../.env.example to .env and fill in real values.
+#
+# This compose file only deploys BizSage-owned services and nginx. Middleware
+# such as MySQL, Redis, and Qdrant must be deployed separately and exposed
+# through the environment variables used below.
 
 services:
-  # ── Infrastructure ──────────────────────────────────────
-  mysql:
-    image: mysql:8.0.45-bookworm
-    container_name: bizsage-mysql
-    ports:
-      - "${MYSQL_PORT:-13306}:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-bizsage}
-      MYSQL_USER: ${MYSQL_USER:-bizsage}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ./mysql/init:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost",
-             "-u${MYSQL_USER:-bizsage}", "-p${MYSQL_PASSWORD}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    restart: always
-    networks:
-      - bizsage
-    deploy:
-      resources:
-        limits:
-          memory: 512m
-          cpus: '1'
-        reservations:
-          memory: 256m
-
-  redis:
-    image: redis:7.2.12-alpine
-    container_name: bizsage-redis
-    ports:
-      - "${REDIS_PORT:-16379}:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    restart: always
-    networks:
-      - bizsage
-    deploy:
-      resources:
-        limits:
-          memory: 256m
-          cpus: '0.5'
-
-  qdrant:
-    image: qdrant/qdrant:v1.18
-    container_name: bizsage-qdrant
-    ports:
-      - "${QDRANT_PORT:-16333}:6333"
-    volumes:
-      - qdrant_data:/qdrant/storage
-    healthcheck:
-      test: ["CMD-SHELL", "timeout 3 bash -c '</dev/tcp/localhost/6333'"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    restart: always
-    networks:
-      - bizsage
-    deploy:
-      resources:
-        limits:
-          memory: 512m
-          cpus: '1'
-        reservations:
-          memory: 256m
-
-  # ── Application Services ────────────────────────────────
+  # Application services
   api:
     build:
       context: ../services/api
@@ -87,24 +18,19 @@ services:
       args:
         BUILDKIT_INLINE_CACHE: "1"
     container_name: bizsage-api
-    # 不对外暴露端口 — 统一通过 nginx 反向代理访问
+    # API is exposed through nginx only.
     # ports:
     #   - "${API_PORT:-8080}:8080"
     environment:
       BIZSAGE_PROFILE: prod
-      DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-bizsage}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+      DB_URL: "${DB_URL}"
       DB_USERNAME: ${MYSQL_USER:-bizsage}
-      DB_PASSWORD: ${MYSQL_PASSWORD}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      JWT_SECRET: ${JWT_SECRET}
-      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY}
+      DB_PASSWORD: "${MYSQL_PASSWORD}"
+      REDIS_HOST: "${REDIS_HOST}"
+      REDIS_PORT: "${REDIS_PORT:-6379}"
+      JWT_SECRET: "${JWT_SECRET}"
+      DATA_ENCRYPTION_KEY: "${DATA_ENCRYPTION_KEY}"
       AI_WORKER_URL: http://ai-worker:8100
-    depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     restart: always
     networks:
       - bizsage
@@ -129,14 +55,11 @@ services:
         BUILDKIT_INLINE_CACHE: "1"
     container_name: bizsage-ai-worker
     environment:
-      LLM_PROVIDER: ${LLM_PROVIDER}
-      OPENAI_COMPATIBLE_BASE_URL: ${OPENAI_COMPATIBLE_BASE_URL}
-      OPENAI_COMPATIBLE_API_KEY: ${OPENAI_COMPATIBLE_API_KEY}
-      OPENAI_COMPATIBLE_MODEL: ${OPENAI_COMPATIBLE_MODEL}
-      QDRANT_URL: http://qdrant:6333
-    depends_on:
-      qdrant:
-        condition: service_healthy
+      LLM_PROVIDER: "${LLM_PROVIDER}"
+      OPENAI_COMPATIBLE_BASE_URL: "${OPENAI_COMPATIBLE_BASE_URL}"
+      OPENAI_COMPATIBLE_API_KEY: "${OPENAI_COMPATIBLE_API_KEY}"
+      OPENAI_COMPATIBLE_MODEL: "${OPENAI_COMPATIBLE_MODEL}"
+      QDRANT_URL: "${QDRANT_URL}"
     restart: always
     networks:
       - bizsage
@@ -187,13 +110,13 @@ services:
       dockerfile: Dockerfile
       args:
         BUILDKIT_INLINE_CACHE: "1"
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+        NEXT_PUBLIC_API_BASE_URL: "${NEXT_PUBLIC_API_BASE_URL}"
     container_name: bizsage-web
-    # 不对外暴露端口 — 统一通过 nginx 反向代理访问
+    # Web is exposed through nginx only.
     # ports:
     #   - "${WEB_PORT:-3000}:3000"
     environment:
-      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+      NEXT_PUBLIC_API_BASE_URL: "${NEXT_PUBLIC_API_BASE_URL}"
     depends_on:
       api:
         condition: service_healthy
@@ -213,7 +136,7 @@ services:
         max-size: "50m"
         max-file: "3"
 
-  # ── Reverse Proxy ────────────────────────────────────
+  # Reverse proxy
   nginx:
     image: nginx:1.29.4-alpine3.23
     container_name: bizsage-nginx
@@ -240,12 +163,6 @@ services:
         max-size: "20m"
         max-file: "3"
 
-# ── Networks ─────────────────────────────────────────────
 networks:
   bizsage:
     driver: bridge
-
-# ── Named Volumes ────────────────────────────────────────
-volumes:
-  mysql_data:
-  qdrant_data:

@@ -2,6 +2,35 @@
 
 ## 2026-07-09
 
+### User Memory Profile Compile Fix
+
+- Change type: functional repair.
+- Affected modules: `services/api` and both change logs.
+- Main changes:
+  - Fixed the `UserMemoryProfile` all-arguments constructor to assign `key` and `value` parameters to the mapped `memoryKey` and `memoryValue` fields.
+  - Restored API compilation after the memory profile fields were renamed for MyBatis-Plus column mapping.
+- Verification results:
+  - Verified with `mvn -DskipTests clean compile` in `services/api`; compilation succeeded.
+- Unfinished items:
+  - None.
+
+### Compose Middleware Extraction
+
+- Change type: deployment configuration change.
+- Affected modules: `infra/docker-compose.yml`, `.env.example`, and both change logs.
+- Main changes:
+  - Removed the in-compose MySQL, Redis, and Qdrant service definitions from `infra/docker-compose.yml`, leaving only BizSage-owned services (`api`, `ai-worker`, `collector`, `web`) and `nginx`.
+  - Removed the MySQL and Qdrant named volumes that were only used by the extracted middleware services.
+  - Switched API and AI worker middleware connection settings to environment-provided external addresses via `DB_URL`, `REDIS_HOST`, `REDIS_PORT`, and `QDRANT_URL`.
+  - Updated `.env.example` with external middleware defaults and the new `DB_URL` and `NGINX_PORT` examples.
+- Verification results:
+  - Used CodeGraph to inspect `infra/docker-compose.yml` before editing and confirmed no indexed file depends on it.
+  - Parsed `infra/docker-compose.yml` with PyYAML; the resulting service list is `api`, `ai-worker`, `collector`, `web`, and `nginx`, with no `volumes` section.
+  - Searched the compose file to confirm no `mysql`, `redis`, or `qdrant` service blocks and no `mysql_data` or `qdrant_data` volumes remain.
+- Unfinished items:
+  - `docker compose config` could not be executed in this environment because the Docker CLI is not installed.
+  - Target deployments must provide separately deployed MySQL, Redis, and Qdrant endpoints through the `.env` values before starting the retained services.
+
 ### Core Code Chinese Comment Enrichment
 
 - Change type: documentation-only code comments.

@@ -34,8 +34,8 @@ public class UserMemoryProfile {
     this.id = id;
     this.userId = userId;
     this.category = category;
-    this.key = key;
-    this.value = value;
+    this.memoryKey = key;
+    this.memoryValue = value;
     this.valueType = valueType;
     this.confidence = confidence;
     this.sourceConversationId = sourceConversationId;

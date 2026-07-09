@@ -2,6 +2,35 @@
 
 ## 2026-07-09
 
+### 用户记忆 Profile 编译修复
+
+- 变更类型：功能修复。
+- 影响模块：`services/api` 和两份变更日志。
+- 主要变更：
+  - 修复 `UserMemoryProfile` 全参数构造函数，将 `key` 与 `value` 参数赋值到已映射的 `memoryKey` 与 `memoryValue` 字段。
+  - 在记忆 Profile 字段为 MyBatis-Plus 列映射重命名后，恢复 API 编译。
+- 验证结果：
+  - 已在 `services/api` 中执行 `mvn -DskipTests clean compile`；编译通过。
+- 未完成事项：
+  - 无。
+
+### Compose 中间件部署剥离
+
+- 变更类型：部署配置调整。
+- 影响模块：`infra/docker-compose.yml`、`.env.example` 和两份变更日志。
+- 主要变更：
+  - 从 `infra/docker-compose.yml` 中移除 MySQL、Redis、Qdrant 三个由 compose 直接部署的中间件服务，仅保留 BizSage 自有服务（`api`、`ai-worker`、`collector`、`web`）和 `nginx`。
+  - 删除仅供已剥离中间件使用的 MySQL 与 Qdrant 命名卷。
+  - 将 API 与 AI worker 的中间件连接地址改为通过环境变量提供，覆盖 `DB_URL`、`REDIS_HOST`、`REDIS_PORT` 和 `QDRANT_URL`。
+  - 更新 `.env.example`，补充外部中间件默认示例以及新的 `DB_URL`、`NGINX_PORT` 示例值。
+- 验证结果：
+  - 修改前已使用 CodeGraph 查看 `infra/docker-compose.yml`，确认没有其他索引文件依赖该 compose 文件。
+  - 已使用 PyYAML 解析 `infra/docker-compose.yml`；解析后的服务列表为 `api`、`ai-worker`、`collector`、`web` 和 `nginx`，且不再包含 `volumes` 段。
+  - 已检索 compose 文件，确认不再存在 `mysql`、`redis`、`qdrant` 服务块，也不再存在 `mysql_data` 或 `qdrant_data` 命名卷。
+- 未完成事项：
+  - 当前环境未安装 Docker CLI，因此无法执行 `docker compose config` 做 Docker 级配置校验。
+  - 目标部署环境启动保留服务前，仍需先单独部署 MySQL、Redis、Qdrant，并在 `.env` 中提供可访问的连接地址。
+
 ### 核心代码中文注释完善
 
 - 变更类型：仅代码注释的文档更新。
