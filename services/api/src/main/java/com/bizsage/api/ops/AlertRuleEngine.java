@@ -99,11 +99,11 @@ public class AlertRuleEngine {
 
   void evaluateCircuitBreakerState() {
     List<Map<String, Object>> openCircuits = jdbc.queryForList("""
-        select source_config_id, name from collection_source_configs
+        select id, name from admin_collection_sources
          where circuit_state = 'OPEN'
         """);
     for (Map<String, Object> row : openCircuits) {
-      Object configId = row.get("source_config_id");
+      Object configId = row.get("id");
       Object name = row.get("name");
       createAlert("P0", "circuit-breaker",
           String.format("Circuit breaker OPEN for collection source #%s (%s)",

@@ -2,6 +2,19 @@
 
 ## 2026-07-09
 
+### 告警规则采集源表对齐
+
+- 变更类型：功能修复。
+- 影响模块：`services/api` 和两份变更日志。
+- 主要变更：
+  - 将熔断告警评估器改为查询当前版本的 `admin_collection_sources` 表，不再访问已废弃的 `collection_source_configs` 表。
+  - 新增定向回归测试，验证当前采集源表结构中的 OPEN 熔断状态会生成告警。
+- 验证结果：
+  - 修改前已使用 CodeGraph 查看告警规则与采集源相关路径。
+  - 已在 `services/api` 中执行 `mvn -Dtest=AlertRuleEngineTest test`；定向告警规则回归测试通过。
+- 未完成事项：
+  - 无。
+
 ### Flyway 启动暂停与 MySQL 初始化基线
 
 - 变更类型：部署配置调整。

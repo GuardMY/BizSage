@@ -2,6 +2,19 @@
 
 ## 2026-07-09
 
+### Alert Rule Collection Source Table Alignment
+
+- Change type: functional repair.
+- Affected modules: `services/api` and both change logs.
+- Main changes:
+  - Updated the circuit-breaker alert evaluator to query the current `admin_collection_sources` table instead of the retired `collection_source_configs` table.
+  - Added a focused regression test proving open collection-source circuits create alerts from the current table shape.
+- Verification results:
+  - Used CodeGraph to inspect the alert rule and collection source paths before editing.
+  - Verified with `mvn -Dtest=AlertRuleEngineTest test` in `services/api`; the focused alert-rule regression passed.
+- Unfinished items:
+  - None.
+
 ### Flyway Startup Pause And MySQL Init Baseline
 
 - Change type: deployment configuration change.
