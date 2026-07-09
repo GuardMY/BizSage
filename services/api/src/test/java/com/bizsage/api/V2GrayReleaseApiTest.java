@@ -52,7 +52,11 @@ class V2GrayReleaseApiTest {
             "Generated from V2 gray-release knowledge and approved intelligence snapshots.",
             "PASSED",
             "Disclaimer: This report is for operational analysis only and is not legal, financial, or investment advice.",
-            List.of()));
+            List.of(),
+            null,
+            null,
+            List.of(),
+            java.util.Map.of()));
   }
 
   @Test

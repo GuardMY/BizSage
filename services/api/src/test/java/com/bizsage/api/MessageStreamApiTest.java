@@ -57,7 +57,11 @@ class MessageStreamApiTest {
         "Disclaimer: for business analysis only.",
         List.of(
             Map.of("category", "PREFERENCE", "key", "response_style", "value", "CONCLUSION_FIRST", "confidence", 0.95, "structured", true),
-            Map.of("category", "BUSINESS_FACT", "key", "channel_mix", "value", "DELIVERY_PLATFORM_HEAVY", "confidence", 0.90, "structured", true)));
+            Map.of("category", "BUSINESS_FACT", "key", "channel_mix", "value", "DELIVERY_PLATFORM_HEAVY", "confidence", 0.90, "structured", true)),
+        null,
+        null,
+        List.of(),
+        Map.of());
   }
 
   @BeforeEach
