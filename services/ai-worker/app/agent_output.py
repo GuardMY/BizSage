@@ -1,7 +1,7 @@
-"""Standardized output format shared by both the Learning and Diagnosis Agents.
+"""学习 Agent 和诊断 Agent 共用的标准输出格式。
 
-Every Agent response follows this structure, ensuring consistent traceability,
-disclaimers, and actionable guidance regardless of which Agent generated it.
+所有 Agent 响应都落到同一结构里，前端和 API 层就能统一处理来源追踪、免责声明、
+置信度、自检状态、建议动作和记忆候选。
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ SELF_CHECK_FAILED = "SELF_CHECK_FAILED"
 
 @dataclass
 class OutputSections:
-    """Structured sections within an Agent answer."""
+    """从 Agent 正文中抽取出的结构化段落。"""
     key_findings: str = ""
     risk_alerts: str = ""
     actionable_steps: str = ""
@@ -43,7 +43,7 @@ class OutputSections:
 
 @dataclass
 class SourceRef:
-    """A single evidence source reference."""
+    """单条证据来源引用。"""
     id: str
     title: str
     source_url: str
@@ -55,16 +55,16 @@ class SourceRef:
 
 @dataclass
 class AgentOutput:
-    """Unified output from any BizSage Agent."""
-    mode: str                                        # "LEARNING" | "DIAGNOSIS"
-    answer: str                                      # plain-language main body
+    """任一 BizSage Agent 的统一输出。"""
+    mode: str                                        # LEARNING 或 DIAGNOSIS。
+    answer: str                                      # 面向用户的主回答正文。
     sections: OutputSections = field(default_factory=OutputSections)
     sources: list[SourceRef] = field(default_factory=list)
     confidence: str = "MEDIUM"                       # LOW | MEDIUM | HIGH
     timeliness: str = ""
-    self_check_status: str = "PASSED"                # PASSED | NEEDS_REVIEW | INSUFFICIENT_EVIDENCE
+    self_check_status: str = "PASSED"                # 自检状态：PASSED / NEEDS_REVIEW / INSUFFICIENT_EVIDENCE。
     disclaimer: str = ""
-    chain_node_id: str | None = None                 # current chain node (learning mode)
+    chain_node_id: str | None = None                 # 学习模式下的当前链条节点。
     suggested_actions: list[str] = field(default_factory=list)
     memory_candidates: list[dict] = field(default_factory=list)
 
@@ -86,6 +86,7 @@ def format_learning_output(
     confidence: str = "MEDIUM",
     self_check_status: str = "PASSED",
 ) -> AgentOutput:
+    """格式化学习 Agent 输出，并补齐学习场景默认提示和建议动作。"""
     return AgentOutput(
         mode="LEARNING",
         answer=answer,
@@ -118,6 +119,7 @@ def format_diagnosis_output(
     confidence: str = "MEDIUM",
     self_check_status: str = "PASSED",
 ) -> AgentOutput:
+    """格式化诊断 Agent 输出，并补齐诊断场景默认提示。"""
     return AgentOutput(
         mode="DIAGNOSIS",
         answer=answer,
@@ -143,7 +145,7 @@ def format_diagnosis_output(
 # ---------------------------------------------------------------------------
 
 def render_agent_output(output: AgentOutput) -> dict:
-    """Render an AgentOutput to a JSON-serializable dict."""
+    """把 AgentOutput 渲染成 API 可直接返回的 JSON 字典。"""
     return {
         "mode": output.mode,
         "answer": output.answer,
@@ -176,7 +178,7 @@ def render_agent_output(output: AgentOutput) -> dict:
 
 
 def render_legacy_format(output: AgentOutput) -> dict:
-    """Render in backward-compatible diagnosis format."""
+    """渲染为旧版诊断接口兼容格式。"""
     return {
         "answer": output.answer,
         "sources": [
@@ -204,8 +206,8 @@ def render_legacy_format(output: AgentOutput) -> dict:
 # ---------------------------------------------------------------------------
 
 def _extract_section(text: str, label: str) -> str:
-    """Extract a named section from LLM-generated text if present."""
-    # Best-effort extraction — if the LLM used numbered sections, pull them out
+    """尽力从 LLM 正文中抽取指定标题段落。"""
+    # 兼容编号标题、中文冒号和【标题】三种常见格式；抽不到时返回空字符串。
     for prefix in (f"{label}：", f"{label}:", f"【{label}】"):
         if prefix in text:
             _, rest = text.split(prefix, 1)
@@ -218,7 +220,7 @@ def _extract_section(text: str, label: str) -> str:
 
 
 def _build_learning_suggestions(chain_node_id: str | None) -> list[str]:
-    """Suggest next learning steps based on the current chain node."""
+    """根据当前链条节点生成下一步学习建议。"""
     node_suggestions = {
         "raw-materials": ["了解原材料成本构成", "探索供应链上游风险", "进入生产制造环节学习"],
         "production": ["了解制造工艺与产能", "探索质量管控要点", "进入仓储库存环节学习"],

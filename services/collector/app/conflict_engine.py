@@ -8,7 +8,7 @@ from app.governance import contains_rumor, simhash, hamming_distance, FIXED_WEIG
 
 
 class ConflictBranch(Enum):
-    """The five classification branches of the conflict engine."""
+    """冲突引擎的五类分支。"""
     SHORT_TERM_FLUCTUATION = "SHORT_TERM_FLUCTUATION"
     REGIONAL_EXCEPTION = "REGIONAL_EXCEPTION"
     PERMANENT_AUTHORITATIVE_UPDATE = "PERMANENT_AUTHORITATIVE_UPDATE"
@@ -17,7 +17,7 @@ class ConflictBranch(Enum):
 
 
 class RoutingAction(Enum):
-    """What action the system should take for each conflict branch."""
+    """每类冲突对应的系统处理动作。"""
     TAG_ONLY = "TAG_ONLY"
     REVIEW_TICKET = "REVIEW_TICKET"
     ALERT = "ALERT"
@@ -27,7 +27,7 @@ class RoutingAction(Enum):
 
 @dataclass(frozen=True)
 class ConflictResult:
-    """Result of a single conflict classification."""
+    """单条输入记录的冲突分类结果。"""
     has_conflict: bool
     conflict_branch: Optional[ConflictBranch] = None
     routing_action: Optional[RoutingAction] = None
@@ -40,7 +40,7 @@ class ConflictResult:
 
 @dataclass(frozen=True)
 class ConflictConfig:
-    """Configurable thresholds for conflict classification."""
+    """冲突分类阈值配置。"""
     sim_hash_threshold: int = 18
     authoritative_weight_threshold: float = 0.80
     min_weight_for_authoritative: float = 0.75
@@ -51,7 +51,7 @@ class ConflictConfig:
 DEFAULT_CONFLICT_CONFIG = ConflictConfig()
 
 # ---------------------------------------------------------------------------
-# Routing table: maps each ConflictBranch to its default RoutingAction
+# 冲突分支到默认路由动作的映射表。
 # ---------------------------------------------------------------------------
 BRANCH_TO_ROUTING: dict[ConflictBranch, RoutingAction] = {
     ConflictBranch.SHORT_TERM_FLUCTUATION: RoutingAction.TAG_ONLY,
@@ -69,15 +69,10 @@ def detect_conflict(
     config: ConflictConfig | None = None,
     blocked_source_ids: set[str] | None = None,
 ) -> ConflictResult:
-    """Classify whether *incoming_record* conflicts with *existing_items*.
+    """判断一条新记录是否与现有情报冲突，并给出处理分支。
 
-    Classification priority (first match wins):
-    1. Rumor keyword in content or source in blocklist → FALSE_INFORMATION
-    2. No existing match found → no conflict (return has_conflict=False)
-    3. Incoming has higher authoritative weight → AUTHORITATIVE_UPDATE
-    4. Same industry, different region → REGIONAL_EXCEPTION
-    5. Close SimHash distance with low incoming weight → FLUCTUATION
-    6. Otherwise → SUSPICIOUS_CONFLICT
+    规则按优先级短路：传闻/黑名单 → 无近似匹配 → 权威来源更新 → 地域差异 →
+    短期低权重波动 → 可疑冲突。
     """
     cfg = config or DEFAULT_CONFLICT_CONFIG
     blocked = blocked_source_ids or set()
@@ -87,7 +82,7 @@ def detect_conflict(
     incoming_source_id = str(incoming_record.get("source_id", "unknown"))
     incoming_weight = _resolve_weight(incoming_record)
 
-    # ── Rule 1: Rumor or blocked source → FALSE_INFORMATION ──
+    # 规则 1：来源黑名单或传闻关键词直接进入虚假信息分支。
     if incoming_source_id in blocked:
         return ConflictResult(
             has_conflict=True,
@@ -111,7 +106,7 @@ def detect_conflict(
     incoming_region = str(incoming_record.get("region_id", ""))
     incoming_industry = str(incoming_record.get("industry_id", ""))
 
-    # ── Find the best-matching existing record ──
+    # 找到 SimHash 距离最近的现有记录作为冲突候选。
     best_match: dict | None = None
     best_distance: int = 65  # 64-bit SimHash max distance is 64
 
@@ -128,7 +123,7 @@ def detect_conflict(
             best_distance = distance
             best_match = existing
 
-    # ── Rule 2: No close match → NO CONFLICT ──
+    # 规则 2：没有足够相似的既有记录，则不构成冲突。
     if best_match is None or best_distance > cfg.sim_hash_threshold:
         return ConflictResult(
             has_conflict=False,
@@ -139,7 +134,7 @@ def detect_conflict(
     existing_region = str(best_match.get("region_id", ""))
     existing_id = str(best_match.get("id", ""))
 
-    # ── Rule 3: Authoritative incoming source trumps low-weight existing ──
+    # 规则 3：新记录权重更高且达到权威阈值时，可推动知识更新。
     if incoming_weight >= cfg.min_weight_for_authoritative and incoming_weight > existing_weight:
         return ConflictResult(
             has_conflict=True,
@@ -152,7 +147,7 @@ def detect_conflict(
             notes=f"Incoming authoritative source (w={incoming_weight:.3f}) supersedes existing (w={existing_weight:.3f}).",
         )
 
-    # ── Rule 4: Same industry, different region → REGIONAL_EXCEPTION ──
+    # 规则 4：内容相似但地域不同，通常是区域例外，不直接覆盖。
     if incoming_region and existing_region and incoming_region != existing_region:
         return ConflictResult(
             has_conflict=True,
@@ -165,7 +160,7 @@ def detect_conflict(
             notes=f"Region mismatch: incoming={incoming_region}, existing={existing_region}.",
         )
 
-    # ── Rule 5: Close distance + low incoming weight → FLUCTUATION ──
+    # 规则 5：低权重新记录与既有记录高度相似时，标记为短期波动。
     if best_distance <= cfg.sim_hash_threshold and incoming_weight < cfg.low_weight_fluctuation_threshold:
         return ConflictResult(
             has_conflict=True,
@@ -178,7 +173,7 @@ def detect_conflict(
             notes=f"Low-weight (w={incoming_weight:.3f}) similar to existing (w={existing_weight:.3f}, dist={best_distance}).",
         )
 
-    # ── Rule 6: Unresolved → SUSPICIOUS ──
+    # 规则 6：无法自动判定的冲突进入人工审核。
     return ConflictResult(
         has_conflict=True,
         conflict_branch=ConflictBranch.SUSPICIOUS_CONFLICT,
@@ -198,7 +193,7 @@ def detect_conflicts(
     config: ConflictConfig | None = None,
     blocked_source_ids: set[str] | None = None,
 ) -> list[ConflictResult]:
-    """Batch conflict detection for multiple incoming records."""
+    """批量检测多条输入记录的冲突分支。"""
     results: list[ConflictResult] = []
     for record in incoming_records:
         results.append(
@@ -213,7 +208,7 @@ def detect_conflicts(
 
 
 def _resolve_weight(record: dict) -> float:
-    """Resolve weight from a record dict, falling back to fixed-weight lookup."""
+    """解析记录权重；缺失时按来源固定权重兜底。"""
     weight = record.get("weight")
     if weight is not None:
         return float(weight)

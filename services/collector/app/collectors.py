@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""采集源适配器。
+
+这里把不同来源（用户表单、Excel、公开页面、第三方 API）的原始输入统一转换成
+治理链路可处理的记录格式。函数只做轻量解析和字段规范化，不在这里做冲突判断。
+"""
+
 import html
 import re
 import xml.etree.ElementTree as ET
@@ -8,6 +14,7 @@ from zipfile import ZipFile
 
 
 def collect_form_business_data(payload: dict) -> list[dict]:
+    """把用户私有表单数据转换为高置信度私有记录。"""
     return [
         normalize_record(
             source_type="USER_PRIVATE_FORM",
@@ -24,6 +31,7 @@ def collect_form_business_data(payload: dict) -> list[dict]:
 
 
 def collect_excel_business_data(path: str | Path) -> list[dict]:
+    """读取简单 xlsx 表格并转换为私有业务记录。"""
     rows = read_simple_xlsx(Path(path))
     if not rows:
         return []
@@ -57,6 +65,7 @@ def collect_public_page(
     region_id: str,
     link_id: str,
 ) -> list[dict]:
+    """从公开网页 HTML 中抽取标题和正文，并标记为中等可信公开来源。"""
     title = extract_title(html_text) or url
     body = extract_body_text(html_text)
     return [
@@ -76,6 +85,7 @@ def collect_public_page(
 
 
 def collect_mock_api(items: list[dict]) -> list[dict]:
+    """把第三方 API mock 数据统一成标准采集记录。"""
     return [
         normalize_record(
             source_type="THIRD_PARTY_API_MOCK",
@@ -106,6 +116,7 @@ def normalize_record(
     weight: float,
     url: str | None = None,
 ) -> dict:
+    """统一字段名、空白和来源元数据，是治理链路的输入契约。"""
     return {
         "source_type": source_type,
         "source_id": source_id,
@@ -121,6 +132,7 @@ def normalize_record(
 
 
 def read_simple_xlsx(path: Path) -> list[list[str]]:
+    """读取仅包含 sheet1/sharedStrings 的简单 xlsx，避免引入完整 Excel 依赖。"""
     ns = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
     with ZipFile(path) as zf:
         shared_xml = ET.fromstring(zf.read("xl/sharedStrings.xml"))
@@ -146,11 +158,13 @@ def read_simple_xlsx(path: Path) -> list[list[str]]:
 
 
 def extract_title(html_text: str) -> str:
+    """从 HTML title 标签中提取页面标题。"""
     match = re.search(r"<title[^>]*>(.*?)</title>", html_text, flags=re.I | re.S)
     return html.unescape(match.group(1)).strip() if match else ""
 
 
 def extract_body_text(html_text: str) -> str:
+    """移除脚本、样式和标签，得到可入库的正文文本。"""
     body_match = re.search(r"<body[^>]*>(.*?)</body>", html_text, flags=re.I | re.S)
     raw = body_match.group(1) if body_match else html_text
     text = re.sub(r"<script.*?</script>|<style.*?</style>", " ", raw, flags=re.I | re.S)

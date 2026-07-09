@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""RAG 检索与排序逻辑。
+
+优先使用 Qdrant 语义检索；没有向量存储时退化为轻量本地检索，便于测试和
+离线环境运行。所有路径都会统一执行行业、地域和会员权益过滤，避免越权引用证据。
+"""
+
 import math
 import re
 from dataclasses import dataclass
@@ -19,11 +25,11 @@ class KnowledgeItem:
     industry_id: str
     region_id: str
     entitlement: str = "FREE"
-    # V2: Six-dimension rerank fields
-    authority: float = 0.85       # source authority (gov > official > media > forum)
-    timeliness: float = 0.85      # freshness score (today=1.0, decays over time)
-    review_confidence: float = 0.85  # confidence from admin review process
-    historical_quality: float = 0.85  # long-term historical accuracy of source
+    # 六维重排字段：用于把“相关”进一步调整为“可靠且适用”。
+    authority: float = 0.85       # 来源权威度：政府/官方 > 媒体 > 社区。
+    timeliness: float = 0.85      # 时效性：越新越高，历史资料随时间衰减。
+    review_confidence: float = 0.85  # 人工审核给出的置信度。
+    historical_quality: float = 0.85  # 来源长期准确率。
     link_id: str = ""
 
 
@@ -50,6 +56,7 @@ def search_knowledge(
     vector_store: object | None = None,
     restrict_to_knowledge_ids: bool = False,
 ) -> list[SearchResult]:
+    """按可用能力选择向量检索或本地检索，并返回排序后的证据列表。"""
     if vector_store is not None:
         return _search_with_vector_store(
             query,
@@ -81,6 +88,7 @@ def _search_locally(
     industry_id: str | None,
     membership_level: str,
 ) -> list[SearchResult]:
+    """无 Qdrant 时的本地兜底检索，组合关键词重合和字符袋余弦相似度。"""
     query_tokens = tokenize(query)
     results: list[SearchResult] = []
     for item in knowledge:
@@ -102,6 +110,7 @@ def _search_locally(
 
 
 def tokenize(text: str) -> list[str]:
+    """面向中英混合文本的轻量分词：英文词 + 中文二元字符片段。"""
     compact = re.sub(r"[，。！？、；：,.!?\s]", "", text.lower())
     words = re.findall(r"[a-z0-9]+", compact)
     chars = [compact[index : index + 2] for index in range(max(len(compact) - 1, 0))]
@@ -109,6 +118,7 @@ def tokenize(text: str) -> list[str]:
 
 
 def keyword_overlap(query_tokens: list[str], doc_tokens: list[str]) -> float:
+    """计算查询词在候选文本中的覆盖比例。"""
     if not query_tokens or not doc_tokens:
         return 0.0
     query_set = set(query_tokens)
@@ -117,6 +127,7 @@ def keyword_overlap(query_tokens: list[str], doc_tokens: list[str]) -> float:
 
 
 def bag(tokens: list[str]) -> dict[str, int]:
+    """把 token 列表转成词频袋，供余弦相似度使用。"""
     result: dict[str, int] = {}
     for token in tokens:
         result[token] = result.get(token, 0) + 1
@@ -124,6 +135,7 @@ def bag(tokens: list[str]) -> dict[str, int]:
 
 
 def cosine(left: dict[str, int], right: dict[str, int]) -> float:
+    """计算两个稀疏词频向量的余弦相似度。"""
     if not left or not right:
         return 0.0
     dot = sum(value * right.get(key, 0) for key, value in left.items())
@@ -145,6 +157,7 @@ def _search_with_vector_store(
     vector_store: object,
     restrict_to_knowledge_ids: bool,
 ) -> list[SearchResult]:
+    """使用 Qdrant 候选集，并叠加词面匹配和质量分做最终重排。"""
     query_tokens = tokenize(query)
     dimensions = int(getattr(vector_store, "dimensions", 32))
     query_vector = embed_text(query, dimensions=dimensions)
@@ -185,6 +198,7 @@ def _candidate_to_knowledge_item(
     *,
     restrict_to_knowledge_ids: bool,
 ) -> KnowledgeItem | None:
+    """把 Qdrant payload 还原为 KnowledgeItem；必要时限制在本次请求知识内。"""
     item_id = str(payload.get("id") or "")
     if item_id and item_id in knowledge_by_id:
         return knowledge_by_id[item_id]
@@ -217,6 +231,7 @@ def _matches_business_filters(
     industry_id: str | None,
     membership_level: str,
 ) -> bool:
+    """业务过滤：地域、行业必须匹配，付费情报只对付费/内部用户开放。"""
     if region_id and item.region_id != region_id:
         return False
     if industry_id and item.industry_id != industry_id:
@@ -227,15 +242,9 @@ def _matches_business_filters(
 
 
 def _quality_score(item: KnowledgeItem) -> float:
-    """V2: Six-dimension rerank scoring.
+    """六维质量分，用于在相似度之外体现来源可信度。
 
-    Dimensions and their weights:
-      - weight (0.20)           — source-level importance / editorial weighting
-      - confidence (0.15)       — LLM confidence in the extracted fact
-      - authority (0.15)        — source credibility tier (gov=1.0, official=0.85, media=0.7, forum=0.5)
-      - timeliness (0.15)       — freshness decay (today=1.0, 30d=0.9, 1y=0.5, 3y+=0.2)
-      - review_confidence (0.20)— admin review verdict confidence
-      - historical_quality (0.15)— long-term accuracy track record of the source
+    权重来自来源级重要性、抽取置信度、来源权威度、时效性、人工审核置信度和历史质量。
     """
     return (
         item.weight * 0.20
@@ -248,6 +257,7 @@ def _quality_score(item: KnowledgeItem) -> float:
 
 
 def _to_search_result(item: KnowledgeItem, score: float) -> SearchResult:
+    """把内部知识对象转换为对外返回的检索结果。"""
     return SearchResult(
         id=item.id,
         title=item.title,

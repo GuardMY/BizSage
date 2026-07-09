@@ -61,6 +61,7 @@ public class MessageController {
       @PathVariable long conversationId,
       @Valid @RequestBody MessageRequest request,
       Principal principal) {
+    // 先校验会话归属，再返回 StreamingResponseBody，避免流式响应开始后才发现越权。
     var user = userStore.findByUsername(principal.getName()).orElseThrow();
     var conversation = conversationStore.getForOwner(principal.getName(), conversationId);
     return outputStream -> {
@@ -75,17 +76,19 @@ public class MessageController {
     };
   }
 
-  // ── Learning Agent endpoints ────────────────────────────────────
+  // 学习 Agent SSE 端点。
 
   /**
-   * Industry Learning Agent — SSE streaming endpoint.
-   * Accepts an optional chainNodeId and learningMode for guided learning.
+   * 行业学习 Agent 的 SSE 流式端点。
+   *
+   * <p>支持可选 chainNodeId 和 learningMode，用于前端引导式学习。
    */
   @PostMapping(value = "/learn/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
   StreamingResponseBody streamLearning(
       @PathVariable long conversationId,
       @Valid @RequestBody LearnMessageRequest request,
       Principal principal) {
+    // 学习流复用诊断帧格式，前端只需按统一 diagnosis 事件解析 payload。
     var user = userStore.findByUsername(principal.getName()).orElseThrow();
     var conversation = conversationStore.getForOwner(principal.getName(), conversationId);
     return outputStream -> {
@@ -103,14 +106,16 @@ public class MessageController {
   }
 
   /**
-   * Dual-Agent mode transition — SSE streaming endpoint.
-   * Switches between LEARNING and DIAGNOSIS modes with preserved context.
+   * 双 Agent 模式切换的 SSE 流式端点。
+   *
+   * <p>在 LEARNING 与 DIAGNOSIS 之间切换时保留会话上下文。
    */
   @PostMapping(value = "/transition/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
   StreamingResponseBody streamTransition(
       @PathVariable long conversationId,
       @Valid @RequestBody TransitionMessageRequest request,
       Principal principal) {
+    // 切换请求仍绑定当前会话和当前用户，防止跨会话复用上下文。
     var user = userStore.findByUsername(principal.getName()).orElseThrow();
     var conversation = conversationStore.getForOwner(principal.getName(), conversationId);
     return outputStream -> {
@@ -142,7 +147,7 @@ public class MessageController {
 
   private String toErrorPayload(AiWorkerException ex) {
     String message = ex.getMessage() != null ? ex.getMessage() : "AI worker unavailable";
-    // Determine a machine-readable error code for the frontend
+    // 将 Worker 异常文本映射为前端可识别的机器错误码。
     String errorCode = "WORKER_ERROR";
     if (message.contains("not reachable") || message.contains("connection failed")) {
       errorCode = "WORKER_UNREACHABLE";
@@ -160,6 +165,7 @@ public class MessageController {
   }
 
   private void writeDiagnosisFrames(OutputStream outputStream, String diagnosis) throws IOException {
+    // Worker 一次返回完整 JSON；这里切成逐步增长的快照，模拟打字式流式体验。
     JsonNode payload = objectMapper.readTree(diagnosis);
     String answer = payload.path("answer").asText("");
     List<String> snapshots = progressiveAnswers(answer);
@@ -171,6 +177,7 @@ public class MessageController {
         writeEvent(outputStream, "diagnosis", objectMapper.writeValueAsString(partialPayload));
       }
     } else {
+      // 非对象 payload 无法安全替换 answer 字段，直接原样发送。
       writeEvent(outputStream, "diagnosis", diagnosis);
       return;
     }
@@ -181,6 +188,7 @@ public class MessageController {
   }
 
   private static List<String> progressiveAnswers(String answer) {
+    // 固定字符步长让前端收到渐进快照；最后一帧必须包含完整答案。
     if (answer == null || answer.isEmpty()) {
       return List.of();
     }
@@ -200,6 +208,7 @@ public class MessageController {
   }
 
   private static void writeEvent(OutputStream outputStream, String eventName, String payload) throws IOException {
+    // SSE 格式要求 event/data 后跟空行；每帧 flush 保证浏览器及时收到。
     String event = "event: " + eventName + "\n" + "data: " + payload + "\n\n";
     outputStream.write(event.getBytes(StandardCharsets.UTF_8));
     outputStream.flush();

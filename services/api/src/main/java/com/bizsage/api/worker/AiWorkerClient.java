@@ -16,11 +16,10 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 /**
- * HTTP client for the AI worker microservice.
+ * AI Worker 微服务 HTTP 客户端。
  *
- * <p>Calls POST /agent/diagnose and maps the response into a
- * {@link DiagnoseResponse}.  Failures are surfaced as
- * {@link AiWorkerException} — callers must not fall back to local answers.
+ * <p>负责诊断、学习、模式切换、知识同步和记忆向量同步。所有推理类失败都会抛出
+ * {@link AiWorkerException}，调用方不得回退到本地模板答案，避免业务诊断出现静默降级。
  */
 @Component
 public class AiWorkerClient {
@@ -40,12 +39,9 @@ public class AiWorkerClient {
   }
 
   /**
-   * Send a diagnosis request to the AI worker and return the structured response.
+   * 向 AI Worker 发送诊断请求，并返回结构化结果。
    *
-   * @param request the assembled diagnosis request
-   * @return the worker's structured diagnosis response
-   * @throws AiWorkerException if the worker is unreachable, times out,
-   *         returns a non-200 status, or returns an invalid body
+   * @throws AiWorkerException 当 Worker 不可达、超时、返回非 2xx 或响应体无效时抛出
    */
   public DiagnoseResponse diagnose(DiagnoseRequest request) {
     try {
@@ -73,6 +69,7 @@ public class AiWorkerClient {
           .body(DiagnoseResponse.class);
 
       if (response == null) {
+        // 空响应无法判断自检状态，必须视为 Worker 失败。
         throw new AiWorkerException("AI worker returned null response");
       }
 
@@ -85,6 +82,7 @@ public class AiWorkerClient {
     } catch (AiWorkerException ex) {
       throw ex;
     } catch (ResourceAccessException ex) {
+      // 将底层连接异常归一化为业务可识别的 Worker 错误，便于 SSE 端映射错误码。
       Throwable root = ex.getCause();
       if (root instanceof ConnectException) {
         throw new AiWorkerException(
@@ -103,9 +101,9 @@ public class AiWorkerClient {
   }
 
   /**
-   * Check whether the AI worker is reachable via its /health endpoint.
+   * 通过 /health 检查 AI Worker 是否可达。
    *
-   * @return true if the worker responds with a healthy status
+   * @return Worker 返回健康状态时为 true
    */
   public boolean isHealthy() {
     try {
@@ -120,14 +118,14 @@ public class AiWorkerClient {
     }
   }
 
-  // ── Knowledge sync ──────────────────────────────────────────────
+  // 知识同步。
 
   /**
-   * Upsert knowledge items into the AI worker's persistent Qdrant collection.
-   * Used for incremental sync when knowledge is published or updated.
+   * 将知识增量 upsert 到 AI Worker 的持久 Qdrant 集合。
    *
-   * @param items knowledge items to upsert (idempotent — same ID overwrites)
-   * @return number of synced items
+   * <p>用于知识发布或更新后的增量同步；同一业务 ID 会覆盖旧向量，保持幂等。
+   *
+   * @return Worker 实际同步的条数
    */
   public int syncKnowledge(List<Map<String, Object>> items) {
     if (items == null || items.isEmpty()) {
@@ -150,17 +148,16 @@ public class AiWorkerClient {
       }
       return 0;
     } catch (Exception ex) {
+      // 知识同步失败不应影响 API 主流程，后续启动全量同步可修复索引缺口。
       log.warn("Knowledge sync to AI worker failed (non-fatal): {}", ex.getMessage());
       return 0;
     }
   }
 
   /**
-   * Clear and fully reload the persistent Qdrant collection.
-   * Used on application startup to ensure Qdrant matches the database.
+   * 清空并全量重建 AI Worker 持久 Qdrant 集合。
    *
-   * @param items all knowledge items to load
-   * @return number of synced items
+   * <p>通常在 API 启动时执行，保证向量集合与数据库权威知识一致。
    */
   public int syncAllKnowledge(List<Map<String, Object>> items) {
     if (items == null || items.isEmpty()) {
@@ -188,17 +185,15 @@ public class AiWorkerClient {
     }
   }
 
-  // ── Memory Embedding Sync ───────────────────────────────────────
+  // 记忆向量同步。
 
   /**
-   * Sync pending user memory embeddings to Qdrant via the AI worker.
+   * 通过 AI Worker 将待同步用户记忆写入 Qdrant。
    *
-   * <p>The AI worker computes embeddings and upserts to the bizsage_memory
-   * Qdrant collection. Returns a list of {embeddingId, qdrantPointId}
-   * maps for the API layer to mark as SYNCED.
+   * <p>AI Worker 负责计算向量并写入 bizsage_memory 集合；API 层根据返回的
+   * embedding_id 与 qdrant_point_id 更新同步状态。
    *
-   * @param memories list of memory embedding records with id and memory_text
-   * @return list of sync results with embedding_id and qdrant_point_id
+   * @return 每条成功同步记忆的结果列表
    */
   @SuppressWarnings("unchecked")
   public List<Map<String, Object>> syncMemoryEmbeddings(List<Map<String, Object>> memories) {
@@ -226,14 +221,12 @@ public class AiWorkerClient {
     }
   }
 
-  // ── Learning Agent ──────────────────────────────────────────────
+  // 学习 Agent。
 
   /**
-   * Send a learning request to the AI worker and return the structured response.
+   * 向 AI Worker 发送学习请求，并返回结构化学习结果。
    *
-   * @param request the assembled learning request
-   * @return the worker's structured diagnosis/learning response
-   * @throws AiWorkerException on failure
+   * @throws AiWorkerException Worker 调用失败时抛出
    */
   public DiagnoseResponse learn(LearningRequest request) {
     try {
@@ -255,6 +248,7 @@ public class AiWorkerClient {
           .body(DiagnoseResponse.class);
 
       if (response == null) {
+        // 学习结果也必须保留自检和来源字段，空响应不能被当作成功。
         throw new AiWorkerException("AI worker returned null learning response");
       }
       log.info("AI worker learning complete: mode={}, chainNodeId={}, sources={}",
@@ -278,7 +272,7 @@ public class AiWorkerClient {
   }
 
   /**
-   * Execute a dual-Agent mode transition (LEARNING ↔ DIAGNOSIS).
+   * 执行学习与诊断之间的双 Agent 模式切换。
    */
   public DiagnoseResponse transition(TransitionRequest request) {
     try {
@@ -317,11 +311,9 @@ public class AiWorkerClient {
   }
 
   /**
-   * Delete knowledge items from the persistent Qdrant collection by ID.
-   * Used when knowledge is unpublished or removed.
+   * 按知识 ID 从 AI Worker 持久 Qdrant 集合中删除向量。
    *
-   * @param ids knowledge item IDs to remove
-   * @return number of deleted items
+   * <p>用于知识下架或删除后的索引清理；失败只记录日志，不阻断主事务。
    */
   public int deleteKnowledge(List<String> ids) {
     if (ids == null || ids.isEmpty()) {

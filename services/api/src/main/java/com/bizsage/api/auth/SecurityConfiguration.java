@@ -25,6 +25,7 @@ import java.util.List;
 public class SecurityConfiguration {
   @Bean
   CorsConfigurationSource corsConfigurationSource() {
+    // 本地前端开发端口；生产环境应由部署配置收紧允许来源。
     CorsConfiguration config = new CorsConfiguration();
     config.setAllowedOrigins(List.of("http://localhost:3000"));
     config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
@@ -41,6 +42,7 @@ public class SecurityConfiguration {
       HttpSecurity http,
       JwtAuthenticationFilter jwtAuthenticationFilter,
       ObjectMapper objectMapper) throws Exception {
+    // API 使用无状态 JWT 认证，不创建服务端 Session。
     http.cors(Customizer.withDefaults())
         .csrf(AbstractHttpConfigurer::disable)
         .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -49,6 +51,7 @@ public class SecurityConfiguration {
             .anyRequest().authenticated())
         .exceptionHandling(exceptions -> exceptions
             .authenticationEntryPoint((request, response, exception) -> {
+              // 未认证时统一返回 ApiResponse，保持前端错误处理一致。
               response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
               response.setContentType(MediaType.APPLICATION_JSON_VALUE);
               String requestId = String.valueOf(request.getAttribute(RequestIds.ATTRIBUTE));
@@ -56,6 +59,7 @@ public class SecurityConfiguration {
                   ApiResponse.error("UNAUTHORIZED", "authentication required", requestId));
             })
             .accessDeniedHandler((request, response, exception) -> {
+              // 已认证但权限不足时返回 403，而不是泄露具体授权规则。
               response.setStatus(HttpServletResponse.SC_FORBIDDEN);
               response.setContentType(MediaType.APPLICATION_JSON_VALUE);
               String requestId = String.valueOf(request.getAttribute(RequestIds.ATTRIBUTE));

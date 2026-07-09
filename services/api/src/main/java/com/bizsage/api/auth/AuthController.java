@@ -29,18 +29,19 @@ public class AuthController {
   ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request,
                                    HttpServletRequest httpRequest,
                                    HttpServletResponse httpResponse) {
+    // 登录成功后同时返回 token 和写入 httpOnly cookie，兼容 API 客户端与浏览器端。
     var user = userStore.findByUsername(request.username())
         .filter(candidate -> passwordMatches(request.password(), candidate.password()))
         .orElseThrow(() -> new IllegalArgumentException("invalid username or password"));
 
     String token = jwtService.issue(user);
 
-    // Set httpOnly cookie so JavaScript cannot read the token (XSS protection).
+    // httpOnly cookie 可降低 XSS 读取 token 的风险；生产 TLS 下应将 Secure 设为 true。
     jakarta.servlet.http.Cookie cookie = new jakarta.servlet.http.Cookie("bizsage_token", token);
     cookie.setHttpOnly(true);
-    cookie.setSecure(false); // Set true when TLS is enabled
+    cookie.setSecure(false); // 启用 TLS 后应设置为 true。
     cookie.setPath("/");
-    cookie.setMaxAge(3600); // 1 hour, matches JWT expiry
+    cookie.setMaxAge(3600); // 与 JWT 1 小时有效期保持一致。
     cookie.setAttribute("SameSite", "Strict");
     httpResponse.addCookie(cookie);
 
@@ -61,6 +62,7 @@ public class AuthController {
   }
 
   private boolean passwordMatches(String rawPassword, String storedPassword) {
+    // 兼容早期明文种子账号；正式账号使用 BCrypt。
     if (storedPassword != null && storedPassword.startsWith("$2")) {
       return passwordEncoder.matches(rawPassword, storedPassword);
     }
@@ -70,14 +72,14 @@ public class AuthController {
   record LoginRequest(@NotBlank String username, @NotBlank String password) {
   }
 
-  /** V2: Clear the httpOnly cookie to log out. */
+  /** 清空 httpOnly cookie 完成浏览器端登出。 */
   @PostMapping("/logout")
   ApiResponse<String> logout(HttpServletResponse httpResponse, HttpServletRequest httpRequest) {
     jakarta.servlet.http.Cookie cookie = new jakarta.servlet.http.Cookie("bizsage_token", "");
     cookie.setHttpOnly(true);
     cookie.setSecure(false);
     cookie.setPath("/");
-    cookie.setMaxAge(0); // expire immediately
+    cookie.setMaxAge(0); // 立即过期。
     cookie.setAttribute("SameSite", "Strict");
     httpResponse.addCookie(cookie);
     return ApiResponse.ok("logged out", requestId(httpRequest));

@@ -68,7 +68,7 @@ public class AdminController {
     return ApiResponse.ok(store.dashboard(), requestId(request));
   }
 
-  /** V2: Collection telemetry for monitoring dashboards. */
+  /** 采集链路遥测数据，供管理端监控面板展示。 */
   @GetMapping("/collection/telemetry")
   ApiResponse<Map<String, Object>> collectionTelemetry(HttpServletRequest request) {
     return ApiResponse.ok(store.getCollectionTelemetry(), requestId(request));

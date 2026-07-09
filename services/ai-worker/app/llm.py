@@ -6,29 +6,18 @@ import warnings
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# DeepSeek / OpenAI‑compatible LLM wrapper (httpx‑based, no SDK needed)
-# ---------------------------------------------------------------------------
-# Supports any OpenAI‑compatible provider by configuring:
-#   OPENAI_COMPATIBLE_BASE_URL   – e.g. https://api.deepseek.com/v1
-#   OPENAI_COMPATIBLE_API_KEY    – your API key
-#   OPENAI_COMPATIBLE_MODEL      – e.g. deepseek-chat
-#   LLM_PROVIDER                 – logical provider name (deepseek / openai / …)
+# OpenAI 兼容 LLM 的旧接口包装层。
 #
-# STRICT MODE: 严格模式 — 不配置真实 LLM 或调用失败时必须显式失败，
-# 绝不回退到 mock 回答。
-#
-# V2: generate_answer() and generate_answer_learn() are now thin wrappers
-#     that delegate to ModelRouter for backward compatibility.
-# ---------------------------------------------------------------------------
+# 严格模式：没有真实 LLM 配置或上游调用失败时必须显式失败，绝不生成 mock 回答。
+# 新代码应直接使用 ModelRouter + PromptAssembler；这里保留薄包装是为了兼容旧调用。
 
 
 class LLMNotConfiguredError(Exception):
-    """Raised when OPENAI_COMPATIBLE_API_KEY is not set."""
+    """OPENAI_COMPATIBLE_API_KEY 未配置时抛出。"""
 
 
 class LLMCallError(Exception):
-    """Raised when the upstream LLM call fails or returns empty."""
+    """上游 LLM 调用失败或返回空内容时抛出。"""
 
     def __init__(self, message: str, status_code: int | None = None):
         super().__init__(message)
@@ -36,9 +25,9 @@ class LLMCallError(Exception):
 
 
 def _get_config() -> tuple[str, str, str]:
-    """Return (base_url, api_key, model).
+    """读取旧版 OPENAI_COMPATIBLE_* 配置。
 
-    Raises LLMNotConfiguredError if OPENAI_COMPATIBLE_API_KEY is not set.
+    未配置 API Key 时抛出 LLMNotConfiguredError。
     """
     api_key = os.getenv("OPENAI_COMPATIBLE_API_KEY", "").strip()
     if not api_key:
@@ -49,12 +38,13 @@ def _get_config() -> tuple[str, str, str]:
     return base_url, api_key, model
 
 
-# ── Backward-compatible wrappers (delegate to ModelRouter) ──────────
+# 向后兼容包装：内部委托给 ModelRouter。
 
 _router = None
 
 
 def _get_router():
+    """懒加载模型路由器，避免导入阶段产生配置依赖。"""
     global _router
     if _router is None:
         from app.model_routing.router import ModelRouter
@@ -63,11 +53,11 @@ def _get_router():
 
 
 def generate_answer(question: str, context: str) -> str:
-    """Backward-compatible wrapper. Delegates to ModelRouter (BALANCED tier).
+    """旧版诊断回答入口，内部委托给 ModelRouter 的 BALANCED 档。
 
     .. deprecated::
-        Use ModelRouter directly with PromptAssembler. This wrapper bypasses
-        the system-prompt layer and will be removed in a future version.
+        新代码请直接使用 ModelRouter + PromptAssembler。此包装绕过系统提示词层，
+        后续版本会移除。
     """
     warnings.warn(
         "generate_answer() is deprecated — use ModelRouter + PromptAssembler directly",
@@ -87,11 +77,10 @@ def generate_answer(question: str, context: str) -> str:
 
 
 def generate_answer_learning(question: str, context: str) -> str:
-    """Backward-compatible wrapper for learning mode.
+    """旧版学习回答入口。
 
     .. deprecated::
-        Use ModelRouter directly with the learning-mode prompt assembler.
-        This wrapper will be removed in a future version.
+        新代码请直接使用学习模式的 PromptAssembler + ModelRouter。
     """
     warnings.warn(
         "generate_answer_learning() is deprecated — use ModelRouter + PromptAssembler directly",

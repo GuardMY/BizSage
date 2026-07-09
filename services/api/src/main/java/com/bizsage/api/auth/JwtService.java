@@ -17,8 +17,7 @@ public class JwtService {
   private final SecretKey key;
 
   public JwtService(@Value("${bizsage.jwt.secret}") String secret) {
-    // Require at least 32 bytes (256 bits) for HS256.
-    // Reject short / placeholder secrets at startup.
+    // HS256 至少需要 32 字节密钥；启动期拒绝空值和占位短密钥。
     if (secret == null || secret.isBlank()) {
       throw new IllegalArgumentException("bizsage.jwt.secret must be set (at least 32 characters)");
     }
@@ -29,7 +28,7 @@ public class JwtService {
     this.key = Keys.hmacShaKeyFor(raw);
   }
 
-  /** Issue a standard JWT (header.payload.signature) valid for 1 hour. */
+  /** 签发 1 小时有效的标准 JWT。 */
   public String issue(UserAccount user) {
     long now = Instant.now().getEpochSecond();
     return Jwts.builder()
@@ -44,7 +43,7 @@ public class JwtService {
         .compact();
   }
 
-  /** Verify a standard JWT and extract the principal. */
+  /** 校验 JWT 并提取 Spring Security 需要的身份主体。 */
   public JwtPrincipal verify(String token) {
     if (token == null || token.isBlank()) {
       throw new IllegalArgumentException("token is missing");
@@ -58,6 +57,7 @@ public class JwtService {
 
       String roleName = claims.get("role", String.class);
       if (roleName == null) {
+        // role 是后续 authority 映射的必需字段，缺失时不能降级为普通用户。
         throw new IllegalArgumentException("token missing role claim");
       }
       return new JwtPrincipal(claims.getSubject(), Role.valueOf(roleName));

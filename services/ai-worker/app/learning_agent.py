@@ -1,15 +1,14 @@
-"""Industry Learning Agent — the second half of BizSage's dual-Agent system.
+"""行业学习 Agent，BizSage 双 Agent 体系的另一条主链路。
 
-Workflow: user question → intent classification → 6-dim RAG → knowledge
-refinement → plain-language reconstruction → structured AgentOutput.
+流程：用户问题 → 意图识别 → 六维 RAG → 知识重组 → 通俗化表达 → 结构化 AgentOutput。
 
-Capabilities (per architecture spec section 7.1):
-- Beginner industry education
-- Policy explanation
-- Operating rules
-- Compliance red lines
-- Real-time industry dynamics
-- Structured progressive learning
+能力范围：
+- 行业新手入门
+- 政策法规解释
+- 经营规则拆解
+- 合规红线提醒
+- 行业动态理解
+- 链条式递进学习
 """
 
 from __future__ import annotations
@@ -35,9 +34,7 @@ from app.rag import KnowledgeItem, SearchResult, search_knowledge
 from app.reasoning_checks.retry import run_with_retry
 
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
+# 行业链条节点：用于把宽泛学习问题落到可教学、可导航的业务环节上。
 
 CHAIN_NODES = [
     ("raw-materials",        "原材料",       "composition, origin, supply pattern, procurement"),
@@ -95,7 +92,7 @@ def _get_router() -> ModelRouter:
 # Intent classification
 # ---------------------------------------------------------------------------
 
-# Keywords mapped to (intent_type, chain_node_id or None)
+# 关键词到（意图类型，链条节点）的映射；优先使用显式命中，降低误判成本。
 _INTENT_PATTERNS: list[tuple[str, str, str | None]] = [
     ("行业概览|行业介绍|行业结构|市场规模|入门|了解这个行业|整体", IntentType.INDUSTRY_OVERVIEW, None),
     ("是什么行业|这个行业怎么做|怎么入行", IntentType.INDUSTRY_OVERVIEW, None),
@@ -125,7 +122,7 @@ _NODE_SLUGS_BY_KEYWORD: list[tuple[re.Pattern, str]] = [
 
 
 def classify_learning_intent(question: str) -> tuple[str, str | None]:
-    """Classify user question into an intent type and optional chain node."""
+    """识别学习意图，并尽可能解析出对应链条节点。"""
     for pattern_str, intent_type, node_id in _INTENT_PATTERNS:
         if re.search(pattern_str, question):
             if intent_type == IntentType.NODE_LEARNING and node_id is None:
@@ -140,7 +137,7 @@ def classify_learning_intent(question: str) -> tuple[str, str | None]:
 
 
 def _resolve_node(question: str) -> str | None:
-    """Try to match the question to a specific chain node by keyword."""
+    """用节点关键词把问题映射到具体链条环节。"""
     for pattern, node_id in _NODE_SLUGS_BY_KEYWORD:
         if pattern.search(question):
             return node_id
@@ -151,7 +148,7 @@ def filter_knowledge_by_node(
     knowledge: list[KnowledgeItem],
     chain_node_id: str | None,
 ) -> list[KnowledgeItem]:
-    """Optionally filter knowledge items to those matching a chain node."""
+    """按链条节点过滤知识；没有节点时保留完整知识池。"""
     if chain_node_id is None:
         return knowledge
     return [k for k in knowledge if k.link_id == chain_node_id]
@@ -177,15 +174,15 @@ def learn(
     restrict_to_knowledge_ids: bool = False,
     compress_config: CompressConfig | None = None,
 ) -> dict:
-    """Run the Industry Learning Agent."""
-    # ── Auto-detect intent and chain node ──
+    """运行行业学习 Agent，并返回统一 Agent 输出结构。"""
+    # 自动识别意图和链条节点；显式传入的 chain_node_id 优先。
     intent_type, detected_node = classify_learning_intent(question)
     effective_node = chain_node_id or detected_node
 
-    # ── FILTER knowledge to the target chain node ──
+    # 优先使用目标节点知识，若该节点没有知识则退回全量知识池，避免过早空结果。
     node_knowledge = filter_knowledge_by_node(knowledge, effective_node)
 
-    # ── RAG search ──
+    # RAG 仍会执行地域、行业和会员过滤，保证学习资料可用且不越权。
     results = search_knowledge(
         question,
         node_knowledge or knowledge,
@@ -208,7 +205,7 @@ def learn(
             )
         )
 
-    # ── Build learning-augmented prompt ──
+    # 学习提示词会把意图、学习模式、节点和用户记忆一起传给模型。
     result_dicts = _results_to_dicts(results)
     memory_context = build_memory_context(recent_messages, conversation_summary, long_term_memories)
     compress_cfg = compress_config or CompressConfig(
@@ -225,7 +222,7 @@ def learn(
         memory_context=memory_context,
     )
 
-    # ── V2: Build system prompt from layered prompt library ──
+    # 分层系统提示词控制学习 Agent 的表达边界和结构要求。
     assembler = _get_assembler()
     system_prompt = assembler.assemble(
         mode=AgentMode.LEARNING.value,
@@ -233,10 +230,11 @@ def learn(
         region_id=region_id,
     )
 
-    # ── V2: Route LLM call through ModelRouter + Self-Check Retry ──
+    # 模型输出必须通过自检；失败时带反馈重试。
     router = _get_router()
 
     def llm_call(messages: list[dict]) -> str:
+        """供自检重试器调用的模型路由包装。"""
         result = router.call(
             messages=messages,
             task_hint="balanced",
@@ -279,7 +277,7 @@ def learn(
             )
         )
 
-    # ── Format output ──
+    # 统一格式化输出，并从本轮学习中提取长期记忆候选。
     output = format_learning_output(
         answer=answer,
         sources=_results_to_sources(results),
@@ -304,7 +302,7 @@ def _build_learning_prompt(
     context: str,
     memory_context: str,
 ) -> str:
-    """Build the full prompt sent to the LLM for learning."""
+    """构造学习模式下发送给 LLM 的完整用户提示词。"""
     node_name = _node_display_name(chain_node_id) if chain_node_id else "全链条"
 
     mode_hint = {
@@ -335,6 +333,7 @@ def _build_learning_prompt(
 # ---------------------------------------------------------------------------
 
 def _node_display_name(node_id: str | None) -> str:
+    """将链条节点 ID 转成人类可读名称。"""
     if node_id is None:
         return "未知"
     for slug, name, _ in CHAIN_NODES:
@@ -344,6 +343,7 @@ def _node_display_name(node_id: str | None) -> str:
 
 
 def _results_to_dicts(results: list[SearchResult]) -> list[dict]:
+    """把检索结果压成自检和上下文压缩使用的证据字典。"""
     return [
         {
             "id": r.id, "title": r.title, "content": r.content,
@@ -354,6 +354,7 @@ def _results_to_dicts(results: list[SearchResult]) -> list[dict]:
 
 
 def _results_to_sources(results: list[SearchResult]) -> list[SourceRef]:
+    """把检索结果转换为统一输出中的来源引用。"""
     return [
         SourceRef(
             id=r.id, title=r.title, source_url=r.source_url,

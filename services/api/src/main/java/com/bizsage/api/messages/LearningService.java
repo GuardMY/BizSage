@@ -26,13 +26,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * Industry Learning Agent orchestrator — the second half of BizSage's
- * dual-Agent system.
+ * 行业学习 Agent 编排服务，是 BizSage 双 Agent 体系的学习链路。
  *
- * <p>Parallels {@link DiagnosisService} but targets the AI worker's
- * {@code /agent/learn} and {@code /agent/transition} endpoints.
- * Handles message persistence, memory extraction, and SSE payload
- * assembly for learning interactions within a conversation.
+ * <p>职责与 {@link DiagnosisService} 类似，但调用 AI Worker 的 {@code /agent/learn}
+ * 和 {@code /agent/transition}。API 层负责消息落库、记忆落库、摘要维护和 SSE payload 组装。
  */
 @Service
 public class LearningService {
@@ -65,30 +62,30 @@ public class LearningService {
   }
 
   /**
-   * Run an industry learning interaction by delegating to the AI worker.
+   * 委托 AI Worker 执行一次行业学习交互。
    *
-   * @param chainNodeId optional chain node to focus learning on (auto-detected if null)
-   * @param learningMode FAST_START, FULL_CHAIN, or NODE_DEEP_DIVE
+   * @param chainNodeId 可选链条节点；为空时 Worker 会尝试自动识别
+   * @param learningMode FAST_START、FULL_CHAIN 或 NODE_DEEP_DIVE
    */
   public String learn(
       Conversation conversation, UserAccount user, String question,
       String chainNodeId, String learningMode) {
-    // 1. Persist the user message
+    // 1. 持久化用户学习问题，便于失败排查和后续摘要。
     long userMessageId = messageStore.append(
         conversation.id(), "USER", "LEARNING_QUESTION", question,
         null, null, null, null,
         conversation.regionId(), conversation.industryId());
 
-    // 2. Load context
+    // 2. 加载记忆、最近消息和摘要，为学习模式提供用户背景。
     List<UserMemoryProfile> memories = userMemoryStore.activeMemoriesForUser(user.id());
     List<ConversationMessage> recentMessages = messageStore.recentActiveMessages(conversation.id(), 6);
     ConversationSummary summary = summaryStore.latestActive(conversation.id()).orElse(null);
 
-    // 3. Load knowledge base
+    // 3. 加载用户可见的知识和已审核情报，作为学习证据池。
     List<Map<String, Object>> knowledgeItems = loadKnowledge(
         conversation.regionId(), conversation.industryId(), user.membershipLevel());
 
-    // 4. Assemble the learning request
+    // 4. 组装学习请求；learningMode 为空时使用快速入门默认值。
     LearningRequest request = LearningRequest.builder()
         .question(question)
         .knowledge(knowledgeItems)
@@ -102,7 +99,7 @@ public class LearningService {
         .membershipLevel(user.membershipLevel())
         .build();
 
-    // 5. Call the AI worker
+    // 5. 调用 AI Worker；学习失败同样严格抛出，不使用本地答案兜底。
     DiagnoseResponse response;
     try {
       response = aiWorkerClient.learn(request);
@@ -116,7 +113,7 @@ public class LearningService {
           "AI worker returned an unsuccessful learning response: selfCheckStatus=" + response.selfCheckStatus());
     }
 
-    // 6. Build the payload for SSE / persistence
+    // 6. 构造 SSE 与持久化共用的学习响应 payload。
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("mode", response.mode() != null ? response.mode() : "LEARNING");
     payload.put("answer", response.answer());
@@ -133,7 +130,7 @@ public class LearningService {
 
     String payloadJson = serialize(payload);
 
-    // 7. Persist the assistant message
+    // 7. 持久化助手学习回答。
     long assistantMessageId = messageStore.append(
         conversation.id(), "ASSISTANT", "LEARNING_ANSWER",
         response.answer(), serialize(toSourceMaps(response)),
@@ -141,14 +138,14 @@ public class LearningService {
         response.selfCheckStatus(),
         conversation.regionId(), conversation.industryId());
 
-    // 8. Persist memory candidates
+    // 8. 持久化学习中产生的长期记忆候选。
     if (response.memoryCandidates() != null) {
       for (Map<String, Object> candidate : response.memoryCandidates()) {
         persistCandidate(user, conversation, userMessageId, assistantMessageId, candidate);
       }
     }
 
-    // 9. Maintain memories and summaries
+    // 9. 标记记忆使用并滚动维护摘要。
     userMemoryStore.markUsed(memories.stream().map(UserMemoryProfile::id).toList());
     summarizeIfNeeded(conversation.id());
 
@@ -156,28 +153,29 @@ public class LearningService {
   }
 
   /**
-   * Execute a dual-Agent mode transition within a conversation.
-   * Routes to the target Agent (LEARNING ↔ DIAGNOSIS) with preserved context.
+   * 在同一会话内执行双 Agent 模式切换。
+   *
+   * <p>Worker 会保留原模式上下文，并将请求路由到目标 Agent（LEARNING ↔ DIAGNOSIS）。
    */
   public String transition(
       Conversation conversation, UserAccount user,
       String fromMode, String toMode, String question, String chainNodeId) {
-    // 1. Persist the transition message
+    // 1. 持久化用户触发切换的问题。
     long userMessageId = messageStore.append(
         conversation.id(), "USER", "TRANSITION",
         question, null, null, null, null,
         conversation.regionId(), conversation.industryId());
 
-    // 2. Load context
+    // 2. 加载切换所需上下文，保证目标 Agent 不丢失原模式讨论内容。
     List<UserMemoryProfile> memories = userMemoryStore.activeMemoriesForUser(user.id());
     List<ConversationMessage> recentMessages = messageStore.recentActiveMessages(conversation.id(), 6);
     ConversationSummary summary = summaryStore.latestActive(conversation.id()).orElse(null);
 
-    // 3. Load knowledge
+    // 3. 切换后的目标 Agent 仍使用同一权限范围内的知识池。
     List<Map<String, Object>> knowledgeItems = loadKnowledge(
         conversation.regionId(), conversation.industryId(), user.membershipLevel());
 
-    // 4. Assemble transition request
+    // 4. 组装模式切换请求。
     TransitionRequest request = TransitionRequest.builder()
         .fromMode(fromMode)
         .toMode(toMode)
@@ -192,7 +190,7 @@ public class LearningService {
         .membershipLevel(user.membershipLevel())
         .build();
 
-    // 5. Call AI worker transition
+    // 5. 调用 AI Worker 的模式切换接口。
     DiagnoseResponse response;
     try {
       response = aiWorkerClient.transition(request);
@@ -206,7 +204,7 @@ public class LearningService {
           "AI worker transition failed: selfCheckStatus=" + response.selfCheckStatus());
     }
 
-    // 6. Build payload
+    // 6. 构造目标模式的统一响应 payload。
     Map<String, Object> payload = new LinkedHashMap<>();
     payload.put("mode", response.mode());
     payload.put("answer", response.answer());
@@ -223,7 +221,7 @@ public class LearningService {
 
     String payloadJson = serialize(payload);
 
-    // 7. Persist assistant message with transition type
+    // 7. 按目标模式持久化助手消息类型。
     String messageType = "LEARNING".equals(toMode) ? "LEARNING_ANSWER" : "ANSWER";
     messageStore.append(
         conversation.id(), "ASSISTANT", messageType,
@@ -232,7 +230,7 @@ public class LearningService {
         response.selfCheckStatus(),
         conversation.regionId(), conversation.industryId());
 
-    // 8. Maintain memories
+    // 8. 持久化切换记忆候选并维护摘要。
     if (response.memoryCandidates() != null) {
       for (Map<String, Object> candidate : response.memoryCandidates()) {
         persistCandidate(user, conversation, userMessageId, 0L, candidate);
@@ -244,10 +242,11 @@ public class LearningService {
     return payloadJson;
   }
 
-  // ── Knowledge loading (shared logic with DiagnosisService) ──────
+  // 知识加载：与 DiagnosisService 保持同一权限口径。
 
   private List<Map<String, Object>> loadKnowledge(
       String regionId, String industryId, String membershipLevel) {
+    // DataScope 用于筛选已审核情报，静态知识由 KnowledgeStore 按地域/行业过滤。
     DataScope scope = new DataScope(regionId, industryId, membershipLevel, false);
     List<KnowledgeItem> knowledgeItems = knowledgeStore.listScoped(regionId, industryId);
     List<IntelligenceItem> intelligenceItems = intelligenceStore.listApprovedScoped(scope);
@@ -262,9 +261,10 @@ public class LearningService {
     return combined;
   }
 
-  // ── Context mappers ────────────────────────────────────────────
+  // 上下文映射。
 
   private List<Map<String, Object>> toRecentMessageMaps(List<ConversationMessage> messages) {
+    // Worker 使用 OpenAI 风格 role/content，不关心数据库消息类型。
     return messages.stream()
         .map(msg -> {
           Map<String, Object> map = new LinkedHashMap<>();
@@ -276,6 +276,7 @@ public class LearningService {
   }
 
   private List<Map<String, Object>> toMemoryMaps(List<UserMemoryProfile> memories) {
+    // 只发送提示词需要的记忆字段，避免暴露内部状态字段。
     return memories.stream()
         .map(mem -> {
           Map<String, Object> map = new LinkedHashMap<>();
@@ -289,9 +290,10 @@ public class LearningService {
         .collect(Collectors.toList());
   }
 
-  // ── Knowledge to AI Worker format ──────────────────────────────
+  // 转换为 AI Worker 知识格式。
 
   private Map<String, Object> knowledgeToMap(KnowledgeItem item) {
+    // 静态知识使用 kb- 前缀，避免与运营情报 ID 冲突。
     Map<String, Object> map = new LinkedHashMap<>();
     map.put("id", "kb-" + item.id());
     map.put("title", item.title());
@@ -300,8 +302,8 @@ public class LearningService {
     map.put("source_id", item.sourceId() != null ? item.sourceId() : "knowledge");
     map.put("weight", item.weight());
     map.put("confidence", item.confidence());
-    map.put("authority", 0.85);     // V2: six-dimension rerank
-    map.put("timeliness", 0.85);    // V2: six-dimension rerank
+    map.put("authority", 0.85);     // 六维重排：静态知识默认中高权威。
+    map.put("timeliness", 0.85);    // 六维重排：静态知识默认中高时效。
     map.put("industry_id", item.industryId() != null ? item.industryId() : "general");
     map.put("region_id", item.regionId() != null ? item.regionId() : "cn-default");
     map.put("entitlement", "FREE");
@@ -309,6 +311,7 @@ public class LearningService {
   }
 
   private Map<String, Object> intelligenceToMap(IntelligenceItem item) {
+    // 运营情报使用 intel- 前缀，权重和置信度来自审核结果。
     Map<String, Object> map = new LinkedHashMap<>();
     map.put("id", "intel-" + item.id());
     map.put("title", item.title());
@@ -317,17 +320,18 @@ public class LearningService {
     map.put("source_id", item.sourceId() != null ? item.sourceId() : "intelligence");
     map.put("weight", item.weight());
     map.put("confidence", item.confidence());
-    map.put("authority", 0.85);     // V2: six-dimension rerank
-    map.put("timeliness", 0.85);    // V2: six-dimension rerank
+    map.put("authority", 0.85);     // 六维重排：后续可按来源动态赋值。
+    map.put("timeliness", 0.85);    // 六维重排：后续可按采集时间动态衰减。
     map.put("industry_id", item.industryId() != null ? item.industryId() : "general");
     map.put("region_id", item.regionId() != null ? item.regionId() : "cn-default");
     map.put("entitlement", "FREE");
     return map;
   }
 
-  // ── Response mappers ────────────────────────────────────────────
+  // 响应映射。
 
   private List<Map<String, Object>> toSourceMaps(DiagnoseResponse response) {
+    // 复用 DiagnoseResponse 的来源结构，前端可统一展示学习和诊断引用。
     if (response.sources() == null) return List.of();
     return response.sources().stream()
         .map(src -> {
@@ -344,13 +348,14 @@ public class LearningService {
         .collect(Collectors.toList());
   }
 
-  // ── Memory persistence ──────────────────────────────────────────
+  // 记忆持久化。
 
   private void persistCandidate(
       UserAccount user, Conversation conversation,
       long userMessageId, long assistantMessageId,
       Map<String, Object> candidate) {
     try {
+      // Worker 只提供候选，UserMemoryStore 负责 save-or-refresh 和生命周期策略。
       String category = stringField(candidate, "category", "PREFERENCE");
       String key = stringField(candidate, "key", "unknown");
       String value = stringField(candidate, "value", "");
@@ -365,9 +370,10 @@ public class LearningService {
     }
   }
 
-  // ── Summarization ───────────────────────────────────────────────
+  // 会话摘要。
 
   private void summarizeIfNeeded(long conversationId) {
+    // 与诊断链路一致：消息达到阈值后把较早内容压入摘要。
     List<ConversationMessage> active = messageStore.activeMessages(conversationId);
     if (active.size() < 8) return;
     int coveredCount = Math.min(4, active.size() - 4);
@@ -388,7 +394,7 @@ public class LearningService {
     messageStore.markInactive(conversationId, summary.coveredMessageEndId(), summary.id());
   }
 
-  // ── Utility ─────────────────────────────────────────────────────
+  // 小型字段解析工具。
 
   private static String stringField(Map<String, Object> map, String key, String defaultValue) {
     Object value = map.get(key);

@@ -1,11 +1,7 @@
-"""V2: Multi-vendor registry for third-party API failover.
+"""第三方 API 多供应商注册表。
 
-Manages multiple API vendors per source type with:
-- Per-vendor health tracking (success/failure counters)
-- Priority-based ordering with automatic degradation
-- Rate-limit awareness
-- Cost-per-call tracking for cost governance
-- Redis-backed state persistence
+按 source_type 管理多个供应商，并跟踪健康度、优先级、限流命中和调用成本。
+供应商状态可写入 Redis，collector 重启后仍能延续降级判断。
 """
 
 from __future__ import annotations
@@ -19,22 +15,22 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class VendorConfig:
-    """Configuration for a third-party API vendor."""
+    """单个第三方 API 供应商配置。"""
 
     vendor_id: str
-    source_type: str  # e.g. "MARKET_DATA", "NEWS_API", "ECONOMIC_INDICATORS"
+    source_type: str  # 例如 "MARKET_DATA"、"NEWS_API"、"ECONOMIC_INDICATORS"。
     api_key: str = ""
     base_url: str = ""
-    priority: int = 1  # lower = preferred
+    priority: int = 1  # 数字越小越优先。
     rate_limit_per_minute: int = 60
     cost_per_call: float = 0.0
     max_consecutive_failures: int = 5
-    health_score: float = 1.0  # 0.0-1.0, starts healthy
+    health_score: float = 1.0  # 0.0-1.0，初始健康。
 
 
 @dataclass
 class VendorState:
-    """Runtime state for a vendor (persisted to Redis)."""
+    """供应商运行时状态，可持久化到 Redis。"""
 
     vendor_id: str
     success_count: int = 0
@@ -47,9 +43,9 @@ class VendorState:
 
 
 class VendorRegistry:
-    """Registry of third-party API vendors with health-aware failover.
+    """带健康感知失败转移的供应商注册表。
 
-    Usage::
+    使用示例::
 
         registry = VendorRegistry(
             vendors=[
@@ -77,44 +73,44 @@ class VendorRegistry:
         self._state_store = state_store
         self._call_counts: dict[str, int] = {}  # in-memory cost tracking
 
-    # ── Public API ──────────────────────────────────────────
+    # 对外 API。
 
     def get_healthy_vendors(self, source_type: str) -> list[VendorConfig]:
-        """Return vendors for a source type ordered by priority, excluding degraded ones.
+        """返回指定来源类型可用的供应商列表。
 
-        If all vendors are degraded, returns all of them (fail-open).
+        正常情况下排除已降级供应商；若全部降级则 fail-open 返回全部，避免数据源彻底中断。
         """
         candidates = [v for v in self._vendors.values() if v.source_type == source_type]
         if not candidates:
             return []
 
-        # Sort by: not degraded first, then priority, then health score descending
+        # 排序规则：未降级优先，其次优先级，再按健康分倒序。
         healthy = [v for v in candidates if not self._is_degraded(v.vendor_id)]
         if healthy:
             healthy.sort(key=lambda v: (v.priority, -v.health_score))
             return healthy
 
-        # All degraded — fail open, return all sorted by priority
+        # 全部降级时开放失败：仍按优先级返回全部供应商，由调用方决定是否尝试。
         logger.warning("All vendors degraded for source_type=%s — failing open", source_type)
         candidates.sort(key=lambda v: v.priority)
         return candidates
 
     def record_success(self, vendor_id: str) -> None:
-        """Record a successful API call for a vendor."""
+        """记录一次供应商成功调用，并逐步恢复健康分。"""
         self._call_counts[vendor_id] = self._call_counts.get(vendor_id, 0) + 1
         state = self._load_state(vendor_id)
         state.success_count += 1
         state.consecutive_failures = 0
         state.last_success = time.time()
         state.degraded = False
-        # Recover health score
+        # 成功后小步恢复健康分，避免一次成功就完全抹平历史故障。
         config = self._vendors.get(vendor_id)
         if config and config.health_score < 1.0:
             config.health_score = min(1.0, config.health_score + 0.1)
         self._save_state(state)
 
     def record_failure(self, vendor_id: str) -> None:
-        """Record a failed API call and potentially degrade the vendor."""
+        """记录一次供应商失败，并在连续失败达到阈值时降级。"""
         config = self._vendors.get(vendor_id)
         if config is None:
             return
@@ -133,13 +129,13 @@ class VendorRegistry:
         self._save_state(state)
 
     def record_rate_limit(self, vendor_id: str) -> None:
-        """Record a rate-limit hit for cost tracking."""
+        """记录供应商限流命中，用于后续容量和成本分析。"""
         state = self._load_state(vendor_id)
         state.rate_limit_hits += 1
         self._save_state(state)
 
     def get_cost_report(self) -> dict:
-        """Return cost-per-vendor summary for the current session."""
+        """返回当前进程会话内各供应商调用成本。"""
         report = {}
         for vendor_id, count in self._call_counts.items():
             config = self._vendors.get(vendor_id)
@@ -152,7 +148,7 @@ class VendorRegistry:
         return report
 
     def status(self) -> list[dict]:
-        """Return health status for all vendors."""
+        """返回所有供应商健康状态。"""
         result = []
         for vendor_id, config in self._vendors.items():
             state = self._load_state(vendor_id)
@@ -169,13 +165,15 @@ class VendorRegistry:
             })
         return result
 
-    # ── Internal ────────────────────────────────────────────
+    # 内部工具。
 
     def _is_degraded(self, vendor_id: str) -> bool:
+        """判断供应商是否处于降级状态。"""
         state = self._load_state(vendor_id)
         return state.degraded
 
     def _load_state(self, vendor_id: str) -> VendorState:
+        """从 Redis 读取供应商状态，读取失败时返回默认状态。"""
         if self._state_store is not None:
             try:
                 raw = self._state_store.load_raw(f"collector:vendor:{vendor_id}")
@@ -199,6 +197,7 @@ class VendorRegistry:
         return VendorState(vendor_id=vendor_id)
 
     def _save_state(self, state: VendorState) -> None:
+        """保存供应商状态；Redis 写失败只记录调试日志。"""
         if self._state_store is not None:
             try:
                 import json as _json

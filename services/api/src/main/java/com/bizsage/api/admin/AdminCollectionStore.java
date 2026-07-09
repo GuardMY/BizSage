@@ -59,6 +59,7 @@ public class AdminCollectionStore {
   }
 
   List<CollectionSourceConfig> listSources() {
+    // 管理端列表按启用状态和最新创建排序，便于优先查看正在运行的源。
     return jdbcTemplate.query("""
         select id, name, source_type, status, interval_minutes, max_retries, failure_threshold, cooldown_minutes,
                circuit_state, failure_count, region_id, industry_id, link_id, source_id, payload_json,
@@ -69,11 +70,13 @@ public class AdminCollectionStore {
   }
 
   CollectionSourceDetail sourceDetail(long sourceConfigId) {
+    // 详情页同时展示源配置、关键词和最近运行记录。
     CollectionSourceConfig source = findSource(sourceConfigId);
     return new CollectionSourceDetail(source, listKeywords(sourceConfigId), recentRuns(sourceConfigId, 12));
   }
 
   CollectionSourceDetail saveSource(CollectionSourceUpsertRequest request, String actor) {
+    // 创建/更新采集源后写审计日志，保证管理端操作可追溯。
     long sourceConfigId = request.sourceConfigId() == null ? createSource(request) : updateSource(request);
     CollectionSourceConfig source = findSource(sourceConfigId);
     writeAudit(actor, request.sourceConfigId() == null ? "ADMIN_COLLECTION_CREATE_SOURCE" : "ADMIN_COLLECTION_UPDATE_SOURCE", "collection_source", String.valueOf(sourceConfigId), "SUCCESS", source.regionId(), source.industryId());
@@ -97,6 +100,7 @@ public class AdminCollectionStore {
   }
 
   CollectionKeyword saveKeyword(CollectionKeywordUpsertRequest request, String actor) {
+    // 关键词必须绑定到已存在的采集源；INCLUDE/EXCLUDE 在执行阶段统一应用。
     long sourceConfigId = request.sourceConfigId() == null ? 0L : request.sourceConfigId();
     if (sourceConfigId <= 0) {
       throw new IllegalArgumentException("source config id is required");
@@ -141,11 +145,13 @@ public class AdminCollectionStore {
       try {
         executeSource(source.sourceConfigId(), "SCHEDULED", "system", true);
       } catch (Exception ignored) {
+        // 单个源失败不能阻断本轮调度，失败状态已在 executeSource 内记录。
       }
     }
   }
 
   private List<CollectionSourceConfig> dueSources() {
+    // 找出到期、启用且未运行中的采集源；熔断冷却期内的源会被跳过。
     LocalDateTime now = LocalDateTime.now();
     List<CollectionSourceConfig> sources = jdbcTemplate.query("""
         select id, name, source_type, status, interval_minutes, max_retries, failure_threshold, cooldown_minutes,
@@ -171,6 +177,7 @@ public class AdminCollectionStore {
   }
 
   private boolean hasRunningRun(long sourceConfigId) {
+    // 防止同一采集源被定时任务重复并发执行。
     Integer count = jdbcTemplate.queryForObject("""
         select count(*)
           from admin_collection_job_runs
@@ -181,6 +188,7 @@ public class AdminCollectionStore {
   }
 
   private CollectionJobRun executeSource(long sourceConfigId, String triggerType, String actor, boolean scheduled) {
+    // 采集执行主流程：创建 job/run、调用 Collector、关键词过滤、入库、生成审核工单并记录结果。
     CollectionSourceConfig source = findSource(sourceConfigId);
     if (!"ENABLED".equals(source.status()) && scheduled) {
       throw new IllegalArgumentException("source is not enabled");
@@ -206,7 +214,7 @@ public class AdminCollectionStore {
         List<Map<String, Object>> filtered = applyKeywords(records, keywords);
         int persisted = persistRawRecords(filtered, source, jobId, keywords);
 
-        // 鈹€鈹€ Auto-create intelligence items + review tickets 鈹€鈹€
+        // 采集到的治理记录先进入情报池，再生成审核工单，避免未经审核直接影响 RAG。
         int intelCreated = 0;
         int ticketsCreated = 0;
         if (!filtered.isEmpty()) {
@@ -223,6 +231,7 @@ public class AdminCollectionStore {
         writeAudit(actor, "ADMIN_COLLECTION_RUN_SOURCE", "collection_source", String.valueOf(sourceConfigId), "SUCCESS", source.regionId(), source.industryId());
         return findRun(runId);
       } catch (Exception exception) {
+        // 捕获后继续重试；最终失败统一进入 markRunFailure。
         failure = exception;
       }
     }
@@ -357,6 +366,7 @@ public class AdminCollectionStore {
   }
 
   private void markRunSuccess(CollectionSourceConfig source, long runId, long jobId, int recordsCollected, int recordsFiltered, int recordsPersisted, int retryCount) {
+    // 成功后关闭熔断、清零失败计数，并按 interval 计算下一次运行时间。
     LocalDateTime now = LocalDateTime.now();
     jdbcTemplate.update("""
         update collection_jobs
@@ -377,6 +387,7 @@ public class AdminCollectionStore {
   }
 
   private void markRunFailure(CollectionSourceConfig source, long runId, long jobId, int retryCount, String errorMessage, Map<String, Object> payload) {
+    // 失败次数达到阈值后打开熔断并写入死信表；否则按正常间隔等待下次调度。
     int failureCount = (source.failureCount() == null ? 0 : source.failureCount()) + 1;
     boolean openCircuit = failureCount >= Math.max(1, source.failureThreshold());
     String jobStatus = openCircuit ? "DEAD_LETTER" : "FAILED";
@@ -405,6 +416,7 @@ public class AdminCollectionStore {
   }
 
   private int persistRawRecords(List<Map<String, Object>> records, CollectionSourceConfig source, long jobId, List<CollectionKeyword> keywords) {
+    // raw_records 保存采集治理后的原始证据，metadata 记录来源配置和命中的关键词。
     int persisted = 0;
     for (Map<String, Object> record : records) {
       jdbcTemplate.update("""
@@ -432,6 +444,7 @@ public class AdminCollectionStore {
   }
 
   private List<Map<String, Object>> applyKeywords(List<Map<String, Object>> records, List<CollectionKeyword> keywords) {
+    // INCLUDE 为空表示不过滤包含词；EXCLUDE 命中则始终排除。
     List<String> includes = keywords.stream().filter(keyword -> "INCLUDE".equals(keyword.matchMode())).map(CollectionKeyword::keyword).map(this::lowercase).toList();
     List<String> excludes = keywords.stream().filter(keyword -> "EXCLUDE".equals(keyword.matchMode())).map(CollectionKeyword::keyword).map(this::lowercase).toList();
     List<Map<String, Object>> filtered = new ArrayList<>();

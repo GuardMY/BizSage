@@ -2,6 +2,24 @@
 
 ## 2026-07-09
 
+### Core Code Chinese Comment Enrichment
+
+- Change type: documentation-only code comments.
+- Affected modules: `services/ai-worker/app`, `services/collector/app`, `services/api/src/main/java/com/bizsage/api`, and both change logs.
+- Main changes:
+  - Added and refined Chinese module, method, and inline comments for the AI Worker diagnosis, learning, transition, RAG, context compression, memory, model routing, vector-store, and self-check retry paths.
+  - Added Chinese comments for Collector collection adapters, governance filtering, conflict classification, Redis state, resilience, API cache, proxy rotation, vendor failover, and HTTP entry points.
+  - Added Chinese comments for API core orchestration around AI Worker calls, SSE message streaming, diagnosis/learning persistence, authentication, request IDs, startup knowledge sync, memory embedding sync, Collector integration, admin collection scheduling, snapshots, and privacy helpers.
+  - Replaced a visible mojibake comment in `AdminCollectionStore` with a readable Chinese explanation while leaving runtime behavior unchanged.
+- Verification results:
+  - Verified the CodeGraph index was up to date before selecting core paths.
+  - Verified Python syntax with `python -m compileall services/ai-worker/app services/collector/app`; all modified Python modules compiled successfully.
+  - Ran `mvn test` in `services/api`; the run reached tests but failed existing business assertions unrelated to comment-only edits, including knowledge/intelligence list expectations, operations work-order shape, admin collection/knowledge lifecycle 500s, and rolling-summary count assertions.
+  - Ran `mvn -DskipTests clean compile` in `services/api`; clean compilation failed in unmodified `UserMemoryProfile.java` because `key` and `value` symbols are unresolved.
+- Unfinished items:
+  - Existing API compile/test failures remain and should be handled separately from this comment-only cleanup.
+  - Some peripheral Java modules outside the selected core paths still contain older English `V2` comments and can be localized in a follow-up pass if desired.
+
 ### RAG Control-Plane Refactor Recommendation Archive
 
 - Change type: documentation.

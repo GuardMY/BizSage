@@ -11,12 +11,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Scheduled job that syncs PENDING user memory embeddings to Qdrant.
+ * 定时同步 PENDING 用户记忆向量到 Qdrant。
  *
- * <p>Runs every 30 seconds, picking up to 50 PENDING records per batch.
- * Each record's memory_text is sent to the AI worker, which computes
- * an embedding and upserts it to the bizsage_memory Qdrant collection.
- * On success the record is marked SYNCED; on failure it is marked FAILED.
+ * <p>每 30 秒最多捞取 50 条 PENDING 记录，把 memory_text 发送给 AI Worker。
+ * Worker 负责计算向量并写入 bizsage_memory 集合；成功后标记 SYNCED，未返回的记录标记 FAILED。
  */
 @Component
 @ConditionalOnProperty(name = "bizsage.memory.vector-sync-enabled", havingValue = "true")
@@ -33,7 +31,7 @@ public class MemorySyncScheduler {
     this.aiWorkerClient = aiWorkerClient;
   }
 
-  /** Every 30 seconds — pick up pending memory embeddings and sync them to Qdrant. */
+  /** 每 30 秒捞取待同步记忆并写入 Qdrant。 */
   @Scheduled(fixedDelay = 30_000, initialDelay = 10_000)
   public void syncPendingEmbeddings() {
     List<Map<String, Object>> pending = embeddingStore.listPending(BATCH_SIZE);
@@ -43,7 +41,7 @@ public class MemorySyncScheduler {
 
     log.debug("Found {} pending memory embeddings to sync", pending.size());
 
-    // Map DB columns to the format expected by the AI worker's /memory/sync endpoint
+    // 将数据库列名映射为 AI Worker /memory/sync 端点期望的字段名。
     List<Map<String, Object>> requestMemories = pending.stream()
         .map(row -> {
           Map<String, Object> mem = new HashMap<>();
@@ -57,7 +55,7 @@ public class MemorySyncScheduler {
 
     List<Map<String, Object>> results = aiWorkerClient.syncMemoryEmbeddings(requestMemories);
 
-    // Update status for each result
+    // Worker 返回结果中的记录标记为 SYNCED。
     for (Map<String, Object> result : results) {
       try {
         Object embeddingIdObj = result.get("embedding_id");
@@ -70,7 +68,7 @@ public class MemorySyncScheduler {
       }
     }
 
-    // Mark any records that weren't in the results as failed
+    // 本批次中未出现在结果里的记录标记为 FAILED，等待后续人工或重试策略处理。
     if (results.size() < pending.size()) {
       var syncedIds = results.stream()
           .map(r -> r.get("embedding_id"))

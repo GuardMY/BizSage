@@ -19,8 +19,10 @@ public class AdminCollectionScheduler {
   @Scheduled(fixedDelayString = "${bizsage.admin.collection.scheduler-delay-ms:15000}")
   void runDueSources() {
     if (!schedulerEnabled) {
+      // 允许测试或单机部署关闭自动采集，只保留手动触发能力。
       return;
     }
+    // 到期判断、并发保护和失败记录都在 Store 层集中处理。
     store.runDueSources();
   }
 }

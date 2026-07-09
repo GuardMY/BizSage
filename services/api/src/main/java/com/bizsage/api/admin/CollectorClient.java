@@ -38,8 +38,11 @@ public class CollectorClient {
     this.restClient = RestClient.builder().baseUrl(collectorUrl).build();
   }
 
-  /** V2: Collect and govern with crawlerPages cache (15-min TTL) to avoid redundant
-   *  re-crawling of the same URLs within a short window. */
+  /**
+   * 采集并治理外部数据。
+   *
+   * <p>使用 crawlerPages 缓存避免短时间内重复抓取相同 URL；缓存 TTL 由缓存配置控制。
+   */
   @Cacheable(value = "crawlerPages", key = "#sourceType + ':' + T(java.util.Objects).hash(#payload)")
   public List<Map<String, Object>> collectAndGovern(String sourceType, Map<String, Object> payload) {
     List<Map<String, Object>> collected = collect(sourceType, payload);
@@ -48,6 +51,7 @@ public class CollectorClient {
 
   private List<Map<String, Object>> collect(String sourceType, Map<String, Object> payload) {
     if (collectorUrl.startsWith("embedded://")) {
+      // embedded 模式用于本地测试或 Collector 服务不可用的轻量环境。
       return embeddedCollect(sourceType, payload);
     }
     try {
@@ -63,6 +67,7 @@ public class CollectorClient {
           .body(MAP_TYPE);
       return readRecords(envelope);
     } catch (ResourceAccessException ex) {
+      // 将网络异常转换为管理端可读错误，避免暴露底层 RestClient 细节。
       Throwable root = ex.getCause();
       if (root instanceof ConnectException) {
         throw new IllegalArgumentException("collector is not reachable");
@@ -78,6 +83,7 @@ public class CollectorClient {
 
   private List<Map<String, Object>> govern(List<Map<String, Object>> records) {
     if (collectorUrl.startsWith("embedded://")) {
+      // embedded 模式下采集函数已返回规范化记录，这里直接透传。
       return embeddedGovern(records);
     }
     try {
@@ -98,6 +104,7 @@ public class CollectorClient {
   }
 
   private List<Map<String, Object>> embeddedCollect(String sourceType, Map<String, Object> payload) {
+    // 内嵌采集只覆盖当前系统使用的三类来源，行为需与 Python Collector 的输出契约一致。
     String normalizedType = normalizeType(sourceType);
     if ("PUBLIC_PAGE".equals(normalizedType)) {
       String url = stringValue(payload.get("url"), stringValue(payload.get("sourceUrl"), "embedded://page"));
@@ -149,6 +156,7 @@ public class CollectorClient {
   }
 
   private List<Map<String, Object>> embeddedGovern(List<Map<String, Object>> records) {
+    // 内嵌治理不做 SimHash/传闻过滤，仅作为开发环境兜底。
     return records;
   }
 
@@ -163,6 +171,7 @@ public class CollectorClient {
       double confidence,
       double weight,
       String url) {
+    // Collector 与 Admin 入库之间的统一记录格式。
     Map<String, Object> record = new HashMap<>();
     record.put("source_type", sourceType);
     record.put("source_id", sourceId);
@@ -178,6 +187,7 @@ public class CollectorClient {
   }
 
   private String endpointForType(String sourceType) {
+    // 业务来源类型到 Collector HTTP 端点的映射。
     return switch (normalizeType(sourceType)) {
       case "PUBLIC_PAGE" -> "/collect/public-page";
       case "MOCK_API" -> "/collect/mock-api";
@@ -187,6 +197,7 @@ public class CollectorClient {
   }
 
   private String normalizeType(String sourceType) {
+    // 兼容下划线、短横线和历史别名。
     String normalized = sourceType == null ? "" : sourceType.trim().toUpperCase(Locale.ROOT);
     return switch (normalized) {
       case "PUBLIC_PAGE", "PUBLIC-PAGE" -> "PUBLIC_PAGE";
@@ -197,6 +208,7 @@ public class CollectorClient {
   }
 
   private List<Map<String, Object>> readRecords(Map<String, Object> envelope) {
+    // Collector 响应统一使用 {"records": [...]} 外壳。
     if (envelope == null) {
       return List.of();
     }
@@ -205,6 +217,7 @@ public class CollectorClient {
   }
 
   private String titleFromHtml(String html, String fallback) {
+    // 内嵌模式的轻量标题提取，复杂 HTML 仍交给独立 Collector。
     int open = html == null ? -1 : html.toLowerCase(Locale.ROOT).indexOf("<title>");
     int close = html == null ? -1 : html.toLowerCase(Locale.ROOT).indexOf("</title>");
     if (open >= 0 && close > open) {
@@ -214,6 +227,7 @@ public class CollectorClient {
   }
 
   private String bodyFromHtml(String html) {
+    // 移除 script/style 和标签后压缩空白，得到近似正文。
     if (html == null) {
       return "";
     }
@@ -222,6 +236,7 @@ public class CollectorClient {
   }
 
   private String compact(String text) {
+    // 压缩多余空白，保持与 Python Collector normalize_record 接近。
     return text == null ? "" : text.replaceAll("\\s+", " ").trim();
   }
 
@@ -230,6 +245,7 @@ public class CollectorClient {
   }
 
   private double doubleValue(Object value, double fallback) {
+    // 外部 payload 可能传入字符串或数字，解析失败时使用默认权重/置信度。
     if (value == null) {
       return fallback;
     }

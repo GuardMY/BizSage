@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+"""经营诊断 Agent 主流程。
+
+本模块只负责把证据、记忆和提示词组装成一次严格的诊断调用；会话落库、
+用户记忆持久化和 SSE 输出由 Java API 层负责。诊断失败时显式返回错误状态，
+避免在业务决策场景里悄悄退回到 mock 或本地模板答案。
+"""
+
 from app.context_compressor import CompressConfig, compress_context
 from app.llm import generate_answer, LLMNotConfiguredError, LLMCallError
 from app.memory import build_memory_context, extract_diagnosis_memories
@@ -15,7 +22,7 @@ TIMELINESS = "基于V1静态基线知识和已入库情报生成。"
 LLM_NOT_CONFIGURED = "LLM_NOT_CONFIGURED"
 LLM_CALL_FAILED = "LLM_CALL_FAILED"
 
-# ── Lazy-initialized singletons ──
+# 懒加载单例：FastAPI 进程内复用提示词装配器和模型路由器，避免每次请求重复构建。
 _assembler: PromptAssembler | None = None
 _router: ModelRouter | None = None
 
@@ -49,7 +56,8 @@ def diagnose(
     restrict_to_knowledge_ids: bool = False,
     compress_config: CompressConfig | None = None,
 ) -> dict:
-    # ── Conflict pre-check ──
+    """基于知识库证据、会话记忆和用户问题生成经营诊断结果。"""
+    # 冲突标签由上游治理链路给出；一旦存在冲突，先交给运营复核，避免输出不可靠结论。
     if conflict_labels:
         return {
             "answer": "当前信息存在冲突或缺少权威支撑，需要运营复核后再给出结论。",
@@ -60,7 +68,7 @@ def diagnose(
             "disclaimer": DISCLAIMER,
         }
 
-    # ── RAG search ──
+    # 先检索可追溯证据，再允许 LLM 生成；没有证据时直接返回“信息不足”。
     results = search_knowledge(
         question,
         knowledge,
@@ -80,7 +88,7 @@ def diagnose(
             "disclaimer": DISCLAIMER,
         }
 
-    # ── Context compression ──
+    # 将 RAG 命中的证据压缩到模型上下文预算内，同时保留消息摘要和长期记忆。
     result_dicts = [
         {
             "id": item.id,
@@ -102,7 +110,7 @@ def diagnose(
     else:
         context = compressed_text
 
-    # ── V2: Build system prompt from layered prompt library ──
+    # 使用分层提示词库生成系统提示词，保证诊断模式、地域和行业约束一致。
     assembler = _get_assembler()
     system_prompt = assembler.assemble(
         mode=AgentMode.DIAGNOSIS.value,
@@ -110,10 +118,11 @@ def diagnose(
         region_id=region_id,
     )
 
-    # ── V2: Route LLM call through ModelRouter + Self-Check Retry ──
+    # 通过 ModelRouter 调用模型，并在自检失败时带反馈重试。
     router = _get_router()
 
     def llm_call(messages: list[dict]) -> str:
+        """供自检重试器调用的薄包装：隐藏路由细节，只返回模型正文。"""
         result = router.call(
             messages=messages,
             task_hint="balanced",

@@ -2,6 +2,24 @@
 
 ## 2026-07-09
 
+### 核心代码中文注释完善
+
+- 变更类型：仅代码注释的文档更新。
+- 影响模块：`services/ai-worker/app`、`services/collector/app`、`services/api/src/main/java/com/bizsage/api` 和两份变更日志。
+- 主要变更：
+  - 为 AI Worker 的诊断、学习、模式切换、RAG、上下文压缩、记忆、模型路由、向量存储和自检重试链路补充并优化中文模块注释、方法注释与关键行内注释。
+  - 为 Collector 的采集适配、治理过滤、冲突分类、Redis 状态、韧性处理、API 缓存、代理轮换、供应商失败转移和 HTTP 入口补充中文注释。
+  - 为 API 核心编排链路补充中文注释，覆盖 AI Worker 调用、SSE 消息流、诊断/学习持久化、认证、请求 ID、启动知识同步、记忆向量同步、Collector 集成、后台采集调度、快照和隐私辅助工具。
+  - 将 `AdminCollectionStore` 中一处可见乱码注释替换为可读中文说明，未改变运行时行为。
+- 验证结果：
+  - 已在选择核心路径前确认 CodeGraph 索引处于最新状态。
+  - 已执行 `python -m compileall services/ai-worker/app services/collector/app`，修改过的 Python 模块均通过语法编译。
+  - 已在 `services/api` 中执行 `mvn test`；测试进入运行阶段，但失败于既有业务断言，与本次仅注释修改无直接关系，包括知识/情报列表预期、运维工单响应形态、后台采集/知识生命周期 500、滚动摘要数量断言等。
+  - 已在 `services/api` 中执行 `mvn -DskipTests clean compile`；干净编译失败于未修改的 `UserMemoryProfile.java`，原因是 `key` 与 `value` 符号无法解析。
+- 未完成事项：
+  - API 现有编译与测试失败仍需作为独立问题处理，不属于本次注释清理范围。
+  - 所选核心路径之外的部分外围 Java 模块仍保留旧的英文 `V2` 注释，如需可在后续继续本地化。
+
 ### RAG 控制面重构建议归档
 
 - 变更类型：文档更新。

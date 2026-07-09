@@ -1,10 +1,6 @@
-"""V2: Proxy rotation pool with per-domain IP cooldown.
+"""代理轮换池，支持按域名失败冷却。
 
-Supports:
-- Multiple proxy vendors with configurable priorities
-- Per-domain failure tracking and exponential cooldown
-- Redis-backed state persistence (survives collector restarts)
-- Round-robin rotation with health weighting
+支持多供应商优先级、失败指数冷却、Redis 状态持久化和健康感知轮换。
 """
 
 from __future__ import annotations
@@ -19,19 +15,19 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ProxyConfig:
-    """Configuration for a single proxy endpoint."""
+    """单个代理节点配置。"""
 
     proxy_id: str
-    address: str  # e.g. "http://user:pass@1.2.3.4:8080"
+    address: str  # 例如 "http://user:pass@1.2.3.4:8080"
     vendor: str = "default"
-    priority: int = 1  # lower = higher priority
+    priority: int = 1  # 数字越小优先级越高。
     max_failures: int = 5
-    base_cooldown_seconds: int = 60  # doubles on each consecutive failure
+    base_cooldown_seconds: int = 60  # 连续失败后按指数倍数增加。
 
 
 @dataclass
 class ProxyState:
-    """Runtime state for a proxy (persisted to Redis)."""
+    """代理运行时状态，可持久化到 Redis。"""
 
     proxy_id: str
     failure_count: int = 0
@@ -65,9 +61,9 @@ class ProxyState:
 
 
 class ProxyManager:
-    """Manages a pool of proxy endpoints with health-aware rotation.
+    """管理代理池并按健康状态轮换。
 
-    Usage::
+    使用示例::
 
         manager = ProxyManager(
             proxies=[ProxyConfig(proxy_id="p1", address="http://proxy1:8080")],
@@ -90,20 +86,19 @@ class ProxyManager:
         self._state_store = state_store
         self._rotation_index: int = 0
 
-    # ── Public API ──────────────────────────────────────────
+    # 对外 API。
 
     def get_proxy(self, domain: str) -> ProxyConfig | None:
-        """Return the best available proxy for a domain.
+        """为目标域名选择一个可用代理。
 
-        Selection order: lowest priority → not in cooldown → round-robin.
-        Returns None if no proxies are available.
+        选择顺序：优先级 → 未冷却 → 轮询；没有可用代理时返回 None。
         """
         available = self._list_available(domain)
         if not available:
             logger.warning("No proxies available for domain %s", domain)
             return None
 
-        # Round-robin among available proxies, ordered by priority
+        # 在同一优先级序列中轮询，避免所有请求压到同一个代理。
         available.sort(key=lambda p: (p.priority, p.proxy_id))
         index = self._rotation_index % len(available)
         self._rotation_index += 1
@@ -112,14 +107,14 @@ class ProxyManager:
         return proxy
 
     def mark_success(self, proxy_id: str, domain: str) -> None:
-        """Reset failure count for a proxy after a successful request."""
+        """请求成功后清空代理失败计数和冷却状态。"""
         state = self._load_state(proxy_id)
         state.failure_count = 0
         state.cooldown_until = 0.0
         self._save_state(state)
 
     def mark_failure(self, proxy_id: str, domain: str) -> None:
-        """Record a failure and apply exponential cooldown."""
+        """记录代理失败，并在达到阈值后进入指数冷却。"""
         config = self._proxies.get(proxy_id)
         if config is None:
             return
@@ -127,7 +122,7 @@ class ProxyManager:
         state.failure_count += 1
 
         if state.failure_count >= config.max_failures:
-            # Exponential backoff: base * 2^(failures - max_failures)
+            # 指数退避：base * 2^(failures - max_failures)。
             extra = state.failure_count - config.max_failures
             cooldown = config.base_cooldown_seconds * (2**extra)
             state.cooldown_until = time.time() + cooldown
@@ -138,7 +133,7 @@ class ProxyManager:
         self._save_state(state)
 
     def status(self) -> list[dict]:
-        """Return health status for all proxies."""
+        """返回所有代理的健康状态。"""
         result = []
         for proxy_id, config in self._proxies.items():
             state = self._load_state(proxy_id)
@@ -152,9 +147,10 @@ class ProxyManager:
             })
         return result
 
-    # ── Internal ────────────────────────────────────────────
+    # 内部工具。
 
     def _list_available(self, domain: str) -> list[ProxyConfig]:
+        """列出当前未处于冷却期的代理。"""
         available: list[ProxyConfig] = []
         for config in self._proxies.values():
             state = self._load_state(config.proxy_id)
@@ -163,6 +159,7 @@ class ProxyManager:
         return available
 
     def _load_state(self, proxy_id: str) -> ProxyState:
+        """从 Redis 读取代理状态，读取失败时退回默认健康状态。"""
         if self._state_store is not None:
             try:
                 raw = self._state_store.load_raw(f"collector:proxy:{proxy_id}")
@@ -175,6 +172,7 @@ class ProxyManager:
         return ProxyState(proxy_id=proxy_id)
 
     def _save_state(self, state: ProxyState) -> None:
+        """保存代理状态；Redis 写失败只记录调试日志。"""
         state.last_used = time.time()
         if self._state_store is not None:
             try:
@@ -187,6 +185,7 @@ class ProxyManager:
                 logger.debug("Failed to save proxy state to Redis for %s", state.proxy_id, exc_info=True)
 
     def _touch_state(self, proxy_id: str) -> None:
+        """更新代理最近使用时间。"""
         state = self._load_state(proxy_id)
         state.last_used = time.time()
         self._save_state(state)

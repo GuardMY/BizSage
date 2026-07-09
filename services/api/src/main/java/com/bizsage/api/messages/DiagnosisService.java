@@ -54,16 +54,15 @@ public class DiagnosisService {
     this.intelligenceStore = intelligenceStore;
   }
 
-  /**
-   * Run a diagnosis by delegating to the AI worker.
+/**
+   * 委托 AI Worker 执行经营诊断。
    *
-   * <p>Message persistence, memory persistence, and summarization
-   * remain in the API layer.  The worker is the sole inference engine.
+   * <p>API 层负责消息落库、记忆落库和摘要维护；AI Worker 是唯一推理引擎。
    *
-   * @throws AiWorkerException if the worker is unavailable or LLM is not configured
+   * @throws AiWorkerException Worker 不可用或 LLM 未配置时抛出
    */
   public String diagnose(Conversation conversation, UserAccount user, String question) {
-    // 1. Persist the user message
+    // 1. 先持久化用户问题，保证 Worker 失败时也能追踪本次提问。
     long userMessageId = messageStore.append(
         conversation.id(),
         "USER",
@@ -76,16 +75,16 @@ public class DiagnosisService {
         conversation.regionId(),
         conversation.industryId());
 
-    // 2. Load context for the worker
+    // 2. 加载 Worker 需要的上下文：长期记忆、最近消息和会话摘要。
     List<UserMemoryProfile> memories = userMemoryStore.activeMemoriesForUser(user.id());
     List<ConversationMessage> recentMessages = messageStore.recentActiveMessages(conversation.id(), 6);
     ConversationSummary summary = summaryStore.latestActive(conversation.id()).orElse(null);
 
-    // 3. Load knowledge base for the worker
+    // 3. 加载本用户可见的知识与已审核情报，作为 RAG 证据池。
     List<Map<String, Object>> knowledgeItems = loadKnowledgeForDiagnosis(
         conversation.regionId(), conversation.industryId(), user.membershipLevel());
 
-    // 4. Assemble the worker request
+    // 4. 组装 Worker 请求；字段命名需与 Python Pydantic 模型保持兼容。
     DiagnoseRequest request = DiagnoseRequest.builder()
         .question(question)
         .knowledge(knowledgeItems)
@@ -97,7 +96,7 @@ public class DiagnosisService {
         .membershipLevel(user.membershipLevel())
         .build();
 
-    // 5. Call the AI worker — strict failure on error
+    // 5. 调用 AI Worker；严格失败，不做本地答案兜底。
     DiagnoseResponse response;
     try {
       response = aiWorkerClient.diagnose(request);
@@ -111,7 +110,7 @@ public class DiagnosisService {
           "AI worker returned an unsuccessful diagnosis: selfCheckStatus=" + response.selfCheckStatus());
     }
 
-    // 6. Build the payload for SSE / persistence
+    // 6. 构造 SSE 与持久化共用的响应 payload。
     List<Map<String, Object>> sources = toSourceMaps(response);
 
     Map<String, Object> payload = new LinkedHashMap<>();
@@ -124,7 +123,7 @@ public class DiagnosisService {
 
     String payloadJson = serialize(payload);
 
-    // 7. Persist the assistant message
+    // 7. 持久化助手回答及其来源、自检状态。
     long assistantMessageId = messageStore.append(
         conversation.id(),
         "ASSISTANT",
@@ -137,23 +136,24 @@ public class DiagnosisService {
         conversation.regionId(),
         conversation.industryId());
 
-    // 8. Persist memory candidates from the worker
+    // 8. 持久化 Worker 从本轮问答中提取的长期记忆候选。
     if (response.memoryCandidates() != null) {
       for (Map<String, Object> candidate : response.memoryCandidates()) {
         persistCandidate(user, conversation, userMessageId, assistantMessageId, candidate);
       }
     }
 
-    // 9. Mark memories as used and maintain summaries
+    // 9. 标记记忆使用并维护会话摘要，防止活跃消息无限增长。
     userMemoryStore.markUsed(memories.stream().map(UserMemoryProfile::id).toList());
     summarizeIfNeeded(conversation.id());
 
     return payloadJson;
   }
 
-  // ── Context mappers ────────────────────────────────────────────
+  // 上下文映射。
 
   private List<Map<String, Object>> toRecentMessageMaps(List<ConversationMessage> messages) {
+    // Worker 只需要 OpenAI 风格 role/content，数据库消息类型在这里收敛。
     return messages.stream()
         .map(msg -> {
           Map<String, Object> map = new LinkedHashMap<>();
@@ -165,6 +165,7 @@ public class DiagnosisService {
   }
 
   private List<Map<String, Object>> toMemoryMaps(List<UserMemoryProfile> memories) {
+    // 只发送生成提示词所需的记忆字段，避免泄露数据库内部状态。
     return memories.stream()
         .map(mem -> {
           Map<String, Object> map = new LinkedHashMap<>();
@@ -178,14 +179,12 @@ public class DiagnosisService {
         .collect(Collectors.toList());
   }
 
-  // ── Knowledge loading ───────────────────────────────────────────
+  // 知识加载。
 
   /**
-   * Load knowledge items from the knowledge base and approved intelligence
-   * for use as the RAG search corpus in the AI worker.
+   * 加载知识库与已审核情报，作为 AI Worker 的 RAG 语料。
    *
-   * <p>Admin users (null region/industry) receive all knowledge items;
-   * scoped users receive only items matching their region and industry.
+   * <p>地域/行业范围由 Store 层和 DataScope 控制，避免把不可见情报传给 Worker。
    */
   private List<Map<String, Object>> loadKnowledgeForDiagnosis(
       String regionId, String industryId, String membershipLevel) {
@@ -205,6 +204,7 @@ public class DiagnosisService {
   }
 
   private Map<String, Object> knowledgeToMap(KnowledgeItem item) {
+    // 以 kb- 前缀区分静态知识，避免与情报 ID 冲突。
     Map<String, Object> map = new LinkedHashMap<>();
     map.put("id", "kb-" + item.id());
     map.put("title", item.title());
@@ -213,8 +213,8 @@ public class DiagnosisService {
     map.put("source_id", item.sourceId() != null ? item.sourceId() : "knowledge");
     map.put("weight", item.weight());
     map.put("confidence", item.confidence());
-    map.put("authority", 0.85);     // V2: six-dimension rerank
-    map.put("timeliness", 0.85);    // V2: six-dimension rerank
+    map.put("authority", 0.85);     // 六维重排：静态知识默认中高权威。
+    map.put("timeliness", 0.85);    // 六维重排：静态知识默认中高时效。
     map.put("industry_id", item.industryId() != null ? item.industryId() : "general");
     map.put("region_id", item.regionId() != null ? item.regionId() : "cn-default");
     map.put("entitlement", "FREE");
@@ -222,6 +222,7 @@ public class DiagnosisService {
   }
 
   private Map<String, Object> intelligenceToMap(IntelligenceItem item) {
+    // 以 intel- 前缀区分运营情报，来源和权重来自审核入库结果。
     Map<String, Object> map = new LinkedHashMap<>();
     map.put("id", "intel-" + item.id());
     map.put("title", item.title());
@@ -230,17 +231,18 @@ public class DiagnosisService {
     map.put("source_id", item.sourceId() != null ? item.sourceId() : "intelligence");
     map.put("weight", item.weight());
     map.put("confidence", item.confidence());
-    map.put("authority", 0.85);     // V2: six-dimension rerank
-    map.put("timeliness", 0.85);    // V2: six-dimension rerank
+    map.put("authority", 0.85);     // 六维重排：后续可接入来源级权威度。
+    map.put("timeliness", 0.85);    // 六维重排：后续可接入情报采集时间衰减。
     map.put("industry_id", item.industryId() != null ? item.industryId() : "general");
     map.put("region_id", item.regionId() != null ? item.regionId() : "cn-default");
     map.put("entitlement", "FREE");
     return map;
   }
 
-  // ── Response mappers ────────────────────────────────────────────
+  // 响应映射。
 
   private List<Map<String, Object>> toSourceMaps(DiagnoseResponse response) {
+    // 保留 Worker 返回的来源分数和权益信息，前端可用于引用展示。
     if (response.sources() == null) {
       return List.of();
     }
@@ -261,7 +263,7 @@ public class DiagnosisService {
         .collect(Collectors.toList());
   }
 
-  // ── Memory persistence ──────────────────────────────────────────
+  // 记忆持久化。
 
   private void persistCandidate(
       UserAccount user,
@@ -270,6 +272,7 @@ public class DiagnosisService {
       long assistantMessageId,
       Map<String, Object> candidate) {
     try {
+      // Worker 只产出候选；最终去重、刷新和过期策略由 UserMemoryStore 控制。
       String category = stringField(candidate, "category", "PREFERENCE");
       String key = stringField(candidate, "key", "unknown");
       String value = stringField(candidate, "value", "");
@@ -291,9 +294,10 @@ public class DiagnosisService {
     }
   }
 
-  // ── Summarization ───────────────────────────────────────────────
+  // 会话摘要。
 
   private void summarizeIfNeeded(long conversationId) {
+    // 只在活跃消息足够多时滚动摘要，保留最近 4 条作为短期上下文。
     List<ConversationMessage> active = messageStore.activeMessages(conversationId);
     if (active.size() < 8) {
       return;
@@ -319,7 +323,7 @@ public class DiagnosisService {
     messageStore.markInactive(conversationId, summary.coveredMessageEndId(), summary.id());
   }
 
-  // ── Utility ─────────────────────────────────────────────────────
+  // 小型字段解析工具。
 
   private static String stringField(Map<String, Object> map, String key, String defaultValue) {
     Object value = map.get(key);

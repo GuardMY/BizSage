@@ -1,4 +1,4 @@
-"""ModelRouter — 4-tier model dispatcher with primary→backup→degrade failover chain."""
+"""ModelRouter：四档模型路由器，支持主模型→备模型→降档的失败转移链。"""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from app.llm import LLMCallError, LLMNotConfiguredError
 from app.model_routing.models import ModelConfig, ModelTier, RouteResult
 from app.model_routing.providers import call_provider
 
-# ── Tier degradation order (when a tier is completely unavailable) ──
+# 某一档模型全部失败时的降档顺序；不包含 TASK_SPECIFIC，避免专用任务误降级。
 _DEGRADE_ORDER: tuple[ModelTier, ...] = (
     ModelTier.ADVANCED,
     ModelTier.BALANCED,
@@ -17,25 +17,24 @@ _DEGRADE_ORDER: tuple[ModelTier, ...] = (
 
 
 class ModelRouter:
-    """4-tier model router with failover chain.
+    """四档模型路由器。
 
-    For each tier (LIGHT / BALANCED / ADVANCED / TASK_SPECIFIC), reads::
+    每档（LIGHT / BALANCED / ADVANCED / TASK_SPECIFIC）读取以下配置::
 
         <TIER>_PRIMARY_MODEL     <TIER>_PRIMARY_BASE_URL     <TIER>_PRIMARY_API_KEY
         <TIER>_BACKUP_MODEL      <TIER>_BACKUP_BASE_URL      <TIER>_BACKUP_API_KEY
 
-    Falls back to legacy ``OPENAI_COMPATIBLE_*`` env vars when no tier-specific
-    config is found, ensuring full backward compatibility.
+    没有分档配置时退回 OPENAI_COMPATIBLE_*，保证旧部署可继续运行。
     """
 
     def __init__(self) -> None:
         self._tiers: dict[ModelTier, list[ModelConfig]] = {}
         self._load_configs()
 
-    # ── Configuration loading ──────────────────────────────────────────
+    # 配置加载。
 
     def _load_configs(self) -> None:
-        """Load all tier configs from environment variables."""
+        """从环境变量加载所有模型档位配置。"""
         for tier in ModelTier:
             primary = self._read_tier_config(tier, is_backup=False)
             if primary:
@@ -44,7 +43,7 @@ class ModelRouter:
             if backup:
                 self._tiers.setdefault(tier, []).append(backup)
 
-        # If no tier configs at all, fall back to legacy OPENAI_COMPATIBLE_*
+        # 没有任何分档配置时，使用旧版 OPENAI_COMPATIBLE_* 作为 BALANCED 档兜底。
         if not self._tiers:
             legacy = self._build_legacy_fallback()
             if legacy:
@@ -79,7 +78,7 @@ class ModelRouter:
         )
 
     def _build_legacy_fallback(self) -> ModelConfig | None:
-        """Build a ModelConfig from legacy OPENAI_COMPATIBLE_* env vars."""
+        """从旧版 OPENAI_COMPATIBLE_* 环境变量构建兼容配置。"""
         api_key = os.getenv("OPENAI_COMPATIBLE_API_KEY", "").strip()
         if not api_key:
             return None
@@ -93,28 +92,22 @@ class ModelRouter:
             model_name=os.getenv("OPENAI_COMPATIBLE_MODEL", "deepseek-chat"),
         )
 
-    # ── Tier resolution ─────────────────────────────────────────────────
+    # 档位解析。
 
     def resolve_tier(
         self,
         task_hint: str | None = None,
         context: dict | None = None,
     ) -> ModelTier:
-        """Resolve the appropriate tier for a task.
+        """为任务解析合适的模型档位。
 
-        Args:
-            task_hint: explicit hint (``"light"``, ``"balanced"``, ``"advanced"``,
-                       ``"task_specific"``).
-            context: optional dict for auto-detection, e.g. ``{"intent_type": "RISK_ASSESSMENT"}``.
-
-        Returns:
-            The resolved ``ModelTier``.
+        显式 task_hint 优先，其次按 context 中的任务意图自动判断，最后使用 DEFAULT_TIER。
         """
-        # Explicit hint takes precedence
+        # 显式 hint 优先，调用方可以强制轻量/平衡/高级档。
         if task_hint and task_hint.upper() in ModelTier.__members__:
             return ModelTier[task_hint.upper()]
 
-        # Auto-detect from context
+        # 根据任务意图自动选择档位：抽取类轻量，风控/归因类更重。
         if context:
             intent = context.get("intent_type", "")
             if intent in {"CLASSIFICATION", "EXTRACTION", "KEYWORD_MATCHING"}:
@@ -124,13 +117,13 @@ class ModelRouter:
             if intent in {"RISK_ASSESSMENT", "ATTRIBUTION"}:
                 return ModelTier.ADVANCED
 
-        # Safe default
+        # 安全默认值：环境变量无效时回到 BALANCED。
         default_tier = os.getenv("DEFAULT_TIER", "balanced").upper()
         if default_tier in ModelTier.__members__:
             return ModelTier[default_tier]
         return ModelTier.BALANCED
 
-    # ── Main entry point ────────────────────────────────────────────────
+    # 主入口。
 
     def call(
         self,
@@ -141,16 +134,9 @@ class ModelRouter:
         max_tokens: int | None = None,
         require_tier: ModelTier | None = None,
     ) -> RouteResult:
-        """Route to appropriate model tier with failover chain.
+        """按档位路由模型调用，并执行失败转移。
 
-        1. Resolve tier (explicit > auto-detect > default).
-        2. Try primary model in the tier.
-        3. On failure, try backup model in the same tier.
-        4. If entire tier is exhausted, degrade to the next available tier.
-        5. If all tiers fail, raise ``LLMCallError``.
-
-        Returns:
-            ``RouteResult`` with response text and routing metadata.
+        顺序：解析档位 → 同档主/备模型 → 跨档降级 → 全部失败抛出 LLMCallError。
         """
         tier = require_tier or self.resolve_tier(task_hint, context)
         configs = self._tiers.get(tier) or self._tiers.get(ModelTier.BALANCED, [])
@@ -163,7 +149,7 @@ class ModelRouter:
         primary_config: ModelConfig | None = None
         last_error: LLMCallError | None = None
 
-        # ── Within-tier failover ──
+        # 同档失败转移：主模型失败后尝试备模型。
         for config in configs:
             try:
                 response = call_provider(config, messages, temperature, max_tokens)
@@ -174,13 +160,13 @@ class ModelRouter:
                     failover_attempted=primary_config is not None,
                 )
             except LLMNotConfiguredError:
-                raise  # Don't retry — missing credentials won't fix themselves
+                raise  # 凭据缺失属于配置错误，重试或降级都无法自动修复。
             except LLMCallError as e:
                 last_error = e
                 if primary_config is None:
                     primary_config = config
 
-        # ── Cross-tier degradation ──
+        # 跨档降级：保持可用性，但在 RouteResult 中记录原始错误。
         for degrade_tier in _DEGRADE_ORDER:
             if degrade_tier == tier:
                 continue

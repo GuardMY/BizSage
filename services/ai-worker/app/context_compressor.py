@@ -1,12 +1,11 @@
-"""Context compression for the RAG retrieval pipeline.
+"""RAG 检索结果的上下文压缩器。
 
-Compresses retrieved knowledge items to fit within the model's context window
-while preserving the most relevant information.  The compressor:
+把命中的知识压到模型上下文预算内，同时尽量保留高相关、高质量证据。压缩流程：
 
-1.  Merges near-duplicate results (high content overlap).
-2.  Truncates very long items to a per-item token budget.
-3.  Distributes the total token budget across items proportionally by score.
-4.  Falls back gracefully when the budget is very tight.
+1. 合并高度重复的结果。
+2. 按相关度分配每条证据的字符预算。
+3. 对超长证据按句子边界截断。
+4. 预算极紧时保证每条证据至少有最小展示长度。
 """
 
 from __future__ import annotations
@@ -22,35 +21,35 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class CompressedItem:
-    """A single compressed knowledge item."""
+    """单条压缩后的知识项。"""
     id: str
     title: str
     content: str
     source_url: str
     source_id: str
     score: float
-    original_length: int       # chars before compression
-    compressed_length: int     # chars after compression
-    merged_from: list[str] = field(default_factory=list)  # ids of items merged in
+    original_length: int       # 压缩前字符数。
+    compressed_length: int     # 压缩后字符数。
+    merged_from: list[str] = field(default_factory=list)  # 被合并进来的知识 ID。
 
 
 @dataclass(frozen=True)
 class CompressConfig:
-    """Tunable parameters for the context compressor."""
+    """上下文压缩的可调参数。"""
 
-    # Total token budget for the compressed context (prompt tokens).
+    # 压缩后上下文可占用的总 token 预算。
     total_token_budget: int = 2400
 
-    # Minimum characters guaranteed per item (ensures every result is represented).
+    # 每条证据的最小字符数，防止低分证据完全消失。
     min_chars_per_item: int = 80
 
-    # Maximum characters for any single item after truncation.
+    # 单条证据截断后的最大字符数。
     max_chars_per_item: int = 1200
 
-    # Jaccard similarity threshold above which two items are merged.
+    # 三元字符 Jaccard 相似度超过该阈值时合并。
     merge_similarity_threshold: float = 0.70
 
-    # Estimated characters per token (conservative for mixed CJK/ASCII text).
+    # 中英混合文本的保守字符/token 估算。
     chars_per_token: float = 3.2
 
 
@@ -66,31 +65,31 @@ def compress_context(
     *,
     config: CompressConfig | None = None,
 ) -> tuple[str, list[CompressedItem]]:
-    """Compress a list of search-result dicts into a token-budgeted context string.
+    """把检索结果压缩成有 token 预算约束的上下文文本。
 
-    Returns ``(context_text, compressed_items)``.
+    返回值为 ``(context_text, compressed_items)``。
     """
     cfg = config or DEFAULT_CONFIG
 
     if not items:
         return "", []
 
-    # ── Step 1: merge items with highly overlapping content ──
+    # 第一步：合并高度重复的证据，减少同义内容占用上下文。
     merged = _merge_similar(items, cfg.merge_similarity_threshold)
 
-    # ── Step 2: sort by score (highest first) ──
+    # 第二步：按相关度排序，优先保护高分证据。
     merged.sort(key=lambda m: m.get("score", 0.0), reverse=True)
 
-    # ── Step 3: distribute token budget proportionally ──
+    # 第三步：按分数比例分配字符预算。
     total_score = sum(m.get("score", 0.0) for m in merged) or len(merged)
     budget_per_item = _distribute_budget(merged, total_score, cfg)
 
-    # ── Step 4: truncate each item to its allocated budget ──
+    # 第四步：把每条证据截断到预算范围内。
     compressed: list[CompressedItem] = []
     for item, budget in zip(merged, budget_per_item):
         compressed.append(_truncate_item(item, budget, cfg.min_chars_per_item, cfg.max_chars_per_item))
 
-    # ── Step 5: build the context string ──
+    # 第五步：拼成最终提示词上下文，保留来源和相关度。
     lines: list[str] = []
     for ci in compressed:
         merged_note = ""
@@ -103,7 +102,7 @@ def compress_context(
 
 
 def estimate_tokens(text: str, chars_per_token: float = 3.2) -> int:
-    """Conservative token count estimate for mixed CJK/ASCII text."""
+    """中英混合文本的保守 token 数估算。"""
     return max(1, int(len(text) / chars_per_token))
 
 
@@ -112,7 +111,7 @@ def estimate_tokens(text: str, chars_per_token: float = 3.2) -> int:
 # ---------------------------------------------------------------------------
 
 def _merge_similar(items: list[dict], threshold: float) -> list[dict]:
-    """Greedily merge items whose content trigram-Jaccard exceeds *threshold*."""
+    """贪心合并三元字符 Jaccard 相似度超过阈值的证据。"""
     if len(items) <= 1:
         return [dict(it) for it in items]
 
@@ -129,7 +128,7 @@ def _merge_similar(items: list[dict], threshold: float) -> list[dict]:
             other = remaining[i]
             other_trigrams = _trigrams(other.get("content", ""))
             if _jaccard(current_trigrams, other_trigrams) >= threshold:
-                # Merge: keep the higher-scored item, append merged ids
+                # 合并时保留分数更高的证据作为主记录，其余记录只留下 ID 追踪。
                 if other.get("score", 0) > current.get("score", 0):
                     # Swap — other becomes primary
                     current, other = other, current
@@ -148,7 +147,7 @@ def _merge_similar(items: list[dict], threshold: float) -> list[dict]:
 
 
 def _trigrams(text: str) -> set[str]:
-    """Character trigrams after whitespace normalization."""
+    """去除空白后的字符三元组。"""
     cleaned = re.sub(r"\s+", "", text)
     if len(cleaned) < 3:
         return {cleaned}
@@ -156,7 +155,7 @@ def _trigrams(text: str) -> set[str]:
 
 
 def _jaccard(left: set[str], right: set[str]) -> float:
-    """Jaccard similarity coefficient."""
+    """Jaccard 相似系数。"""
     if not left and not right:
         return 1.0
     if not left or not right:
@@ -173,23 +172,23 @@ def _distribute_budget(
     total_score: float,
     config: CompressConfig,
 ) -> list[int]:
-    """Distribute character budget across items by score, with guardrails."""
+    """按分数分配字符预算，并应用最小/最大保护线。"""
     total_chars = int(config.total_token_budget * config.chars_per_token)
     n = len(items)
     min_guaranteed = config.min_chars_per_item * n
 
     if total_chars <= min_guaranteed:
-        # Budget too tight — give every item the minimum
+        # 预算过紧时，每条证据都只给最小展示长度。
         return [config.min_chars_per_item] * n
 
-    # Reserve minimum for each item, distribute the rest by score
+    # 先预留最小长度，再把剩余预算按分数比例分配。
     remaining = total_chars - min_guaranteed
     budgets: list[int] = []
     for item in items:
         share = int(remaining * (item.get("score", 0.0) / total_score))
         budgets.append(config.min_chars_per_item + share)
 
-    # Clamp to max_chars_per_item and redistribute overflow
+    # 超过单条上限的预算会回收，再分给尚未达到上限的证据。
     overflow = 0
     for i in range(n):
         if budgets[i] > config.max_chars_per_item:
@@ -220,7 +219,7 @@ def _truncate_item(
     min_chars: int,
     max_chars: int,
 ) -> CompressedItem:
-    """Truncate a single item's content to fit within *char_budget*."""
+    """把单条证据截断到指定字符预算内。"""
     content = str(item.get("content", ""))
     title = str(item.get("title", ""))
     score = float(item.get("score", 0.0))
@@ -259,19 +258,19 @@ def _truncate_item(
 _SENTENCE_END = re.compile(r"[。！？.!?\n]")
 
 def _truncate_at_boundary(text: str, budget: int) -> str:
-    """Truncate *text* to at most *budget* characters at a sentence boundary."""
+    """优先在句子边界截断文本，找不到合适边界时硬截断。"""
     if len(text) <= budget:
         return text
 
-    # Try to find the last sentence break within budget
+    # 在预算窗口内寻找最后一个句末符号，避免截断在半句话中间。
     truncated = text[:budget]
     match = None
     for m in _SENTENCE_END.finditer(truncated):
         match = m
 
     if match and match.end() > budget * 0.5:
-        # Found a good boundary in the latter half of the budget window
+        # 只有边界落在后半段时才采用，避免丢掉太多有效信息。
         return truncated[:match.end()] + "…"
 
-    # Fall back to hard cut at budget with ellipsis
+    # 兜底硬截断，并追加省略号提示内容被压缩。
     return truncated[:budget - 1] + "…"

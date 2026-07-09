@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+"""AI Worker HTTP 入口。
+
+该服务对 API 层暴露诊断、学习、模式切换、知识同步和记忆向量同步接口。
+请求级知识会写入临时 Qdrant 集合并在请求结束后清理；持久知识同步则写入
+默认集合，作为线上 RAG 的长期语义索引。
+"""
+
 import hashlib
 import os
 
@@ -15,6 +22,7 @@ from app.vector_store import QdrantVectorStore
 
 app = FastAPI(title="BizSage AI Worker", version="0.1.0")
 
+# 开发和空知识库场景的兜底基线知识，保证本地环境仍可验证 RAG 流程。
 SEED_KNOWLEDGE = [
     KnowledgeItem(
         id="seed-restaurant-cashflow",
@@ -98,16 +106,16 @@ class TransitionRequest(BaseModel):
 
 
 class SyncRequest(BaseModel):
-    """Request to sync knowledge into the persistent Qdrant collection."""
+    """同步知识到持久 Qdrant 集合的请求。"""
     knowledge: list[dict] = Field(default_factory=list)
-    clear_before: bool = False  # When true, recreate the collection before upserting
+    clear_before: bool = False  # 为 true 时先重建集合，通常用于启动时全量重刷。
 
 
 class MemorySyncRequest(BaseModel):
-    """Request to sync memory embeddings to Qdrant.
+    """同步用户记忆向量到 Qdrant 的请求。
 
-    Used by the API layer to push unstructured user memories from the
-    user_memory_embeddings table into the vector store for semantic search.
+    API 层会把 user_memory_embeddings 表里待同步的非结构化记忆推送过来，
+    Worker 负责计算向量并写入记忆集合，供后续语义检索使用。
     """
     memories: list[dict] = Field(default_factory=list)
     collection: str = "bizsage_memory"
@@ -119,6 +127,7 @@ def health() -> dict:
 
 
 def build_vector_store(collection_name: str | None = None) -> QdrantVectorStore:
+    """创建 Qdrant 存储句柄；不传集合名时使用持久知识集合。"""
     base_collection = os.getenv("QDRANT_COLLECTION", "bizsage_knowledge")
     return QdrantVectorStore(
         QdrantClient(url=os.getenv("QDRANT_URL", "http://localhost:16333")),
@@ -128,6 +137,7 @@ def build_vector_store(collection_name: str | None = None) -> QdrantVectorStore:
 
 @app.post("/rag/search")
 def search(request: SearchRequest) -> dict:
+    """调试/验证用 RAG 搜索接口，使用请求级临时集合隔离传入知识。"""
     request_knowledge = parse_knowledge(request.knowledge)
     knowledge = request_knowledge or SEED_KNOWLEDGE
     vector_store = build_vector_store(build_request_collection_name(request_knowledge))
@@ -153,12 +163,10 @@ def search(request: SearchRequest) -> dict:
 
 @app.post("/knowledge/sync")
 def sync_knowledge(request: SyncRequest) -> dict:
-    """Upsert knowledge items into the persistent Qdrant collection.
+    """将权威知识库条目写入持久 Qdrant 集合。
 
-    Used by the API layer to keep the vector store in sync with the
-    authoritative knowledge base (MySQL `knowledge_items` table).
-    When `clear_before` is true, the collection is recreated before
-    upserting (used for full-resync on startup).
+    API 层用它同步 MySQL knowledge_items 表；clear_before 为 true 时先删后建，
+    适用于服务启动或人工触发的全量重建。
     """
     knowledge = parse_knowledge(request.knowledge)
     if not knowledge:
@@ -183,9 +191,9 @@ def sync_knowledge(request: SyncRequest) -> dict:
 
 @app.post("/knowledge/delete")
 def delete_knowledge(knowledge_ids: list[str]) -> dict:
-    """Delete knowledge items from the persistent Qdrant collection by ID.
+    """按业务知识 ID 删除持久 Qdrant 集合中的点。
 
-    Used when knowledge is unpublished or superseded.
+    当知识被下架或被新版本替代时调用；点 ID 与写入时保持同一 uuid5 规则。
     """
     if not knowledge_ids:
         return {"deleted": 0, "message": "No IDs provided"}
@@ -212,6 +220,7 @@ def delete_knowledge(knowledge_ids: list[str]) -> dict:
 
 @app.post("/agent/diagnose")
 def diagnose_endpoint(request: DiagnoseRequest) -> dict:
+    """诊断接口：同步请求知识、调用诊断 Agent，并统一转换 LLM 配置错误。"""
     request_knowledge = parse_knowledge(request.knowledge)
     knowledge = request_knowledge or SEED_KNOWLEDGE
     vector_store = build_vector_store(build_request_collection_name(request_knowledge))
@@ -253,6 +262,7 @@ def diagnose_endpoint(request: DiagnoseRequest) -> dict:
 
 @app.post("/agent/learn")
 def learn_endpoint(request: LearnRequest) -> dict:
+    """学习接口：按学习模式和链条节点执行 RAG + 学习 Agent。"""
     request_knowledge = parse_knowledge(request.knowledge)
     knowledge = request_knowledge or SEED_KNOWLEDGE
     vector_store = build_vector_store(build_request_collection_name(request_knowledge))
@@ -296,6 +306,7 @@ def learn_endpoint(request: LearnRequest) -> dict:
 
 @app.post("/agent/transition")
 def transition_endpoint(request: TransitionRequest) -> dict:
+    """双 Agent 模式切换接口，保留上下文后路由到目标 Agent。"""
     request_knowledge = parse_knowledge(request.knowledge)
     knowledge = request_knowledge or SEED_KNOWLEDGE
     vector_store = build_vector_store(build_request_collection_name(request_knowledge))
@@ -328,14 +339,12 @@ def transition_endpoint(request: TransitionRequest) -> dict:
 
 @app.post("/memory/sync")
 def sync_memory_embeddings(request: MemorySyncRequest) -> dict:
-    """Sync user memory embeddings to Qdrant.
+    """同步用户长期记忆向量到 Qdrant。
 
-    Receives PENDING memory embedding records from the Java API layer,
-    computes embeddings via embed_text(), and upserts them to the
-    bizsage_memory Qdrant collection.
+    接收 Java API 层发送的 PENDING 记忆记录，使用 embed_text() 计算向量后
+    写入 bizsage_memory 集合。
 
-    Returns the qdrant_point_id for each synced memory so the API layer
-    can update the embedding_status to SYNCED.
+    返回每条记忆对应的 qdrant_point_id，供 API 层把 embedding_status 更新为 SYNCED。
     """
     if not request.memories:
         return {"synced": 0, "results": [], "message": "No memories to sync"}
@@ -398,6 +407,7 @@ def sync_memory_embeddings(request: MemorySyncRequest) -> dict:
 
 
 def parse_knowledge(items: list[dict]) -> list[KnowledgeItem]:
+    """把 API/前端传入的字典规范化为 RAG 使用的 KnowledgeItem。"""
     return [
         KnowledgeItem(
             id=resolve_knowledge_id(item),
@@ -419,6 +429,7 @@ def parse_knowledge(items: list[dict]) -> list[KnowledgeItem]:
 
 
 def resolve_knowledge_id(item: dict) -> str:
+    """优先使用传入 ID；缺失时用来源、标题和正文生成稳定指纹。"""
     raw_id = item.get("id")
     if raw_id not in {None, ""}:
         return str(raw_id)
@@ -435,6 +446,7 @@ def resolve_knowledge_id(item: dict) -> str:
 
 
 def build_request_collection_name(knowledge: list[KnowledgeItem]) -> str | None:
+    """为请求级知识生成临时集合名，避免不同请求的向量互相污染。"""
     if not knowledge:
         return None
 
@@ -449,7 +461,7 @@ def build_request_collection_name(knowledge: list[KnowledgeItem]) -> str | None:
 
 
 def _check_llm_error(result: dict):
-    """Return a 503 JSONResponse if the LLM is not configured or the call failed, else None."""
+    """把 Agent 返回的 LLM 错误状态转换成 HTTP 503；正常结果返回 None。"""
     from app.agent import LLM_NOT_CONFIGURED, LLM_CALL_FAILED
     from fastapi.responses import JSONResponse
 
@@ -468,6 +480,7 @@ def _check_llm_error(result: dict):
 
 
 def cleanup_request_collection(vector_store: QdrantVectorStore, request_knowledge: list[KnowledgeItem]) -> None:
+    """清理请求级临时集合；清理失败不影响本次业务响应。"""
     if not request_knowledge:
         return
     try:

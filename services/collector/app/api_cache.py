@@ -1,11 +1,8 @@
-"""V2: Third-party API response cache with cost tracking.
+"""第三方 API 响应缓存和成本统计。
 
-Caches API responses in Redis to:
-- Reduce redundant third-party API calls (cost savings)
-- Speed up repeated queries for the same data
-- Track per-vendor call volume and cost
+将第三方 API 响应写入 Redis，用于减少重复调用、加速相同查询，并统计供应商调用量。
 
-Cache TTL is configurable per source type.
+不同 source_type 可以配置不同 TTL。
 """
 
 from __future__ import annotations
@@ -18,7 +15,7 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-# Default cache TTLs per source type (seconds)
+# 各来源类型的默认缓存 TTL，单位秒。
 DEFAULT_TTL: dict[str, int] = {
     "MARKET_DATA": 300,       # 5 min
     "NEWS_API": 600,          # 10 min
@@ -29,7 +26,7 @@ DEFAULT_TTL: dict[str, int] = {
 
 @dataclass
 class CachedResponse:
-    """A cached API response with metadata."""
+    """带缓存元数据的 API 响应。"""
 
     source_type: str
     query_hash: str
@@ -39,9 +36,9 @@ class CachedResponse:
 
 
 class ApiCacheManager:
-    """Manages caching of third-party API responses in Redis.
+    """管理第三方 API 响应缓存。
 
-    Usage::
+    使用示例::
 
         cache = ApiCacheManager(state_store=redis_store)
         cached = cache.get("MARKET_DATA", {"symbol": "AAPL"})
@@ -56,10 +53,10 @@ class ApiCacheManager:
         self._hit_count: dict[str, int] = {}
         self._miss_count: dict[str, int] = {}
 
-    # ── Public API ──────────────────────────────────────────
+    # 对外 API。
 
     def get(self, source_type: str, query: dict) -> dict | None:
-        """Retrieve a cached response. Returns None on cache miss."""
+        """读取缓存响应；未命中或 Redis 异常时返回 None。"""
         query_hash = self._hash_query(query)
         key = f"collector:api-cache:{source_type}:{query_hash}"
 
@@ -70,6 +67,7 @@ class ApiCacheManager:
         try:
             raw = self._state_store.load_raw(key)
             if raw is None:
+                # 未命中时只更新内存计数，不把缓存缺失视为错误。
                 self._miss_count[source_type] = self._miss_count.get(source_type, 0) + 1
                 return None
 
@@ -81,6 +79,7 @@ class ApiCacheManager:
             logger.debug("API cache hit for %s:%s", source_type, query_hash[:8])
             return data.get("response")
         except Exception:
+            # 缓存是性能优化，读取失败不应阻断真实 API 调用。
             self._miss_count[source_type] = self._miss_count.get(source_type, 0) + 1
             logger.debug("API cache read failed for %s", source_type, exc_info=True)
             return None
@@ -93,7 +92,7 @@ class ApiCacheManager:
         ttl: int | None = None,
         vendor_id: str | None = None,
     ) -> None:
-        """Cache an API response with TTL."""
+        """按 source_type 和查询参数写入缓存。"""
         query_hash = self._hash_query(query)
         key = f"collector:api-cache:{source_type}:{query_hash}"
         effective_ttl = ttl or DEFAULT_TTL.get(source_type, 600)
@@ -115,7 +114,7 @@ class ApiCacheManager:
                 logger.debug("API cache write failed for %s", source_type, exc_info=True)
 
     def get_hit_rate(self, source_type: str | None = None) -> float:
-        """Return cache hit rate (0.0-1.0) for a source type, or aggregate."""
+        """返回指定来源或整体的缓存命中率；无样本时返回 -1.0。"""
         if source_type:
             hits = self._hit_count.get(source_type, 0)
             misses = self._miss_count.get(source_type, 0)
@@ -126,7 +125,7 @@ class ApiCacheManager:
         return hits / total if total > 0 else -1.0
 
     def stats(self) -> dict:
-        """Return cache statistics per source type."""
+        """返回各来源类型的缓存统计。"""
         result = {}
         all_types = set(self._hit_count.keys()) | set(self._miss_count.keys())
         for st in all_types:
@@ -141,10 +140,10 @@ class ApiCacheManager:
             }
         return result
 
-    # ── Internal ────────────────────────────────────────────
+    # 内部工具。
 
     @staticmethod
     def _hash_query(query: dict) -> str:
-        """Stable hash of query parameters for cache key."""
+        """把查询参数规范化后生成稳定缓存键哈希。"""
         canonical = json.dumps(query, sort_keys=True, ensure_ascii=True)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
