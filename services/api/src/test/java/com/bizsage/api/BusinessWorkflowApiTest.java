@@ -30,7 +30,7 @@ class BusinessWorkflowApiTest {
 
     mvc.perform(get("/api/conversations").header("Authorization", "Bearer " + token))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data[?(@.title == '门店现金流诊断')]").isNotEmpty());
+      .andExpect(jsonPath("$.data.items[?(@.title == '门店现金流诊断')]").isNotEmpty());
 
     mvc.perform(post("/api/conversations/" + conversationId + "/archive").header("Authorization", "Bearer " + token))
       .andExpect(status().isOk())
@@ -52,7 +52,7 @@ class BusinessWorkflowApiTest {
 
     mvc.perform(get("/api/conversations").header("Authorization", "Bearer " + token))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data[?(@.id == " + conversationId + ")]").isEmpty());
+      .andExpect(jsonPath("$.data.items[?(@.id == " + conversationId + ")]").isEmpty());
   }
 
   @Test
@@ -87,7 +87,7 @@ class BusinessWorkflowApiTest {
 
     mvc.perform(get("/api/intelligence").header("Authorization", "Bearer " + token))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data[?(@.title == '本地餐饮平台佣金调整')]").isNotEmpty());
+      .andExpect(jsonPath("$.data.items[?(@.title == '本地餐饮平台佣金调整')]").isNotEmpty());
   }
 
   @Test
@@ -134,7 +134,7 @@ class BusinessWorkflowApiTest {
         .header("Authorization", "Bearer " + token))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.code").value("OK"))
-      .andExpect(jsonPath("$.data[?(@.title == 'Redis fingerprint baseline')]").isNotEmpty());
+      .andExpect(jsonPath("$.data.items[?(@.title == 'Redis fingerprint baseline')]").isNotEmpty());
   }
 
   private String login(String username) throws Exception {

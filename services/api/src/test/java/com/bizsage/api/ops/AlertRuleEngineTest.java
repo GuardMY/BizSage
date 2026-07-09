@@ -2,6 +2,9 @@ package com.bizsage.api.ops;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -38,7 +41,81 @@ class AlertRuleEngineTest {
         values (7, 'Supplier prepayment mock API', 'OPEN')
         """);
 
-    new AlertRuleEngine(jdbc, 0.05, 0.20, 30).evaluateCircuitBreakerState();
+    OpsQueryMapper mapper = new OpsQueryMapper() {
+      @Override
+      public List<Map<String, Object>> listAlerts() {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public List<Map<String, Object>> listReviewWorkOrders() {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public List<Map<String, Object>> listAuditLogs() {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public Integer countAuditLogsByResult(String result, Instant since, Instant until) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public Integer countRecentApiErrors() {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public Integer countRecentApiCalls() {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public Integer countRecentCollectionRuns() {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public Integer countRecentFailedCollectionRuns() {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public List<Map<String, Object>> listOpenCircuits() {
+        return jdbc.queryForList("select id, name from admin_collection_sources where circuit_state = 'OPEN'");
+      }
+
+      @Override
+      public Integer countActiveDbConnections() {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public Integer countStaleKnowledgeItems(int days) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public Integer countOpenAlertsForComponent(String component) {
+        return jdbc.queryForObject(
+            "select count(*) from alert_events where component = ? and status not in ('CLOSED') limit 1",
+            Integer.class,
+            component);
+      }
+
+      @Override
+      public int insertAlert(String level, String component, String message) {
+        return jdbc.update(
+            "insert into alert_events (alert_level, component, message, status, region_id, industry_id) values (?, ?, ?, 'OPEN', 'global', 'global')",
+            level,
+            component,
+            message);
+      }
+    };
+
+    new AlertRuleEngine(mapper, 0.05, 0.20, 30).evaluateCircuitBreakerState();
 
     String message = jdbc.queryForObject("""
         select message from alert_events

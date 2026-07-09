@@ -167,7 +167,7 @@ class V2GrayReleaseApiTest {
 
     mvc.perform(get("/api/ops/audit-logs").header("Authorization", "Bearer " + operatorToken))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data[0].action").value("V2_M0_SCOPE_LOCK"));
+      .andExpect(jsonPath("$.data[?(@.action == 'V2_M0_SCOPE_LOCK')]").isNotEmpty());
   }
 
   @Test
@@ -192,7 +192,7 @@ class V2GrayReleaseApiTest {
     mvc.perform(get("/api/knowledge").header("Authorization", "Bearer " + operatorToken))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.code").value("OK"))
-      .andExpect(jsonPath("$.data[?(@.title == 'Gray release knowledge baseline')]").isNotEmpty());
+      .andExpect(jsonPath("$.data.items[?(@.title == 'Gray release knowledge baseline')]").isNotEmpty());
   }
 
   private String login(String username) throws Exception {

@@ -57,7 +57,7 @@ class AuthAndRbacTest {
     mvc.perform(get("/api/users").header("Authorization", "Bearer " + adminToken))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.code").value("OK"))
-      .andExpect(jsonPath("$.data[0].username").value("admin"));
+      .andExpect(jsonPath("$.data.items[0].username").value("admin"));
   }
 
   @Test

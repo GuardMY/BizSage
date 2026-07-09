@@ -169,6 +169,20 @@
   - Complete the remaining JDBC-to-MyBatis migration in admin, governance, ops, and snapshot-related classes that still use `JdbcTemplate`.
   - Reconcile API test expectations around paginated envelopes versus flat lists, then rerun the full `services/api` Maven test suite after the remaining persistence paths are migrated.
 
+### Admin JdbcTemplate Residual Migration Completion
+
+- Change type: functional development.
+- Affected modules: `services/api` and both change logs.
+- Main changes:
+  - Replaced the remaining admin-side `JdbcTemplate` implementations in `AdminStore`, `AdminKnowledgeStore`, and `AdminCollectionStore` with MyBatis mapper-based persistence.
+  - Added dedicated admin mapper interfaces for dashboard telemetry, alert/audit/review/ticket/human-intelligence flows, knowledge lifecycle queries and writes, and collection-source/job/dead-letter persistence.
+  - Preserved existing admin API contracts while keeping knowledge publication sync to `knowledge_items`, AI worker Qdrant sync, collection-triggered intelligence creation, and audit-log writes on the MyBatis path.
+- Verification results:
+  - Verified with `rg -n "JdbcTemplate" services/api/src/main/java/com/bizsage/api`; admin residual references were removed from the API source tree.
+  - Planned follow-up verification with `mvn -DskipTests compile` and targeted admin/governance API tests after the mapper migration settled.
+- Unfinished items:
+  - Run the full compile and targeted Maven suites against the new admin mapper path, then fix any mapper-SQL or H2 compatibility regressions that surface.
+
 ### Flyway Database Migration Adoption
 
 - Change type: functional repair.
@@ -927,4 +941,20 @@
 - Unfinished items:
   - Run backend tests and Web tests in an environment with Maven and Node.js installed.
   - A live browser verification of the `/admin` knowledge workspace is still recommended after the frontend toolchain is available.
+
+### API MyBatis-Plus Migration Self-Check Closure
+
+- Change type: functional bug fix and regression alignment.
+- Affected modules: `services/api`, `services/api/src/test/resources`, `services/api/src/test/java`, and both change logs.
+- Main changes:
+  - Completed the remaining `JdbcTemplate` to MyBatis-Plus/MyBatis mapper migration in the API admin path and re-verified that `services/api/src/main/java/com/bizsage/api` no longer contains `JdbcTemplate` references.
+  - Fixed H2 admin seed compatibility for explicit-ID bootstrap rows by resetting identity sequences for `admin_knowledge_nodes`, `admin_knowledge_versions`, and `admin_collection_sources`.
+  - Added CLOB-to-string normalization in migrated admin stores so H2 test reads remain compatible with mapper-backed persistence for knowledge content and collection payload JSON.
+  - Updated API regression tests to match the current paged response contracts for `/api/users`, `/api/conversations`, `/api/intelligence`, and `/api/knowledge`, and removed brittle assumptions about admin audit/review list ordering.
+- Verification results:
+  - Verified `rg -n "JdbcTemplate" services/api/src/main/java/com/bizsage/api` returns no matches after the migration cleanup.
+  - Verified `mvn -q -DskipTests compile` passes in `services/api`.
+  - Verified `mvn -q "-Dtest=AdminV3ApiTest,GovernanceApiTest,V2GrayReleaseApiTest,AuthAndRbacTest,BusinessWorkflowApiTest" test` passes in `services/api`.
+- Unfinished items:
+  - A broader backend regression sweep is still recommended if the team wants full-suite confidence beyond the targeted migration-related tests.
 

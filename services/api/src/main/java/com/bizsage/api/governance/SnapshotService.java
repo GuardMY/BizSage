@@ -7,7 +7,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 /**
@@ -24,12 +23,12 @@ public class SnapshotService {
 
   private final SnapshotStore store;
   private final ObjectMapper objectMapper;
-  private final JdbcTemplate jdbcTemplate;
+  private final SnapshotQueryMapper snapshotQueryMapper;
 
-  public SnapshotService(SnapshotStore store, ObjectMapper objectMapper, JdbcTemplate jdbcTemplate) {
+  public SnapshotService(SnapshotStore store, ObjectMapper objectMapper, SnapshotQueryMapper snapshotQueryMapper) {
     this.store = store;
     this.objectMapper = objectMapper;
-    this.jdbcTemplate = jdbcTemplate;
+    this.snapshotQueryMapper = snapshotQueryMapper;
   }
 
   public SnapshotDetail generateSnapshot(SnapshotType type, String regionId, String industryId) {
@@ -49,39 +48,15 @@ public class SnapshotService {
   }
 
   private String buildDailyPayload(String regionId, String industryId) {
-    // 日快照保留明细，用于回溯某一地域/行业在当天的完整可用情报。
-    List<Map<String, Object>> records = jdbcTemplate.queryForList(
-        "select id, title, content, status, confidence, link_id, region_id, industry_id, "
-            + "source_id, weight, url from intelligence "
-            + "where status = 'APPROVED' and region_id = ? and industry_id = ?",
-        regionId, industryId);
-    return toJson(records);
+    return toJson(snapshotQueryMapper.listApprovedIntelligenceRecords(regionId, industryId));
   }
 
   private String buildWeeklyPayload(String regionId, String industryId) {
-    // 周快照聚合到 link_id 维度，降低存储量并支持运营看板。
-    List<Map<String, Object>> aggregated = jdbcTemplate.queryForList(
-        "select link_id, count(*) as record_count, avg(confidence) as avg_confidence, "
-            + "avg(weight) as avg_weight, max(create_time) as latest "
-            + "from intelligence "
-            + "where status = 'APPROVED' and region_id = ? and industry_id = ? "
-            + "group by link_id",
-        regionId, industryId);
-    return toJson(aggregated);
+    return toJson(snapshotQueryMapper.listWeeklySnapshotAggregates(regionId, industryId));
   }
 
   private String buildMonthlyPayload(String regionId, String industryId) {
-    // 月快照增加近 30 天新增量，方便识别哪些链条节点近期变化更活跃。
-    List<Map<String, Object>> aggregated = jdbcTemplate.queryForList(
-        "select link_id, count(*) as record_count, avg(confidence) as avg_confidence, "
-            + "avg(weight) as avg_weight,"
-            + "count(case when create_time >= date_sub(current_timestamp, interval 30 day) then 1 end) as new_this_month, "
-            + "max(create_time) as latest "
-            + "from intelligence "
-            + "where status = 'APPROVED' and region_id = ? and industry_id = ? "
-            + "group by link_id",
-        regionId, industryId);
-    return toJson(aggregated);
+    return toJson(snapshotQueryMapper.listMonthlySnapshotAggregates(regionId, industryId));
   }
 
   public void generateAllScopes(SnapshotType type) {

@@ -169,6 +169,20 @@
   - 继续完成仍在使用 `JdbcTemplate` 的后台、治理、运维和快照相关类的 JDBC 到 MyBatis 迁移。
   - 在剩余持久层迁移完成后，对齐分页响应与测试断言之间的差异，并重新运行 `services/api` 全量 Maven 测试。
 
+### Admin 残留 JdbcTemplate 迁移收口
+
+- 变更类型：功能开发。
+- 影响模块：`services/api` 和两份变更日志。
+- 主要变更：
+  - 将 `AdminStore`、`AdminKnowledgeStore` 和 `AdminCollectionStore` 中剩余的 `JdbcTemplate` 实现全部替换为基于 MyBatis Mapper 的持久化访问。
+  - 为后台仪表盘遥测、告警/审计/复核/工单/人工情报流程、知识生命周期读写，以及采集源/任务/死信等链路新增专用 Admin Mapper 接口。
+  - 在迁移后保持现有管理端 API 返回结构不变，同时保留知识发布同步 `knowledge_items`、AI worker 的 Qdrant 同步、采集自动生成情报与审核单、以及审计日志写入能力。
+- 验证结果：
+  - 已通过 `rg -n "JdbcTemplate" services/api/src/main/java/com/bizsage/api` 复核，API 源码树中的 admin 残留引用已清理。
+  - 已规划继续执行 `mvn -DskipTests compile` 与定向 admin/governance API 测试，验证 Mapper 迁移后的编译与运行兼容性。
+- 未完成事项：
+  - 仍需跑完整编译和定向 Maven 测试，并根据结果修复可能暴露出的 Mapper SQL 或 H2 兼容性问题。
+
 ### 引入 Flyway 数据库迁移
 
 - 变更类型：功能修复。
@@ -945,4 +959,20 @@
 - δ������
   - ���ھ߱� Maven �� Node.js �������Ļ��������к�˲��Ժ� Web ���ԡ�
   - ��ǰ�˹��������ú��Խ���� `/admin` ֪ʶ������ִ��һ����ʵ�������֤��
+
+### API MyBatis-Plus 迁移自检收口
+
+- 变更类型：功能缺陷修复与回归对齐。
+- 影响模块：`services/api`、`services/api/src/test/resources`、`services/api/src/test/java` 和两份变更日志。
+- 主要变更：
+  - 完成 API 管理后台路径中剩余的 `JdbcTemplate` 到 MyBatis-Plus/MyBatis Mapper 的迁移收尾，并重新确认 `services/api/src/main/java/com/bizsage/api` 已无 `JdbcTemplate` 引用。
+  - 为 H2 管理后台种子数据中带显式 ID 的启动记录补齐自增序列重置，覆盖 `admin_knowledge_nodes`、`admin_knowledge_versions` 和 `admin_collection_sources`。
+  - 在迁移后的管理后台 store 中补充 `CLOB` 到字符串的兼容转换，确保 H2 测试环境下的知识内容与采集 `payloadJson` 能稳定通过 Mapper 读写。
+  - 将 `/api/users`、`/api/conversations`、`/api/intelligence`、`/api/knowledge` 的回归测试断言更新为当前分页响应契约，并去掉对后台审核/审计列表首条顺序的脆弱假设。
+- 验证结果：
+  - 已验证 `rg -n "JdbcTemplate" services/api/src/main/java/com/bizsage/api` 无任何匹配结果。
+  - 已验证 `services/api` 下执行 `mvn -q -DskipTests compile` 通过。
+  - 已验证 `services/api` 下执行 `mvn -q "-Dtest=AdminV3ApiTest,GovernanceApiTest,V2GrayReleaseApiTest,AuthAndRbacTest,BusinessWorkflowApiTest" test` 通过。
+- 未完成事项：
+  - 如果团队需要超出迁移相关范围的更高信心，仍建议补跑更大范围的后端全量回归测试。
 

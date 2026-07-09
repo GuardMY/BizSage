@@ -43,11 +43,16 @@ VALUES
 INSERT INTO admin_knowledge_publications (node_id, version_id, action, actor, notes)
 VALUES (1, 1, 'PUBLISH', 'system', 'Bootstrap publication');
 
+ALTER TABLE admin_knowledge_nodes ALTER COLUMN id RESTART WITH 2;
+ALTER TABLE admin_knowledge_versions ALTER COLUMN id RESTART WITH 2;
+
 INSERT INTO admin_collection_sources
   (id, name, source_type, status, interval_minutes, max_retries, failure_threshold, cooldown_minutes, circuit_state, failure_count, region_id, industry_id, link_id, source_id, payload_json, next_run_time, last_status)
 VALUES
   (1, 'Shanghai rent pressure page', 'PUBLIC_PAGE', 'ENABLED', 60, 1, 3, 30, 'CLOSED', 0, 'cn-default', 'general', 'sales-payment', 'admin-collector-public', '{"url":"https://example.com/shanghai-rent","html":"<html><title>Shanghai Rent Pressure</title><body>Landlords in Shanghai request shorter concession periods and faster payment cycles.</body></html>"}', CURRENT_TIMESTAMP, 'IDLE'),
   (2, 'Supplier prepayment mock API', 'MOCK_API', 'ENABLED', 120, 1, 3, 30, 'CLOSED', 0, 'cn-default', 'general', 'supply-chain', 'admin-collector-mock', '{"items":[{"title":"Supplier prepayment pressure","content":"Several suppliers now request larger advance payments.","url":"https://example.com/mock/prepayment","confidence":0.82,"weight":0.82,"industry_id":"general","region_id":"cn-default","link_id":"supply-chain"}]}', CURRENT_TIMESTAMP, 'IDLE');
+
+ALTER TABLE admin_collection_sources ALTER COLUMN id RESTART WITH 3;
 
 INSERT INTO admin_collection_keywords (source_config_id, keyword, match_mode, status, notes)
 VALUES

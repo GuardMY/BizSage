@@ -1,64 +1,46 @@
 package com.bizsage.api.ops;
 
-import java.sql.Timestamp;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
-/**
- * V2: Persistence for SLA data points.
- *
- * <p>Each data point records a 1-minute aggregation window of request
- * counts, error counts, and latency values.
- */
 @Repository
 public class SlaStore {
+  private final SlaDataPointMapper slaDataPointMapper;
 
-  private final JdbcTemplate jdbc;
-
-  public SlaStore(JdbcTemplate jdbc) {
-    this.jdbc = jdbc;
+  public SlaStore(SlaDataPointMapper slaDataPointMapper) {
+    this.slaDataPointMapper = slaDataPointMapper;
   }
 
-  /** Insert an aggregated data point. */
   public void insert(SlaDataPoint point) {
-    jdbc.update("""
-        insert into sla_data_points
-          (window_start, window_end, total_requests, error_requests,
-           latency_p50_ms, latency_p95_ms, latency_p99_ms, uptime_flag)
-        values (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        Timestamp.from(point.windowStart()),
-        Timestamp.from(point.windowEnd()),
-        point.totalRequests(),
-        point.errorRequests(),
-        point.latencyP50Ms(),
-        point.latencyP95Ms(),
-        point.latencyP99Ms(),
-        point.uptimeFlag() ? 1 : 0);
+    SlaDataPointEntity entity = new SlaDataPointEntity();
+    entity.setWindowStart(point.windowStart());
+    entity.setWindowEnd(point.windowEnd());
+    entity.setTotalRequests(point.totalRequests());
+    entity.setErrorRequests(point.errorRequests());
+    entity.setLatencyP50Ms(point.latencyP50Ms());
+    entity.setLatencyP95Ms(point.latencyP95Ms());
+    entity.setLatencyP99Ms(point.latencyP99Ms());
+    entity.setUptimeFlag(point.uptimeFlag() ? 1 : 0);
+    slaDataPointMapper.insert(entity);
   }
 
-  /** Query data points within a time window. */
   public List<Map<String, Object>> queryWindow(Instant since, Instant until) {
-    return jdbc.queryForList("""
-        select window_start, window_end, total_requests, error_requests,
-               latency_p50_ms, latency_p95_ms, latency_p99_ms, uptime_flag
-          from sla_data_points
-         where window_start >= ? and window_start <= ?
-         order by window_start
-        """, Timestamp.from(since), Timestamp.from(until));
+    return slaDataPointMapper.selectMaps(new LambdaQueryWrapper<SlaDataPointEntity>()
+        .ge(SlaDataPointEntity::getWindowStart, since)
+        .le(SlaDataPointEntity::getWindowStart, until)
+        .orderByAsc(SlaDataPointEntity::getWindowStart));
   }
 
-  /** Delete data points older than retention period. */
   public int deleteOlderThan(Instant cutoff) {
-    return jdbc.update("delete from sla_data_points where window_start < ?",
-        Timestamp.from(cutoff));
+    return slaDataPointMapper.delete(new LambdaQueryWrapper<SlaDataPointEntity>()
+        .lt(SlaDataPointEntity::getWindowStart, cutoff));
   }
 
-  /** SLA data point record. */
-  record SlaDataPoint(
+  public record SlaDataPoint(
       Instant windowStart,
       Instant windowEnd,
       int totalRequests,

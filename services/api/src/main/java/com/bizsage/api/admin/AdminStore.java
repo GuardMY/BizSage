@@ -1,50 +1,54 @@
 package com.bizsage.api.admin;
 
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.bizsage.api.admin.AdminDtos.AdminList;
 import com.bizsage.api.admin.AdminDtos.AlertItem;
 import com.bizsage.api.admin.AdminDtos.AuditLogItem;
 import com.bizsage.api.admin.AdminDtos.Dashboard;
 import com.bizsage.api.admin.AdminDtos.HumanIntelligenceCreateRequest;
-import com.bizsage.api.admin.AdminDtos.RiskRule;
-import com.bizsage.api.admin.AdminDtos.RiskRuleUpsertRequest;
 import com.bizsage.api.admin.AdminDtos.HumanIntelligenceItem;
 import com.bizsage.api.admin.AdminDtos.IntelligenceReviewItem;
 import com.bizsage.api.admin.AdminDtos.Metric;
+import com.bizsage.api.admin.AdminDtos.RiskRule;
+import com.bizsage.api.admin.AdminDtos.RiskRuleUpsertRequest;
 import com.bizsage.api.admin.AdminDtos.TicketItem;
+import com.bizsage.api.intelligence.IntelligenceItem;
+import com.bizsage.api.intelligence.IntelligenceMapper;
+import com.bizsage.api.intelligence.ReviewTicket;
+import com.bizsage.api.intelligence.AdminReviewMapper;
 import java.math.BigDecimal;
-import java.sql.PreparedStatement;
-import java.sql.Statement;
-import java.sql.Timestamp;
+import java.sql.Clob;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
 public class AdminStore {
-  private final JdbcTemplate jdbcTemplate;
+  private final AdminStoreMapper mapper;
+  private final IntelligenceMapper intelligenceMapper;
+  private final AdminReviewMapper reviewMapper;
 
-  public AdminStore(JdbcTemplate jdbcTemplate) {
-    this.jdbcTemplate = jdbcTemplate;
+  public AdminStore(AdminStoreMapper mapper, IntelligenceMapper intelligenceMapper, AdminReviewMapper reviewMapper) {
+    this.mapper = mapper;
+    this.intelligenceMapper = intelligenceMapper;
+    this.reviewMapper = reviewMapper;
   }
 
   Dashboard dashboard() {
     List<Metric> metrics = List.of(
-        new Metric("pendingReviews", "Pending reviews", String.valueOf(countWhere("admin_intelligence_reviews", "review_status = 'PENDING'")), "warning", "Intelligence waiting for reviewer verdict"),
-        new Metric("openTickets", "Open tickets", String.valueOf(countWhere("admin_tickets", "status not in ('CLOSED','ARCHIVED')")), "warning", "Operational ledger items still active"),
-        new Metric("openAlerts", "Open alerts", String.valueOf(countWhere("alert_events", "status <> 'CLOSED'")), "critical", "Alerts that still require acknowledgement"),
-        new Metric("auditLogs", "Audit logs", String.valueOf(countWhere("audit_logs", "1 = 1")), "healthy", "Recorded administrator operations"),
-        new Metric("humanIntel", "Human intelligence", String.valueOf(countWhere("admin_human_intelligence", "1 = 1")), "healthy", "Submitted local intelligence records"),
-        new Metric("p0Alerts", "P0 alerts", String.valueOf(countWhere("alert_events", "alert_level = 'P0' and status <> 'CLOSED'")), "critical", "Highest severity open alerts"),
-        new Metric("collectionSources", "Collection sources", String.valueOf(countWhere("admin_collection_sources", "status = 'ENABLED'")), "healthy", "Active data source configurations"),
-        new Metric("collectionSuccessRate", "Collection success", collectionSuccessRate(), "healthy", "Recent collection run success rate"),
-        new Metric("knowledgeNodes", "Knowledge nodes", String.valueOf(countWhere("admin_knowledge_nodes", "1 = 1")), "healthy", "Maintained knowledge records"),
+        new Metric("pendingReviews", "Pending reviews", String.valueOf(intValue(mapper.countPendingReviews())), "warning", "Intelligence waiting for reviewer verdict"),
+        new Metric("openTickets", "Open tickets", String.valueOf(intValue(mapper.countOpenTickets())), "warning", "Operational ledger items still active"),
+        new Metric("openAlerts", "Open alerts", String.valueOf(intValue(mapper.countOpenAlerts())), "critical", "Alerts that still require acknowledgement"),
+        new Metric("auditLogs", "Audit logs", String.valueOf(intValue(mapper.countAuditLogs())), "healthy", "Recorded administrator operations"),
+        new Metric("humanIntel", "Human intelligence", String.valueOf(intValue(mapper.countHumanIntelligence())), "healthy", "Submitted local intelligence records"),
+        new Metric("p0Alerts", "P0 alerts", String.valueOf(intValue(mapper.countOpenP0Alerts())), "critical", "Highest severity open alerts"),
+        new Metric("collectionSources", "Collection sources", String.valueOf(intValue(mapper.countEnabledCollectionSources())), "healthy", "Active data source configurations"),
+        new Metric("collectionSuccessRate", collectionSuccessRate(), collectionSuccessRate(), "healthy", "Recent collection run success rate"),
+        new Metric("knowledgeNodes", "Knowledge nodes", String.valueOf(intValue(mapper.countKnowledgeNodes())), "healthy", "Maintained knowledge records"),
         new Metric("crawlerHealth", "Crawler circuits", crawlerHealth(), "healthy", "Open circuit breaker states"));
 
     return new Dashboard(
@@ -55,56 +59,28 @@ public class AdminStore {
         listAuditLogs(null).items().stream().limit(5).toList());
   }
 
-  /** V2: Aggregate collection telemetry for monitoring dashboards. */
   Map<String, Object> getCollectionTelemetry() {
-    int totalSources = countWhere("admin_collection_sources", "1 = 1");
-    int enabledSources = countWhere("admin_collection_sources", "status = 'ENABLED'");
-    int openCircuits = countWhere("admin_collection_sources", "circuit_state = 'OPEN'");
-    int deadLetterCount = countWhere("dead_letter_records", "1 = 1");
-
-    Integer totalRuns24h = jdbcTemplate.queryForObject(
-        "select count(*) from admin_collection_job_runs where start_time >= date_sub(current_timestamp, interval 24 hour)",
-        Integer.class);
-    Integer successRuns24h = jdbcTemplate.queryForObject(
-        "select count(*) from admin_collection_job_runs where status = 'SUCCESS' and start_time >= date_sub(current_timestamp, interval 24 hour)",
-        Integer.class);
-    double successRate24h = totalRuns24h != null && totalRuns24h > 0
-        ? (double) successRuns24h / totalRuns24h : -1.0;
-
-    Integer records24h = jdbcTemplate.queryForObject(
-        "select coalesce(sum(records_collected), 0) from admin_collection_job_runs where start_time >= date_sub(current_timestamp, interval 24 hour)",
-        Integer.class);
-
-    List<Map<String, Object>> recentRuns = jdbcTemplate.queryForList("""
-        select r.status, r.records_collected, r.start_time, s.name as source_name
-          from admin_collection_job_runs r
-          left join admin_collection_sources s on s.id = r.source_config_id
-         order by r.id desc limit 10
-        """);
+    int totalRuns24h = intValue(mapper.countCollectionRuns24h());
+    int successRuns24h = intValue(mapper.countSuccessfulCollectionRuns24h());
+    double successRate24h = totalRuns24h > 0 ? (double) successRuns24h / totalRuns24h : -1.0;
 
     Map<String, Object> result = new LinkedHashMap<>();
-    result.put("totalSources", totalSources);
-    result.put("enabledSources", enabledSources);
-    result.put("openCircuits", openCircuits);
-    result.put("deadLetterCount", deadLetterCount);
-    result.put("totalRuns24h", totalRuns24h != null ? totalRuns24h : 0);
+    result.put("totalSources", intValue(mapper.countCollectionSources()));
+    result.put("enabledSources", intValue(mapper.countEnabledCollectionSources()));
+    result.put("openCircuits", intValue(mapper.countOpenCollectionCircuits()));
+    result.put("deadLetterCount", intValue(mapper.countDeadLetters()));
+    result.put("totalRuns24h", totalRuns24h);
     result.put("successRate24h", String.format("%.1f%%", successRate24h * 100));
-    result.put("recordsCollected24h", records24h != null ? records24h : 0);
-    result.put("recentRuns", recentRuns);
+    result.put("recordsCollected24h", intValue(mapper.sumCollectedRecords24h()));
+    result.put("recentRuns", mapper.listRecentCollectionRuns());
     return result;
   }
 
   AdminList<AlertItem> listAlerts(String status) {
-    String where = StringUtils.hasText(status) ? " where status = ?" : "";
-    Object[] args = StringUtils.hasText(status) ? new Object[] {status} : new Object[0];
-    List<AlertItem> items = jdbcTemplate.query("""
-        select id, alert_level, component, message, status, owner, region_id, industry_id, create_time, update_time
-          from alert_events
-        """ + where + " order by case alert_level when 'P0' then 0 when 'P1' then 1 else 2 end, id desc",
-        alertMapper(), args);
+    List<AlertItem> items = mapper.listAlerts(status).stream().map(this::toAlertItem).toList();
     return new AdminList<>(items, items.size(), Map.of(
-        "open", countWhere("alert_events", "status <> 'CLOSED'"),
-        "p0", countWhere("alert_events", "alert_level = 'P0' and status <> 'CLOSED'")));
+        "open", intValue(mapper.countOpenAlerts()),
+        "p0", intValue(mapper.countOpenP0Alerts())));
   }
 
   AlertItem updateAlert(long id, String action, String actor, String notes) {
@@ -114,12 +90,7 @@ public class AdminStore {
       case "close" -> "CLOSED";
       default -> throw new IllegalArgumentException("unsupported alert action");
     };
-    int updated = jdbcTemplate.update("""
-        update alert_events
-           set status = ?, owner = ?, update_time = current_timestamp
-         where id = ?
-        """, status, actor, id);
-    if (updated == 0) {
+    if (mapper.updateAlert(id, status, actor) == 0) {
       throw new IllegalArgumentException("alert not found");
     }
     writeAudit(actor, "ADMIN_ALERT_" + action.toUpperCase(), "alert", String.valueOf(id), "SUCCESS", "global", "global");
@@ -128,39 +99,20 @@ public class AdminStore {
 
   AdminList<AuditLogItem> listAuditLogs(String query) {
     String like = "%" + (query == null ? "" : query.trim()) + "%";
-    List<AuditLogItem> items = jdbcTemplate.query("""
-        select id, actor, action, target_type, target_id, result, region_id, industry_id, create_time
-          from audit_logs
-         where (? = '%%' or actor like ? or action like ? or target_type like ? or target_id like ?)
-         order by id desc
-        """, auditMapper(), like, like, like, like, like);
+    List<AuditLogItem> items = mapper.listAuditLogs(like).stream().map(this::toAuditLogItem).toList();
     return new AdminList<>(items, items.size(), Map.of("total", items.size()));
   }
 
   AdminList<IntelligenceReviewItem> listReviews(String status) {
-    String where = StringUtils.hasText(status) ? " where r.review_status = ?" : "";
-    Object[] args = StringUtils.hasText(status) ? new Object[] {status} : new Object[0];
-    List<IntelligenceReviewItem> items = jdbcTemplate.query("""
-        select r.id, r.intelligence_id, i.title, i.content, i.url, i.status,
-               r.review_status, r.verdict, r.reviewer, r.reason,
-               i.confidence, r.region_id, r.industry_id, i.source_id,
-               r.create_time, r.update_time
-          from admin_intelligence_reviews r
-          left join intelligence i on i.id = r.intelligence_id
-        """ + where + " order by r.id desc", reviewMapper(), args);
+    List<IntelligenceReviewItem> items = mapper.listReviews(status).stream().map(this::toReviewItem).toList();
     return new AdminList<>(items, items.size(), Map.of(
-        "pending", countWhere("admin_intelligence_reviews", "review_status = 'PENDING'"),
-        "completed", countWhere("admin_intelligence_reviews", "review_status = 'COMPLETED'")));
+        "pending", intValue(mapper.countPendingReviews()),
+        "completed", intValue(mapper.countCompletedReviews())));
   }
 
   IntelligenceReviewItem decideReview(long id, String verdict, String notes, String actor) {
     String normalizedVerdict = normalizeVerdict(verdict);
-    int updated = jdbcTemplate.update("""
-        update admin_intelligence_reviews
-           set review_status = 'COMPLETED', verdict = ?, reviewer = ?, reason = ?, update_time = current_timestamp
-         where id = ?
-        """, normalizedVerdict, actor, notes, id);
-    if (updated == 0) {
+    if (mapper.completeReview(id, normalizedVerdict, actor, notes) == 0) {
       throw new IllegalArgumentException("review not found");
     }
 
@@ -175,33 +127,55 @@ public class AdminStore {
       case "ARCHIVE" -> "ARCHIVED";
       default -> "PENDING";
     };
-    jdbcTemplate.update("update intelligence set status = ?, update_time = current_timestamp where id = ?",
-        intelligenceStatus, item.intelligenceId());
+
+    intelligenceMapper.update(null, new LambdaUpdateWrapper<IntelligenceItem>()
+        .eq(IntelligenceItem::getId, item.intelligenceId())
+        .set(IntelligenceItem::getStatus, intelligenceStatus));
 
     if ("FLAG".equals(normalizedVerdict) || "SUSPICIOUS".equals(normalizedVerdict)) {
       String ticketType = "FLAG".equals(normalizedVerdict) ? "review_escalation" : "suspicious_review";
-      jdbcTemplate.update("""
-          insert into admin_tickets
-            (ticket_type, severity, target_type, target_id, title, description, status, owner, next_action, region_id, industry_id)
-          values (?, 'P1', 'intelligence', ?, ?, ?, 'NEW', ?, ?, ?, ?)
-          """,
-          ticketType, item.intelligenceId(),
-          normalizedVerdict.equals("SUSPICIOUS") ? "Suspicious intelligence review: " + item.title() : "Escalated intelligence review: " + item.title(),
-          notes, actor,
-          "FLAG".equals(normalizedVerdict) ? "Assign second reviewer and confirm source conflict." : "Investigate suspicious signal and verify evidence.",
-          item.regionId(), item.industryId());
+      Map<String, Object> ticket = new LinkedHashMap<>();
+      ticket.put("ticketType", ticketType);
+      ticket.put("severity", "P1");
+      ticket.put("targetType", "intelligence");
+      ticket.put("targetId", item.intelligenceId());
+      ticket.put("title", normalizedVerdict.equals("SUSPICIOUS") ? "Suspicious intelligence review: " + item.title() : "Escalated intelligence review: " + item.title());
+      ticket.put("description", notes);
+      ticket.put("status", "NEW");
+      ticket.put("owner", actor);
+      ticket.put("nextAction", "FLAG".equals(normalizedVerdict) ? "Assign second reviewer and confirm source conflict." : "Investigate suspicious signal and verify evidence.");
+      ticket.put("regionId", item.regionId());
+      ticket.put("industryId", item.industryId());
+      mapper.insertTicket(ticket);
     }
     if ("COMPLIANCE".equals(normalizedVerdict)) {
-      jdbcTemplate.update("""
-          insert into admin_tickets
-            (ticket_type, severity, target_type, target_id, title, description, status, owner, next_action, region_id, industry_id)
-          values ('compliance_review', 'P1', 'intelligence', ?, ?, ?, 'NEW', ?, 'Route to legal/compliance for content review.', ?, ?)
-          """,
-          item.intelligenceId(), "Compliance review: " + item.title(), notes, actor, item.regionId(), item.industryId());
+      Map<String, Object> ticket = new LinkedHashMap<>();
+      ticket.put("ticketType", "compliance_review");
+      ticket.put("severity", "P1");
+      ticket.put("targetType", "intelligence");
+      ticket.put("targetId", item.intelligenceId());
+      ticket.put("title", "Compliance review: " + item.title());
+      ticket.put("description", notes);
+      ticket.put("status", "NEW");
+      ticket.put("owner", actor);
+      ticket.put("nextAction", "Route to legal/compliance for content review.");
+      ticket.put("regionId", item.regionId());
+      ticket.put("industryId", item.industryId());
+      mapper.insertTicket(ticket);
     }
     if ("PAID_INTEL".equals(normalizedVerdict)) {
-      jdbcTemplate.update("update intelligence set entitlement = 'PAID', update_time = current_timestamp where id = ?",
-          item.intelligenceId());
+      intelligenceMapper.update(null, new LambdaUpdateWrapper<IntelligenceItem>()
+          .eq(IntelligenceItem::getId, item.intelligenceId())
+          .set(IntelligenceItem::getEntitlement, "PAID"));
+    }
+
+    ReviewTicket ticket = reviewMapper.selectById(id);
+    if (ticket != null) {
+      ticket.setReviewStatus("COMPLETED");
+      ticket.setVerdict(normalizedVerdict);
+      ticket.setReviewer(actor);
+      ticket.setReason(notes);
+      reviewMapper.updateById(ticket);
     }
 
     writeAudit(actor, "ADMIN_INTELLIGENCE_" + normalizedVerdict, "intelligence", String.valueOf(item.intelligenceId()), "SUCCESS", item.regionId(), item.industryId());
@@ -209,26 +183,14 @@ public class AdminStore {
   }
 
   AdminList<TicketItem> listTickets(String status) {
-    String where = StringUtils.hasText(status) ? " where status = ?" : "";
-    Object[] args = StringUtils.hasText(status) ? new Object[] {status} : new Object[0];
-    List<TicketItem> items = jdbcTemplate.query("""
-        select id, ticket_type, severity, target_type, target_id, title, status, owner,
-               next_action, region_id, industry_id, create_time, update_time
-          from admin_tickets
-        """ + where + " order by case severity when 'P0' then 0 when 'P1' then 1 else 2 end, id desc",
-        ticketMapper(), args);
+    List<TicketItem> items = mapper.listTickets(status).stream().map(this::toTicketItem).toList();
     return new AdminList<>(items, items.size(), Map.of(
-        "open", countWhere("admin_tickets", "status not in ('CLOSED','ARCHIVED')"),
-        "p0", countWhere("admin_tickets", "severity = 'P0' and status not in ('CLOSED','ARCHIVED')")));
+        "open", intValue(mapper.countOpenTickets()),
+        "p0", intValue(mapper.countP0Tickets())));
   }
 
   TicketItem transitionTicket(long id, String status, String owner, String nextAction, String actor, String notes) {
-    int updated = jdbcTemplate.update("""
-        update admin_tickets
-           set status = ?, owner = ?, next_action = ?, update_time = current_timestamp
-         where id = ?
-        """, blankToDefault(status, "IN_PROGRESS"), blankToDefault(owner, actor), blankToDefault(nextAction, "Continue handling"), id);
-    if (updated == 0) {
+    if (mapper.transitionTicket(id, blankToDefault(status, "IN_PROGRESS"), blankToDefault(owner, actor), blankToDefault(nextAction, "Continue handling")) == 0) {
       throw new IllegalArgumentException("ticket not found");
     }
     TicketItem item = findTicket(id);
@@ -237,41 +199,27 @@ public class AdminStore {
   }
 
   AdminList<HumanIntelligenceItem> listHumanIntelligence(String status) {
-    String where = StringUtils.hasText(status) ? " where status = ?" : "";
-    Object[] args = StringUtils.hasText(status) ? new Object[] {status} : new Object[0];
-    List<HumanIntelligenceItem> items = jdbcTemplate.query("""
-        select id, city, industry_id, link_id, content, source_type, collector, event_time,
-               confidence, entitlement, status, reviewer, review_notes, region_id, source_id, create_time, update_time
-          from admin_human_intelligence
-        """ + where + " order by id desc", humanMapper(), args);
+    List<HumanIntelligenceItem> items = mapper.listHumanIntelligence(status).stream().map(this::toHumanItem).toList();
     return new AdminList<>(items, items.size(), Map.of(
-        "pending", countWhere("admin_human_intelligence", "status = 'PENDING_REVIEW'"),
-        "approved", countWhere("admin_human_intelligence", "status = 'APPROVED'")));
+        "pending", intValue(mapper.countPendingHumanIntelligence()),
+        "approved", intValue(mapper.countApprovedHumanIntelligence())));
   }
 
   HumanIntelligenceItem createHumanIntelligence(HumanIntelligenceCreateRequest request, String actor) {
-    KeyHolder keyHolder = new GeneratedKeyHolder();
-    jdbcTemplate.update(connection -> {
-      PreparedStatement ps = connection.prepareStatement("""
-          insert into admin_human_intelligence
-            (city, industry_id, link_id, content, source_type, collector, event_time,
-             confidence, entitlement, status, region_id, source_id)
-          values (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_REVIEW', ?, ?)
-          """, Statement.RETURN_GENERATED_KEYS);
-      ps.setString(1, blankToDefault(request.city(), "Unknown"));
-      ps.setString(2, blankToDefault(request.industryId(), "general"));
-      ps.setString(3, blankToDefault(request.linkId(), "general"));
-      ps.setString(4, blankToDefault(request.content(), ""));
-      ps.setString(5, blankToDefault(request.sourceType(), "local_visit"));
-      ps.setString(6, blankToDefault(request.collector(), actor));
-      ps.setString(7, request.eventTime());
-      ps.setBigDecimal(8, request.confidence() == null ? BigDecimal.valueOf(0.7) : request.confidence());
-      ps.setString(9, blankToDefault(request.entitlement(), "FREE"));
-      ps.setString(10, blankToDefault(request.regionId(), "cn-default"));
-      ps.setString(11, blankToDefault(request.sourceId(), "human-intel"));
-      return ps;
-    }, keyHolder);
-    long id = generatedId(keyHolder);
+    Map<String, Object> values = new LinkedHashMap<>();
+    values.put("city", blankToDefault(request.city(), "Unknown"));
+    values.put("industryId", blankToDefault(request.industryId(), "general"));
+    values.put("linkId", blankToDefault(request.linkId(), "general"));
+    values.put("content", blankToDefault(request.content(), ""));
+    values.put("sourceType", blankToDefault(request.sourceType(), "local_visit"));
+    values.put("collector", blankToDefault(request.collector(), actor));
+    values.put("eventTime", request.eventTime());
+    values.put("confidence", request.confidence() == null ? BigDecimal.valueOf(0.7) : request.confidence());
+    values.put("entitlement", blankToDefault(request.entitlement(), "FREE"));
+    values.put("regionId", blankToDefault(request.regionId(), "cn-default"));
+    values.put("sourceId", blankToDefault(request.sourceId(), "human-intel"));
+    mapper.insertHumanIntelligence(values);
+    long id = longValue(values.get("id"));
     HumanIntelligenceItem item = findHumanIntelligence(id);
     writeAudit(actor, "ADMIN_HUMAN_INTELLIGENCE_CREATE", "human_intelligence", String.valueOf(id), "SUCCESS", item.regionId(), item.industryId());
     return item;
@@ -279,285 +227,305 @@ public class AdminStore {
 
   HumanIntelligenceItem reviewHumanIntelligence(long id, String verdict, String notes, String actor) {
     String status = "PASS".equals(normalizeVerdict(verdict)) ? "APPROVED" : "REJECTED";
-    int updated = jdbcTemplate.update("""
-        update admin_human_intelligence
-           set status = ?, reviewer = ?, review_notes = ?, update_time = current_timestamp
-         where id = ?
-        """, status, actor, notes, id);
-    if (updated == 0) {
+    if (mapper.reviewHumanIntelligence(id, status, actor, notes) == 0) {
       throw new IllegalArgumentException("human intelligence not found");
     }
     HumanIntelligenceItem item = findHumanIntelligence(id);
     if ("APPROVED".equals(status)) {
-      jdbcTemplate.update("""
-          insert into intelligence
-            (title, content, url, status, confidence, link_id, region_id, industry_id, source_id, weight, content_hash)
-          values (?, ?, ?, 'APPROVED', ?, ?, ?, ?, ?, ?, ?)
-          """,
-          "Human intelligence: " + item.city(),
-          item.content(),
-          "human://" + item.id(),
-          item.confidence(),
-          item.linkId(),
-          item.regionId(),
-          item.industryId(),
-          item.sourceId(),
-          BigDecimal.valueOf(0.9),
-          "human-" + item.id());
+      mapper.insertHumanIntelligenceAsIntelligence(Map.of(
+          "title", "Human intelligence: " + item.city(),
+          "content", item.content(),
+          "url", "human://" + item.id(),
+          "confidence", item.confidence(),
+          "linkId", item.linkId(),
+          "regionId", item.regionId(),
+          "industryId", item.industryId(),
+          "sourceId", item.sourceId(),
+          "weight", BigDecimal.valueOf(0.9),
+          "contentHash", "human-" + item.id()));
     }
     writeAudit(actor, "ADMIN_HUMAN_INTELLIGENCE_" + status, "human_intelligence", String.valueOf(id), "SUCCESS", item.regionId(), item.industryId());
     return item;
   }
 
-  private AlertItem findAlert(long id) {
-    return jdbcTemplate.query("select id, alert_level, component, message, status, owner, region_id, industry_id, create_time, update_time from alert_events where id = ?",
-        alertMapper(), id).stream().findFirst().orElseThrow(() -> new IllegalArgumentException("alert not found"));
-  }
-
-  private IntelligenceReviewItem findReview(long id) {
-    return jdbcTemplate.query("""
-        select r.id, r.intelligence_id, i.title, i.content, i.url, i.status,
-               r.review_status, r.verdict, r.reviewer, r.reason,
-               i.confidence, r.region_id, r.industry_id, i.source_id,
-               r.create_time, r.update_time
-          from admin_intelligence_reviews r
-          left join intelligence i on i.id = r.intelligence_id
-         where r.id = ?
-        """, reviewMapper(), id).stream().findFirst().orElseThrow(() -> new IllegalArgumentException("review not found"));
-  }
-
-  private TicketItem findTicket(long id) {
-    return jdbcTemplate.query("""
-        select id, ticket_type, severity, target_type, target_id, title, status, owner,
-               next_action, region_id, industry_id, create_time, update_time
-          from admin_tickets
-         where id = ?
-        """, ticketMapper(), id).stream().findFirst().orElseThrow(() -> new IllegalArgumentException("ticket not found"));
-  }
-
-  private HumanIntelligenceItem findHumanIntelligence(long id) {
-    return jdbcTemplate.query("""
-        select id, city, industry_id, link_id, content, source_type, collector, event_time,
-               confidence, entitlement, status, reviewer, review_notes, region_id, source_id, create_time, update_time
-          from admin_human_intelligence
-         where id = ?
-        """, humanMapper(), id).stream().findFirst().orElseThrow(() -> new IllegalArgumentException("human intelligence not found"));
-  }
-
-  private void writeAudit(String actor, String action, String targetType, String targetId, String result, String regionId, String industryId) {
-    jdbcTemplate.update("""
-        insert into audit_logs (actor, action, target_type, target_id, result, region_id, industry_id)
-        values (?, ?, ?, ?, ?, ?, ?)
-        """, actor, action, targetType, targetId, result, regionId, industryId);
-  }
-
-  // ── Risk Rules ──
   List<RiskRule> listRiskRules() {
-    return jdbcTemplate.query("""
-        select id, rule_type, name, description, enabled, threshold_value, scope_json,
-               risk_level, change_mode, version, create_time, update_time
-          from admin_risk_rules
-         order by rule_type, name
-        """, riskRuleMapper());
+    return mapper.listRiskRules().stream().map(this::toRiskRule).toList();
   }
 
   RiskRule upsertRiskRule(RiskRuleUpsertRequest request, String actor) {
     if (request.id() == null) {
-      KeyHolder keyHolder = new GeneratedKeyHolder();
-      jdbcTemplate.update(connection -> {
-        PreparedStatement ps = connection.prepareStatement("""
-            insert into admin_risk_rules
-              (rule_type, name, description, enabled, threshold_value, scope_json, risk_level, change_mode, version)
-            values (?, ?, ?, ?, ?, ?, ?, ?, 1)
-            """, Statement.RETURN_GENERATED_KEYS);
-        ps.setString(1, blankToDefault(request.ruleType(), "general"));
-        ps.setString(2, blankToDefault(request.name(), "Untitled rule"));
-        ps.setString(3, request.description());
-        ps.setBoolean(4, request.enabled() == null || request.enabled());
-        ps.setBigDecimal(5, request.thresholdValue());
-        ps.setString(6, request.scopeJson());
-        ps.setString(7, blankToDefault(request.riskLevel(), "MEDIUM"));
-        ps.setString(8, blankToDefault(request.changeMode(), "IMMEDIATE"));
-        return ps;
-      }, keyHolder);
-      long id = generatedId(keyHolder);
+      Map<String, Object> values = new LinkedHashMap<>();
+      values.put("ruleType", blankToDefault(request.ruleType(), "general"));
+      values.put("name", blankToDefault(request.name(), "Untitled rule"));
+      values.put("description", request.description());
+      values.put("enabled", request.enabled() == null || request.enabled());
+      values.put("thresholdValue", request.thresholdValue());
+      values.put("scopeJson", request.scopeJson());
+      values.put("riskLevel", blankToDefault(request.riskLevel(), "MEDIUM"));
+      values.put("changeMode", blankToDefault(request.changeMode(), "IMMEDIATE"));
+      mapper.insertRiskRule(values);
+      long id = longValue(values.get("id"));
       writeAudit(actor, "ADMIN_RISK_RULE_CREATE", "risk_rule", String.valueOf(id), "SUCCESS", "global", "global");
       return findRiskRule(id);
     }
-    long id = request.id();
-    jdbcTemplate.update("""
-        update admin_risk_rules
-           set rule_type = ?, name = ?, description = ?, enabled = ?, threshold_value = ?,
-               scope_json = ?, risk_level = ?, change_mode = ?, version = version + 1, update_time = current_timestamp
-         where id = ?
-        """,
-        blankToDefault(request.ruleType(), "general"),
-        blankToDefault(request.name(), "Untitled rule"),
-        request.description(),
-        request.enabled() == null || request.enabled(),
-        request.thresholdValue(),
-        request.scopeJson(),
-        blankToDefault(request.riskLevel(), "MEDIUM"),
-        blankToDefault(request.changeMode(), "IMMEDIATE"),
-        id);
-    writeAudit(actor, "ADMIN_RISK_RULE_UPDATE", "risk_rule", String.valueOf(id), "SUCCESS", "global", "global");
-    return findRiskRule(id);
+
+    Map<String, Object> existing = requireMap(mapper.findRiskRule(request.id()), "risk rule not found");
+    Map<String, Object> values = new LinkedHashMap<>();
+    values.put("id", request.id());
+    values.put("ruleType", blankToDefault(request.ruleType(), stringValue(existing.get("ruleType"))));
+    values.put("name", blankToDefault(request.name(), stringValue(existing.get("name"))));
+    values.put("description", request.description() == null ? stringValue(existing.get("description")) : request.description());
+    values.put("enabled", request.enabled() == null ? booleanValue(existing.get("enabled")) : request.enabled());
+    values.put("thresholdValue", request.thresholdValue() == null ? decimalValue(existing.get("thresholdValue"), null) : request.thresholdValue());
+    values.put("scopeJson", request.scopeJson() == null ? stringValue(existing.get("scopeJson")) : request.scopeJson());
+    values.put("riskLevel", blankToDefault(request.riskLevel(), stringValue(existing.get("riskLevel"))));
+    values.put("changeMode", blankToDefault(request.changeMode(), stringValue(existing.get("changeMode"))));
+    mapper.updateRiskRule(values);
+    writeAudit(actor, "ADMIN_RISK_RULE_UPDATE", "risk_rule", String.valueOf(request.id()), "SUCCESS", "global", "global");
+    return findRiskRule(request.id());
   }
 
   RiskRule toggleRiskRule(long id, String actor) {
     RiskRule rule = findRiskRule(id);
     boolean next = !rule.enabled();
-    jdbcTemplate.update("update admin_risk_rules set enabled = ?, update_time = current_timestamp where id = ?", next, id);
+    mapper.toggleRiskRule(id, next);
     writeAudit(actor, next ? "ADMIN_RISK_RULE_ENABLE" : "ADMIN_RISK_RULE_DISABLE", "risk_rule", String.valueOf(id), "SUCCESS", "global", "global");
     return findRiskRule(id);
   }
 
-  // ── Collection Lifecycle ──
   void archiveCollectionSource(long sourceConfigId, String actor) {
-    var source = jdbcTemplate.query("select id from admin_collection_sources where id = ?",
-        (rs, rn) -> rs.getLong("id"), sourceConfigId).stream().findFirst();
-    if (source.isEmpty()) throw new IllegalArgumentException("source not found");
-    jdbcTemplate.update("update admin_collection_sources set status = 'ARCHIVED', update_time = current_timestamp where id = ?", sourceConfigId);
+    if (mapper.findCollectionSourceId(sourceConfigId) == null) {
+      throw new IllegalArgumentException("source not found");
+    }
+    mapper.updateCollectionSourceStatus(sourceConfigId, "ARCHIVED");
     writeAudit(actor, "ADMIN_COLLECTION_ARCHIVE", "collection_source", String.valueOf(sourceConfigId), "SUCCESS", "global", "global");
   }
 
   void restoreCollectionSource(long sourceConfigId, String actor) {
-    var source = jdbcTemplate.query("select id from admin_collection_sources where id = ?",
-        (rs, rn) -> rs.getLong("id"), sourceConfigId).stream().findFirst();
-    if (source.isEmpty()) throw new IllegalArgumentException("source not found");
-    jdbcTemplate.update("update admin_collection_sources set status = 'ENABLED', update_time = current_timestamp where id = ?", sourceConfigId);
+    if (mapper.findCollectionSourceId(sourceConfigId) == null) {
+      throw new IllegalArgumentException("source not found");
+    }
+    mapper.updateCollectionSourceStatus(sourceConfigId, "ENABLED");
     writeAudit(actor, "ADMIN_COLLECTION_RESTORE", "collection_source", String.valueOf(sourceConfigId), "SUCCESS", "global", "global");
   }
 
+  private AlertItem findAlert(long id) {
+    return toAlertItem(requireMap(mapper.findAlert(id), "alert not found"));
+  }
+
+  private IntelligenceReviewItem findReview(long id) {
+    return toReviewItem(requireMap(mapper.findReview(id), "review not found"));
+  }
+
+  private TicketItem findTicket(long id) {
+    return toTicketItem(requireMap(mapper.findTicket(id), "ticket not found"));
+  }
+
+  private HumanIntelligenceItem findHumanIntelligence(long id) {
+    return toHumanItem(requireMap(mapper.findHumanIntelligence(id), "human intelligence not found"));
+  }
+
   private RiskRule findRiskRule(long id) {
-    return jdbcTemplate.query("""
-        select id, rule_type, name, description, enabled, threshold_value, scope_json,
-               risk_level, change_mode, version, create_time, update_time
-          from admin_risk_rules where id = ?
-        """, riskRuleMapper(), id).stream().findFirst()
-        .orElseThrow(() -> new IllegalArgumentException("risk rule not found"));
+    return toRiskRule(requireMap(mapper.findRiskRule(id), "risk rule not found"));
   }
 
-  private RowMapper<RiskRule> riskRuleMapper() {
-    return (rs, rowNum) -> new RiskRule(
-        rs.getLong("id"),
-        rs.getString("rule_type"),
-        rs.getString("name"),
-        rs.getString("description"),
-        rs.getBoolean("enabled"),
-        rs.getBigDecimal("threshold_value"),
-        rs.getString("scope_json"),
-        rs.getString("risk_level"),
-        rs.getString("change_mode"),
-        rs.getInt("version"),
-        timestamp(rs.getTimestamp("create_time")),
-        timestamp(rs.getTimestamp("update_time")));
-  }
-
-  private int countWhere(String table, String where) {
-    Integer count = jdbcTemplate.queryForObject("select count(*) from " + table + " where " + where, Integer.class);
-    return count == null ? 0 : count;
+  private void writeAudit(String actor, String action, String targetType, String targetId, String result, String regionId, String industryId) {
+    mapper.insertAuditLog(Map.of(
+        "actor", actor,
+        "action", action,
+        "targetType", targetType,
+        "targetId", targetId,
+        "result", result,
+        "regionId", regionId,
+        "industryId", industryId));
   }
 
   private String collectionSuccessRate() {
-    int total = countWhere("admin_collection_job_runs", "1 = 1");
-    if (total == 0) return "—";
-    int success = countWhere("admin_collection_job_runs", "status = 'SUCCESS'");
-    return Math.round(100.0 * success / total) + "%";
+    int total = intValue(mapper.countCollectionRuns());
+    if (total == 0) {
+      return "-";
+    }
+    return Math.round(100.0 * intValue(mapper.countSuccessfulCollectionRuns()) / total) + "%";
   }
 
   private String crawlerHealth() {
-    int openCircuits = countWhere("admin_collection_sources", "circuit_state = 'OPEN'");
+    int openCircuits = intValue(mapper.countOpenCollectionCircuits());
     return openCircuits == 0 ? "All closed" : openCircuits + " open";
   }
 
-  private RowMapper<AlertItem> alertMapper() {
-    return (rs, rowNum) -> new AlertItem(
-        rs.getLong("id"),
-        rs.getString("alert_level"),
-        rs.getString("component"),
-        rs.getString("message"),
-        rs.getString("status"),
-        rs.getString("owner"),
-        rs.getString("region_id"),
-        rs.getString("industry_id"),
-        timestamp(rs.getTimestamp("create_time")),
-        timestamp(rs.getTimestamp("update_time")));
+  private AlertItem toAlertItem(Map<String, Object> row) {
+    return new AlertItem(
+        longValue(row, "id"),
+        stringValue(row, "level"),
+        stringValue(row, "component"),
+        stringValue(row, "message"),
+        stringValue(row, "status"),
+        stringValue(row, "owner"),
+        stringValue(row, "regionId"),
+        stringValue(row, "industryId"),
+        timeValue(row, "createTime"),
+        timeValue(row, "updateTime"));
   }
 
-  private RowMapper<AuditLogItem> auditMapper() {
-    return (rs, rowNum) -> new AuditLogItem(
-        rs.getLong("id"),
-        rs.getString("actor"),
-        rs.getString("action"),
-        rs.getString("target_type"),
-        rs.getString("target_id"),
-        rs.getString("result"),
-        rs.getString("region_id"),
-        rs.getString("industry_id"),
-        timestamp(rs.getTimestamp("create_time")));
+  private AuditLogItem toAuditLogItem(Map<String, Object> row) {
+    return new AuditLogItem(
+        longValue(row, "id"),
+        stringValue(row, "actor"),
+        stringValue(row, "action"),
+        stringValue(row, "targetType"),
+        stringValue(row, "targetId"),
+        stringValue(row, "result"),
+        stringValue(row, "regionId"),
+        stringValue(row, "industryId"),
+        timeValue(row, "createTime"));
   }
 
-  private RowMapper<IntelligenceReviewItem> reviewMapper() {
-    return (rs, rowNum) -> new IntelligenceReviewItem(
-        rs.getLong("id"),
-        rs.getLong("intelligence_id"),
-        rs.getString("title"),
-        rs.getString("content"),
-        rs.getString("url"),
-        rs.getString("status"),
-        rs.getString("review_status"),
-        rs.getString("verdict"),
-        rs.getString("reviewer"),
-        rs.getString("reason"),
-        rs.getBigDecimal("confidence"),
-        rs.getString("region_id"),
-        rs.getString("industry_id"),
-        rs.getString("source_id"),
-        timestamp(rs.getTimestamp("create_time")),
-        timestamp(rs.getTimestamp("update_time")));
+  private IntelligenceReviewItem toReviewItem(Map<String, Object> row) {
+    return new IntelligenceReviewItem(
+        longValue(row, "id"),
+        longValue(row, "intelligenceId"),
+        stringValue(row, "title"),
+        stringValue(row, "content"),
+        stringValue(row, "url"),
+        stringValue(row, "status"),
+        stringValue(row, "reviewStatus"),
+        stringValue(row, "verdict"),
+        stringValue(row, "reviewer"),
+        stringValue(row, "reason"),
+        decimalValue(lookup(row, "confidence"), BigDecimal.ZERO),
+        stringValue(row, "regionId"),
+        stringValue(row, "industryId"),
+        stringValue(row, "sourceId"),
+        timeValue(row, "createTime"),
+        timeValue(row, "updateTime"));
   }
 
-  private RowMapper<TicketItem> ticketMapper() {
-    return (rs, rowNum) -> new TicketItem(
-        rs.getLong("id"),
-        rs.getString("ticket_type"),
-        rs.getString("severity"),
-        rs.getString("target_type"),
-        rs.getLong("target_id"),
-        rs.getString("title"),
-        rs.getString("status"),
-        rs.getString("owner"),
-        rs.getString("next_action"),
-        rs.getString("region_id"),
-        rs.getString("industry_id"),
-        timestamp(rs.getTimestamp("create_time")),
-        timestamp(rs.getTimestamp("update_time")));
+  private TicketItem toTicketItem(Map<String, Object> row) {
+    return new TicketItem(
+        longValue(row, "id"),
+        stringValue(row, "ticketType"),
+        stringValue(row, "severity"),
+        stringValue(row, "targetType"),
+        longValue(row, "targetId"),
+        stringValue(row, "title"),
+        stringValue(row, "status"),
+        stringValue(row, "owner"),
+        stringValue(row, "nextAction"),
+        stringValue(row, "regionId"),
+        stringValue(row, "industryId"),
+        timeValue(row, "createTime"),
+        timeValue(row, "updateTime"));
   }
 
-  private RowMapper<HumanIntelligenceItem> humanMapper() {
-    return (rs, rowNum) -> new HumanIntelligenceItem(
-        rs.getLong("id"),
-        rs.getString("city"),
-        rs.getString("industry_id"),
-        rs.getString("link_id"),
-        rs.getString("content"),
-        rs.getString("source_type"),
-        rs.getString("collector"),
-        rs.getString("event_time"),
-        rs.getBigDecimal("confidence"),
-        rs.getString("entitlement"),
-        rs.getString("status"),
-        rs.getString("reviewer"),
-        rs.getString("review_notes"),
-        rs.getString("region_id"),
-        rs.getString("source_id"),
-        timestamp(rs.getTimestamp("create_time")),
-        timestamp(rs.getTimestamp("update_time")));
+  private HumanIntelligenceItem toHumanItem(Map<String, Object> row) {
+    return new HumanIntelligenceItem(
+        longValue(row, "id"),
+        stringValue(row, "city"),
+        stringValue(row, "industryId"),
+        stringValue(row, "linkId"),
+        stringValue(row, "content"),
+        stringValue(row, "sourceType"),
+        stringValue(row, "collector"),
+        stringValue(row, "eventTime"),
+        decimalValue(lookup(row, "confidence"), BigDecimal.ZERO),
+        stringValue(row, "entitlement"),
+        stringValue(row, "status"),
+        stringValue(row, "reviewer"),
+        stringValue(row, "reviewNotes"),
+        stringValue(row, "regionId"),
+        stringValue(row, "sourceId"),
+        timeValue(row, "createTime"),
+        timeValue(row, "updateTime"));
   }
 
-  private LocalDateTime timestamp(Timestamp timestamp) {
-    return timestamp == null ? null : timestamp.toLocalDateTime();
+  private RiskRule toRiskRule(Map<String, Object> row) {
+    return new RiskRule(
+        longValue(row, "id"),
+        stringValue(row, "ruleType"),
+        stringValue(row, "name"),
+        stringValue(row, "description"),
+        booleanValue(lookup(row, "enabled")),
+        decimalValue(lookup(row, "thresholdValue"), null),
+        stringValue(row, "scopeJson"),
+        stringValue(row, "riskLevel"),
+        stringValue(row, "changeMode"),
+        intValue(lookup(row, "version")),
+        timeValue(row, "createTime"),
+        timeValue(row, "updateTime"));
+  }
+
+  private Map<String, Object> requireMap(Map<String, Object> row, String message) {
+    if (row == null || row.isEmpty()) {
+      throw new IllegalArgumentException(message);
+    }
+    return row;
+  }
+
+  private Object lookup(Map<String, Object> row, String key) {
+    if (row.containsKey(key)) {
+      return row.get(key);
+    }
+    for (Map.Entry<String, Object> entry : row.entrySet()) {
+      if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(key)) {
+        return entry.getValue();
+      }
+    }
+    return null;
+  }
+
+  private int intValue(Object value) {
+    return value instanceof Number number ? number.intValue() : 0;
+  }
+
+  private long longValue(Map<String, Object> row, String key) {
+    Object value = lookup(row, key);
+    return value instanceof Number number ? number.longValue() : 0L;
+  }
+
+  private long longValue(Object value) {
+    return value instanceof Number number ? number.longValue() : 0L;
+  }
+
+  private boolean booleanValue(Object value) {
+    return value instanceof Boolean bool ? bool : value instanceof Number number && number.intValue() != 0;
+  }
+
+  private BigDecimal decimalValue(Object value, BigDecimal fallback) {
+    if (value == null) {
+      return fallback;
+    }
+    if (value instanceof BigDecimal decimal) {
+      return decimal;
+    }
+    try {
+      return new BigDecimal(String.valueOf(value));
+    } catch (NumberFormatException exception) {
+      return fallback;
+    }
+  }
+
+  private LocalDateTime timeValue(Map<String, Object> row, String key) {
+    Object value = lookup(row, key);
+    return value instanceof LocalDateTime time ? time : null;
+  }
+
+  private String stringValue(Map<String, Object> row, String key) {
+    Object value = lookup(row, key);
+    return stringValue(value);
+  }
+
+  private String stringValue(Object value) {
+    if (value == null) {
+      return null;
+    }
+    if (value instanceof Clob clob) {
+      try {
+        return clob.getSubString(1, (int) clob.length());
+      } catch (SQLException exception) {
+        throw new IllegalArgumentException("unable to read clob value", exception);
+      }
+    }
+    return String.valueOf(value);
   }
 
   private String normalizeVerdict(String verdict) {
@@ -573,12 +541,5 @@ public class AdminStore {
 
   private String blankToDefault(String value, String fallback) {
     return StringUtils.hasText(value) ? value : fallback;
-  }
-
-  private long generatedId(KeyHolder keyHolder) {
-    if (keyHolder.getKeys() != null && keyHolder.getKeys().get("id") instanceof Number id) {
-      return id.longValue();
-    }
-    return keyHolder.getKey().longValue();
   }
 }

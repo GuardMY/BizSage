@@ -7,7 +7,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,17 +17,17 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/ops")
 @PreAuthorize("hasAnyRole('SUPER_ADMIN','OPERATOR')")
 public class OpsController {
-  private final JdbcTemplate jdbcTemplate;
+  private final OpsReadService opsReadService;
   private final CacheMetrics cacheMetrics;
   private final SlaService slaService;
   private final String grayCohort;
 
   public OpsController(
-      JdbcTemplate jdbcTemplate,
+      OpsReadService opsReadService,
       CacheMetrics cacheMetrics,
       SlaService slaService,
       @Value("${bizsage.gray-release.cohort:internal-operators-and-seed-paid-users}") String grayCohort) {
-    this.jdbcTemplate = jdbcTemplate;
+    this.opsReadService = opsReadService;
     this.cacheMetrics = cacheMetrics;
     this.slaService = slaService;
     this.grayCohort = grayCohort;
@@ -80,29 +79,17 @@ public class OpsController {
 
   @GetMapping("/alerts")
   ApiResponse<List<Map<String, Object>>> alerts(HttpServletRequest request) {
-    return ApiResponse.ok(jdbcTemplate.queryForList("""
-        select alert_level as level, component as scope, status, owner, message
-          from alert_events
-         order by id desc
-        """), requestId(request));
+    return ApiResponse.ok(opsReadService.listAlerts(), requestId(request));
   }
 
   @GetMapping("/review-work-orders")
   ApiResponse<List<Map<String, Object>>> reviewWorkOrders(HttpServletRequest request) {
-    return ApiResponse.ok(jdbcTemplate.queryForList("""
-        select id, reason, status, source_id as sourceId, target_type as targetType, target_id as targetId
-          from review_work_orders
-         order by id desc
-        """), requestId(request));
+    return ApiResponse.ok(opsReadService.listReviewWorkOrders(), requestId(request));
   }
 
   @GetMapping("/audit-logs")
   ApiResponse<List<Map<String, Object>>> auditLogs(HttpServletRequest request) {
-    return ApiResponse.ok(jdbcTemplate.queryForList("""
-        select id, action, actor, result, target_type as targetType, target_id as targetId
-          from audit_logs
-         order by id desc
-        """), requestId(request));
+    return ApiResponse.ok(opsReadService.listAuditLogs(), requestId(request));
   }
 
   private String requestId(HttpServletRequest request) {

@@ -1,5 +1,7 @@
 package com.bizsage.api.admin;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.bizsage.api.admin.AdminKnowledgeDtos.KnowledgeDraftRequest;
 import com.bizsage.api.admin.AdminKnowledgeDtos.KnowledgeNodeDetail;
 import com.bizsage.api.admin.AdminKnowledgeDtos.KnowledgePublication;
@@ -7,79 +9,42 @@ import com.bizsage.api.admin.AdminKnowledgeDtos.KnowledgeRollbackRequest;
 import com.bizsage.api.admin.AdminKnowledgeDtos.KnowledgeTreeNode;
 import com.bizsage.api.admin.AdminKnowledgeDtos.KnowledgeVersion;
 import com.bizsage.api.admin.AdminKnowledgeDtos.KnowledgeVersionDiff;
+import com.bizsage.api.knowledge.KnowledgeItem;
+import com.bizsage.api.knowledge.KnowledgeMapper;
 import com.bizsage.api.worker.AiWorkerClient;
 import java.math.BigDecimal;
-import java.sql.PreparedStatement;
-import java.sql.Statement;
-import java.sql.Timestamp;
+import java.sql.Clob;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
 public class AdminKnowledgeStore {
-  private final JdbcTemplate jdbcTemplate;
+  private final AdminKnowledgeMapper mapper;
+  private final KnowledgeMapper knowledgeMapper;
   private final AiWorkerClient aiWorkerClient;
 
-  public AdminKnowledgeStore(JdbcTemplate jdbcTemplate, AiWorkerClient aiWorkerClient) {
-    this.jdbcTemplate = jdbcTemplate;
+  public AdminKnowledgeStore(AdminKnowledgeMapper mapper, KnowledgeMapper knowledgeMapper, AiWorkerClient aiWorkerClient) {
+    this.mapper = mapper;
+    this.knowledgeMapper = knowledgeMapper;
     this.aiWorkerClient = aiWorkerClient;
   }
 
   List<KnowledgeTreeNode> listNodes() {
-    return jdbcTemplate.query("""
-        select n.id, n.title, n.slug, n.industry_id, n.region_id, n.link_id, n.status,
-               n.published_version_id,
-               (select count(*) from admin_knowledge_versions v where v.node_id = n.id) as version_count,
-               n.update_time
-          from admin_knowledge_nodes n
-         order by n.industry_id, n.region_id, n.link_id, n.title
-        """, nodeMapper());
+    return mapper.listNodes().stream().map(this::toNode).toList();
   }
 
   KnowledgeNodeDetail detail(long nodeId) {
-    KnowledgeTreeNode node = jdbcTemplate.query("""
-        select n.id, n.title, n.slug, n.industry_id, n.region_id, n.link_id, n.status,
-               n.published_version_id,
-               (select count(*) from admin_knowledge_versions v where v.node_id = n.id) as version_count,
-               n.update_time
-          from admin_knowledge_nodes n
-         where n.id = ?
-        """, nodeMapper(), nodeId).stream().findFirst()
-        .orElseThrow(() -> new IllegalArgumentException("knowledge node not found"));
+    KnowledgeTreeNode node = toNode(requireMap(mapper.findNode(nodeId), "knowledge node not found"));
+    List<KnowledgeVersion> versions = mapper.listVersions(nodeId).stream().map(this::toVersion).toList();
+    List<KnowledgePublication> publications = mapper.listPublications(nodeId).stream().map(this::toPublication).toList();
 
-    List<KnowledgeVersion> versions = jdbcTemplate.query("""
-        select id, node_id, version_number, title, summary, content, source_url, review_status,
-               author, reviewer, review_notes, change_notes, confidence, created_by_action, create_time, update_time
-          from admin_knowledge_versions
-         where node_id = ?
-         order by version_number desc
-        """, versionMapper(), nodeId);
-
-    List<KnowledgePublication> publications = jdbcTemplate.query("""
-        select id, node_id, version_id, action, actor, notes, create_time
-          from admin_knowledge_publications
-         where node_id = ?
-         order by id desc
-        """, publicationMapper(), nodeId);
-
-    Long draftVersionId = versions.stream()
-        .filter(version -> "DRAFT".equals(version.reviewStatus()))
-        .map(KnowledgeVersion::versionId)
-        .findFirst()
-        .orElse(null);
-    Long reviewVersionId = versions.stream()
-        .filter(version -> "IN_REVIEW".equals(version.reviewStatus()))
-        .map(KnowledgeVersion::versionId)
-        .findFirst()
-        .orElse(null);
+    Long draftVersionId = versions.stream().filter(version -> "DRAFT".equals(version.reviewStatus())).map(KnowledgeVersion::versionId).findFirst().orElse(null);
+    Long reviewVersionId = versions.stream().filter(version -> "IN_REVIEW".equals(version.reviewStatus())).map(KnowledgeVersion::versionId).findFirst().orElse(null);
 
     return new KnowledgeNodeDetail(
         node.nodeId(),
@@ -98,50 +63,31 @@ public class AdminKnowledgeStore {
 
   KnowledgeNodeDetail saveDraft(KnowledgeDraftRequest request, String actor) {
     long nodeId = request.nodeId() == null ? createNode(request, actor) : request.nodeId();
-    int nextVersion = nextVersionNumber(nodeId);
-    KeyHolder keyHolder = new GeneratedKeyHolder();
-    jdbcTemplate.update(connection -> {
-      PreparedStatement ps = connection.prepareStatement("""
-          insert into admin_knowledge_versions
-            (node_id, version_number, title, summary, content, source_url, review_status,
-             author, confidence, change_notes, created_by_action)
-          values (?, ?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, 'SAVE_DRAFT')
-          """, Statement.RETURN_GENERATED_KEYS);
-      ps.setLong(1, nodeId);
-      ps.setInt(2, nextVersion);
-      ps.setString(3, blankToDefault(request.title(), "Untitled node"));
-      ps.setString(4, blankToDefault(request.summary(), ""));
-      ps.setString(5, blankToDefault(request.content(), ""));
-      ps.setString(6, request.sourceUrl());
-      ps.setString(7, actor);
-      ps.setBigDecimal(8, request.confidence() == null ? BigDecimal.valueOf(0.85) : request.confidence());
-      ps.setString(9, blankToDefault(request.changeNotes(), "Draft saved"));
-      return ps;
-    }, keyHolder);
-    long versionId = generatedId(keyHolder);
+    int nextVersion = intValue(mapper.nextVersionNumber(nodeId), 1);
 
-    jdbcTemplate.update("""
-        update admin_knowledge_nodes
-           set title = ?, slug = ?, industry_id = ?, region_id = ?, link_id = ?,
-               status = 'DRAFT', draft_version_id = ?, review_version_id = null, update_time = current_timestamp
-         where id = ?
-        """,
-        blankToDefault(request.title(), "Untitled node"),
-        normalizedSlug(request),
-        blankToDefault(request.industryId(), "general"),
-        blankToDefault(request.regionId(), "cn-default"),
-        blankToDefault(request.linkId(), "general"),
-        versionId,
-        nodeId);
+    Map<String, Object> versionValues = new LinkedHashMap<>();
+    versionValues.put("nodeId", nodeId);
+    versionValues.put("versionNumber", nextVersion);
+    versionValues.put("title", blankToDefault(request.title(), "Untitled node"));
+    versionValues.put("summary", blankToDefault(request.summary(), ""));
+    versionValues.put("content", blankToDefault(request.content(), ""));
+    versionValues.put("sourceUrl", request.sourceUrl());
+    versionValues.put("author", actor);
+    versionValues.put("confidence", request.confidence() == null ? BigDecimal.valueOf(0.85) : request.confidence());
+    versionValues.put("changeNotes", blankToDefault(request.changeNotes(), "Draft saved"));
+    mapper.insertVersion(versionValues);
+    long versionId = longValue(versionValues.get("id"));
 
-    writeAudit(
-        actor,
-        "ADMIN_KNOWLEDGE_SAVE_DRAFT",
-        "knowledge_node",
-        String.valueOf(nodeId),
-        "SUCCESS",
-        blankToDefault(request.regionId(), "cn-default"),
-        blankToDefault(request.industryId(), "general"));
+    mapper.updateNodeForDraft(Map.of(
+        "nodeId", nodeId,
+        "title", blankToDefault(request.title(), "Untitled node"),
+        "slug", normalizedSlug(request),
+        "industryId", blankToDefault(request.industryId(), "general"),
+        "regionId", blankToDefault(request.regionId(), "cn-default"),
+        "linkId", blankToDefault(request.linkId(), "general"),
+        "draftVersionId", versionId));
+
+    writeAudit(actor, "ADMIN_KNOWLEDGE_SAVE_DRAFT", "knowledge_node", String.valueOf(nodeId), "SUCCESS", blankToDefault(request.regionId(), "cn-default"), blankToDefault(request.industryId(), "general"));
     return detail(nodeId);
   }
 
@@ -150,16 +96,8 @@ public class AdminKnowledgeStore {
     if (!"DRAFT".equals(version.reviewStatus())) {
       throw new IllegalArgumentException("only draft versions can enter review");
     }
-    jdbcTemplate.update("""
-        update admin_knowledge_versions
-           set review_status = 'IN_REVIEW', review_notes = ?, update_time = current_timestamp
-         where id = ?
-        """, blankToDefault(notes, "Submitted for review"), versionId);
-    jdbcTemplate.update("""
-        update admin_knowledge_nodes
-           set status = 'IN_REVIEW', draft_version_id = null, review_version_id = ?, update_time = current_timestamp
-         where id = ?
-        """, versionId, nodeId);
+    mapper.updateVersionReview(versionId, "IN_REVIEW", null, blankToDefault(notes, "Submitted for review"));
+    mapper.updateNodeReviewState(nodeId, "IN_REVIEW", null, versionId);
     KnowledgeNodeDetail detail = detail(nodeId);
     writeAudit(actor, "ADMIN_KNOWLEDGE_SUBMIT_REVIEW", "knowledge_version", String.valueOf(versionId), "SUCCESS", detail.regionId(), detail.industryId());
     return detail;
@@ -173,16 +111,8 @@ public class AdminKnowledgeStore {
     if (actor.equalsIgnoreCase(version.author())) {
       throw new IllegalArgumentException("reviewer must be different from author");
     }
-    jdbcTemplate.update("""
-        update admin_knowledge_versions
-           set review_status = 'APPROVED', reviewer = ?, review_notes = ?, update_time = current_timestamp
-         where id = ?
-        """, actor, blankToDefault(notes, "Approved"), versionId);
-    jdbcTemplate.update("""
-        update admin_knowledge_nodes
-           set status = 'APPROVED', draft_version_id = null, review_version_id = ?, update_time = current_timestamp
-         where id = ?
-        """, versionId, nodeId);
+    mapper.updateVersionReview(versionId, "APPROVED", actor, blankToDefault(notes, "Approved"));
+    mapper.updateNodeReviewState(nodeId, "APPROVED", null, versionId);
     KnowledgeNodeDetail detail = detail(nodeId);
     writeAudit(actor, "ADMIN_KNOWLEDGE_APPROVE_REVIEW", "knowledge_version", String.valueOf(versionId), "SUCCESS", detail.regionId(), detail.industryId());
     return detail;
@@ -194,18 +124,8 @@ public class AdminKnowledgeStore {
       throw new IllegalArgumentException("only approved versions can be published");
     }
     KnowledgeNodeDetail current = detail(nodeId);
-    jdbcTemplate.update("""
-        update admin_knowledge_nodes
-           set title = ?, slug = ?, status = 'PUBLISHED', draft_version_id = null, review_version_id = null,
-               published_version_id = ?, update_time = current_timestamp
-         where id = ?
-        """, version.title(), normalizedSlug(version.title(), current.slug()), versionId, nodeId);
-
-    jdbcTemplate.update("""
-        insert into admin_knowledge_publications (node_id, version_id, action, actor, notes)
-        values (?, ?, 'PUBLISH', ?, ?)
-        """, nodeId, versionId, actor, blankToDefault(notes, "Published"));
-
+    mapper.publishNode(nodeId, version.title(), normalizedSlug(version.title(), current.slug()), versionId);
+    mapper.insertPublication(nodeId, versionId, "PUBLISH", actor, blankToDefault(notes, "Published"));
     syncPublishedVersion(current, version);
     syncToQdrant(nodeId, version, current);
     KnowledgeNodeDetail detail = detail(nodeId);
@@ -222,16 +142,8 @@ public class AdminKnowledgeStore {
     if (current.publishedVersionId() == null) {
       throw new IllegalArgumentException("rollback requires an already published node");
     }
-    jdbcTemplate.update("""
-        update admin_knowledge_nodes
-           set title = ?, slug = ?, status = 'PUBLISHED', draft_version_id = null, review_version_id = null,
-               published_version_id = ?, update_time = current_timestamp
-         where id = ?
-        """, version.title(), normalizedSlug(version.title(), current.slug()), version.versionId(), nodeId);
-    jdbcTemplate.update("""
-        insert into admin_knowledge_publications (node_id, version_id, action, actor, notes)
-        values (?, ?, 'ROLLBACK', ?, ?)
-        """, nodeId, version.versionId(), actor, blankToDefault(request.notes(), "Rolled back"));
+    mapper.publishNode(nodeId, version.title(), normalizedSlug(version.title(), current.slug()), version.versionId());
+    mapper.insertPublication(nodeId, version.versionId(), "ROLLBACK", actor, blankToDefault(request.notes(), "Rolled back"));
     syncPublishedVersion(current, version);
     syncToQdrant(nodeId, version, current);
     KnowledgeNodeDetail detail = detail(nodeId);
@@ -243,56 +155,65 @@ public class AdminKnowledgeStore {
     KnowledgeVersion left = findVersionById(leftVersionId);
     KnowledgeVersion right = findVersionById(rightVersionId);
     return new KnowledgeVersionDiff(
-        left.versionId(),
-        right.versionId(),
-        left.title(),
-        right.title(),
-        left.summary(),
-        right.summary(),
-        left.content(),
-        right.content(),
-        left.sourceUrl(),
-        right.sourceUrl(),
-        left.confidence(),
-        right.confidence(),
-        left.reviewStatus(),
-        right.reviewStatus());
+        left.versionId(), right.versionId(), left.title(), right.title(), left.summary(), right.summary(),
+        left.content(), right.content(), left.sourceUrl(), right.sourceUrl(), left.confidence(), right.confidence(),
+        left.reviewStatus(), right.reviewStatus());
+  }
+
+  AdminKnowledgeDtos.InspectionReport inspect() {
+    var nodes = listNodes();
+    var findings = new java.util.ArrayList<AdminKnowledgeDtos.InspectionFinding>();
+    int warning = 0;
+    int critical = 0;
+
+    for (var node : nodes) {
+      var detail = detail(node.nodeId());
+      var versions = detail.versions();
+      var latestVersion = versions.isEmpty() ? null : versions.get(0);
+
+      if (latestVersion != null && (latestVersion.sourceUrl() == null || latestVersion.sourceUrl().isBlank())) {
+        findings.add(new AdminKnowledgeDtos.InspectionFinding("NO_SOURCE", node.nodeId(), node.title(), "Latest version has no source URL. Add a reference to the original evidence."));
+      }
+      if (latestVersion != null && latestVersion.confidence() != null && latestVersion.confidence().doubleValue() < 0.7) {
+        findings.add(new AdminKnowledgeDtos.InspectionFinding("LOW_CONFIDENCE", node.nodeId(), node.title(), "Confidence is below 0.7 (current: " + latestVersion.confidence() + "). Review and update with stronger evidence."));
+      }
+      if ("DRAFT".equals(node.status()) && node.updateTime() != null && node.updateTime().isBefore(LocalDateTime.now().minusDays(7))) {
+        findings.add(new AdminKnowledgeDtos.InspectionFinding("STALE_DRAFT", node.nodeId(), node.title(), "Draft has not been updated in over 7 days. Consider submitting for review or discarding."));
+      }
+
+      boolean hasConflict = false;
+      for (int i = 0; i < versions.size() && !hasConflict; i++) {
+        for (int j = i + 1; j < versions.size() && !hasConflict; j++) {
+          if ("APPROVED".equals(versions.get(i).reviewStatus()) && "APPROVED".equals(versions.get(j).reviewStatus())) {
+            findings.add(new AdminKnowledgeDtos.InspectionFinding("DUPLICATE_APPROVED", node.nodeId(), node.title(), "Multiple approved versions exist (V" + versions.get(j).versionNumber() + " and V" + versions.get(i).versionNumber() + "). Consider publishing one and archiving the other."));
+            hasConflict = true;
+          }
+        }
+      }
+    }
+
+    for (var finding : findings) {
+      if ("STALE_DRAFT".equals(finding.type()) || "DUPLICATE_APPROVED".equals(finding.type())) {
+        critical++;
+      } else {
+        warning++;
+      }
+    }
+
+    return new AdminKnowledgeDtos.InspectionReport(findings, nodes.size(), nodes.size() - warning - critical, warning, critical);
   }
 
   private long createNode(KnowledgeDraftRequest request, String actor) {
-    KeyHolder keyHolder = new GeneratedKeyHolder();
-    jdbcTemplate.update(connection -> {
-      PreparedStatement ps = connection.prepareStatement("""
-          insert into admin_knowledge_nodes
-            (title, slug, industry_id, region_id, link_id, status, source_id, weight)
-          values (?, ?, ?, ?, ?, 'DRAFT', 'admin-knowledge', 1.0000)
-          """, Statement.RETURN_GENERATED_KEYS);
-      ps.setString(1, blankToDefault(request.title(), "Untitled node"));
-      ps.setString(2, normalizedSlug(request));
-      ps.setString(3, blankToDefault(request.industryId(), "general"));
-      ps.setString(4, blankToDefault(request.regionId(), "cn-default"));
-      ps.setString(5, blankToDefault(request.linkId(), "general"));
-      return ps;
-    }, keyHolder);
-    long nodeId = generatedId(keyHolder);
-    writeAudit(
-        actor,
-        "ADMIN_KNOWLEDGE_CREATE_NODE",
-        "knowledge_node",
-        String.valueOf(nodeId),
-        "SUCCESS",
-        blankToDefault(request.regionId(), "cn-default"),
-        blankToDefault(request.industryId(), "general"));
+    Map<String, Object> values = new LinkedHashMap<>();
+    values.put("title", blankToDefault(request.title(), "Untitled node"));
+    values.put("slug", normalizedSlug(request));
+    values.put("industryId", blankToDefault(request.industryId(), "general"));
+    values.put("regionId", blankToDefault(request.regionId(), "cn-default"));
+    values.put("linkId", blankToDefault(request.linkId(), "general"));
+    mapper.insertNode(values);
+    long nodeId = longValue(values.get("id"));
+    writeAudit(actor, "ADMIN_KNOWLEDGE_CREATE_NODE", "knowledge_node", String.valueOf(nodeId), "SUCCESS", blankToDefault(request.regionId(), "cn-default"), blankToDefault(request.industryId(), "general"));
     return nodeId;
-  }
-
-  private int nextVersionNumber(long nodeId) {
-    Integer version = jdbcTemplate.queryForObject("""
-        select coalesce(max(version_number), 0) + 1
-          from admin_knowledge_versions
-         where node_id = ?
-        """, Integer.class, nodeId);
-    return version == null ? 1 : version;
   }
 
   private KnowledgeVersion requireVersion(long nodeId, long versionId) {
@@ -304,64 +225,40 @@ public class AdminKnowledgeStore {
   }
 
   private KnowledgeVersion findVersionById(long versionId) {
-    return jdbcTemplate.query("""
-        select id, node_id, version_number, title, summary, content, source_url, review_status,
-               author, reviewer, review_notes, change_notes, confidence, created_by_action, create_time, update_time
-          from admin_knowledge_versions
-         where id = ?
-        """, versionMapper(), versionId).stream()
-        .findFirst()
-        .orElseThrow(() -> new IllegalArgumentException("knowledge version not found"));
+    return toVersion(requireMap(mapper.findVersion(versionId), "knowledge version not found"));
   }
 
   private void syncPublishedVersion(KnowledgeNodeDetail node, KnowledgeVersion version) {
-    Long existingId = jdbcTemplate.query("""
-        select id
-          from knowledge_items
-         where source_id = ?
-        """, (rs, rowNum) -> rs.getLong("id"), "admin-node-" + node.nodeId()).stream().findFirst().orElse(null);
+    KnowledgeItem existing = knowledgeMapper.selectOne(new LambdaQueryWrapper<KnowledgeItem>()
+        .eq(KnowledgeItem::getSourceId, "admin-node-" + node.nodeId())
+        .last("limit 1"));
 
-    if (existingId == null) {
-      jdbcTemplate.update("""
-          insert into knowledge_items
-            (title, content, source_url, confidence, link_id, region_id, industry_id, source_id, weight)
-          values (?, ?, ?, ?, ?, ?, ?, ?, ?)
-          """,
-          version.title(),
-          version.content(),
-          version.sourceUrl(),
-          version.confidence(),
-          node.linkId(),
-          node.regionId(),
-          node.industryId(),
-          "admin-node-" + node.nodeId(),
-          version.confidence());
+    if (existing == null) {
+      KnowledgeItem item = new KnowledgeItem();
+      item.setTitle(version.title());
+      item.setContent(version.content());
+      item.setSourceUrl(version.sourceUrl());
+      item.setConfidence(version.confidence() == null ? null : version.confidence().doubleValue());
+      item.setLinkId(node.linkId());
+      item.setRegionId(node.regionId());
+      item.setIndustryId(node.industryId());
+      item.setSourceId("admin-node-" + node.nodeId());
+      item.setWeight(version.confidence() == null ? null : version.confidence().doubleValue());
+      knowledgeMapper.insert(item);
     } else {
-      jdbcTemplate.update("""
-          update knowledge_items
-             set title = ?, content = ?, source_url = ?, confidence = ?, link_id = ?, region_id = ?, industry_id = ?,
-                 weight = ?, update_time = current_timestamp
-           where id = ?
-          """,
-          version.title(),
-          version.content(),
-          version.sourceUrl(),
-          version.confidence(),
-          node.linkId(),
-          node.regionId(),
-          node.industryId(),
-          version.confidence(),
-          existingId);
+      knowledgeMapper.update(null, new LambdaUpdateWrapper<KnowledgeItem>()
+          .eq(KnowledgeItem::getId, existing.getId())
+          .set(KnowledgeItem::getTitle, version.title())
+          .set(KnowledgeItem::getContent, version.content())
+          .set(KnowledgeItem::getSourceUrl, version.sourceUrl())
+          .set(KnowledgeItem::getConfidence, version.confidence() == null ? null : version.confidence().doubleValue())
+          .set(KnowledgeItem::getLinkId, node.linkId())
+          .set(KnowledgeItem::getRegionId, node.regionId())
+          .set(KnowledgeItem::getIndustryId, node.industryId())
+          .set(KnowledgeItem::getWeight, version.confidence() == null ? null : version.confidence().doubleValue()));
     }
   }
 
-  /**
-   * Sync a published/rollback knowledge version to the AI worker's Qdrant
-   * vector store so it is available for RAG search during diagnosis.
-   *
-   * <p>Failures are logged but do not block the publish flow — the MySQL
-   * knowledge_items table remains the authoritative source.
-   */
   private void syncToQdrant(long nodeId, KnowledgeVersion version, KnowledgeNodeDetail node) {
     Map<String, Object> item = new LinkedHashMap<>();
     item.put("id", "admin-node-" + nodeId);
@@ -379,66 +276,130 @@ public class AdminKnowledgeStore {
   }
 
   private void writeAudit(String actor, String action, String targetType, String targetId, String result, String regionId, String industryId) {
-    jdbcTemplate.update("""
-        insert into audit_logs (actor, action, target_type, target_id, result, region_id, industry_id)
-        values (?, ?, ?, ?, ?, ?, ?)
-        """, actor, action, targetType, targetId, result, regionId, industryId);
+    mapper.insertAuditLog(Map.of(
+        "actor", actor,
+        "action", action,
+        "targetType", targetType,
+        "targetId", targetId,
+        "result", result,
+        "regionId", regionId,
+        "industryId", industryId));
   }
 
-  private RowMapper<KnowledgeTreeNode> nodeMapper() {
-    return (rs, rowNum) -> new KnowledgeTreeNode(
-        rs.getLong("id"),
-        rs.getString("title"),
-        rs.getString("slug"),
-        rs.getString("industry_id"),
-        rs.getString("region_id"),
-        rs.getString("link_id"),
-        rs.getString("status"),
-        (Long) rs.getObject("published_version_id"),
-        rs.getInt("version_count"),
-        timestamp(rs.getTimestamp("update_time")));
+  private KnowledgeTreeNode toNode(Map<String, Object> row) {
+    return new KnowledgeTreeNode(
+        longValue(row, "nodeId"),
+        stringValue(row, "title"),
+        stringValue(row, "slug"),
+        stringValue(row, "industryId"),
+        stringValue(row, "regionId"),
+        stringValue(row, "linkId"),
+        stringValue(row, "status"),
+        nullableLong(row, "publishedVersionId"),
+        intValue(lookup(row, "versionCount"), 0),
+        timeValue(row, "updateTime"));
   }
 
-  private RowMapper<KnowledgeVersion> versionMapper() {
-    return (rs, rowNum) -> new KnowledgeVersion(
-        rs.getLong("id"),
-        rs.getLong("node_id"),
-        rs.getInt("version_number"),
-        rs.getString("title"),
-        rs.getString("summary"),
-        rs.getString("content"),
-        rs.getString("source_url"),
-        rs.getString("review_status"),
-        rs.getString("author"),
-        rs.getString("reviewer"),
-        rs.getString("review_notes"),
-        rs.getString("change_notes"),
-        rs.getBigDecimal("confidence"),
-        rs.getString("created_by_action"),
-        timestamp(rs.getTimestamp("create_time")),
-        timestamp(rs.getTimestamp("update_time")));
+  private KnowledgeVersion toVersion(Map<String, Object> row) {
+    return new KnowledgeVersion(
+        longValue(row, "versionId"),
+        longValue(row, "nodeId"),
+        intValue(lookup(row, "versionNumber"), 0),
+        stringValue(row, "title"),
+        stringValue(row, "summary"),
+        stringValue(row, "content"),
+        stringValue(row, "sourceUrl"),
+        stringValue(row, "reviewStatus"),
+        stringValue(row, "author"),
+        stringValue(row, "reviewer"),
+        stringValue(row, "reviewNotes"),
+        stringValue(row, "changeNotes"),
+        decimalValue(lookup(row, "confidence")),
+        stringValue(row, "createdByAction"),
+        timeValue(row, "createTime"),
+        timeValue(row, "updateTime"));
   }
 
-  private RowMapper<KnowledgePublication> publicationMapper() {
-    return (rs, rowNum) -> new KnowledgePublication(
-        rs.getLong("id"),
-        rs.getLong("node_id"),
-        rs.getLong("version_id"),
-        rs.getString("action"),
-        rs.getString("actor"),
-        rs.getString("notes"),
-        timestamp(rs.getTimestamp("create_time")));
+  private KnowledgePublication toPublication(Map<String, Object> row) {
+    return new KnowledgePublication(
+        longValue(row, "publicationId"),
+        longValue(row, "nodeId"),
+        longValue(row, "versionId"),
+        stringValue(row, "action"),
+        stringValue(row, "actor"),
+        stringValue(row, "notes"),
+        timeValue(row, "createTime"));
   }
 
-  private LocalDateTime timestamp(Timestamp timestamp) {
-    return timestamp == null ? null : timestamp.toLocalDateTime();
-  }
-
-  private long generatedId(KeyHolder keyHolder) {
-    if (keyHolder.getKeys() != null && keyHolder.getKeys().get("id") instanceof Number id) {
-      return id.longValue();
+  private Map<String, Object> requireMap(Map<String, Object> row, String message) {
+    if (row == null || row.isEmpty()) {
+      throw new IllegalArgumentException(message);
     }
-    return keyHolder.getKey().longValue();
+    return row;
+  }
+
+  private Object lookup(Map<String, Object> row, String key) {
+    if (row.containsKey(key)) {
+      return row.get(key);
+    }
+    for (Map.Entry<String, Object> entry : row.entrySet()) {
+      if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(key)) {
+        return entry.getValue();
+      }
+    }
+    return null;
+  }
+
+  private long longValue(Map<String, Object> row, String key) {
+    Object value = lookup(row, key);
+    return value instanceof Number number ? number.longValue() : 0L;
+  }
+
+  private long longValue(Object value) {
+    return value instanceof Number number ? number.longValue() : 0L;
+  }
+
+  private Long nullableLong(Map<String, Object> row, String key) {
+    Object value = lookup(row, key);
+    return value instanceof Number number ? number.longValue() : null;
+  }
+
+  private int intValue(Object value, int fallback) {
+    return value instanceof Number number ? number.intValue() : fallback;
+  }
+
+  private BigDecimal decimalValue(Object value) {
+    if (value == null) {
+      return null;
+    }
+    if (value instanceof BigDecimal decimal) {
+      return decimal;
+    }
+    try {
+      return new BigDecimal(String.valueOf(value));
+    } catch (NumberFormatException exception) {
+      return null;
+    }
+  }
+
+  private LocalDateTime timeValue(Map<String, Object> row, String key) {
+    Object value = lookup(row, key);
+    return value instanceof LocalDateTime time ? time : null;
+  }
+
+  private String stringValue(Map<String, Object> row, String key) {
+    Object value = lookup(row, key);
+    if (value == null) {
+      return null;
+    }
+    if (value instanceof Clob clob) {
+      try {
+        return clob.getSubString(1, (int) clob.length());
+      } catch (SQLException exception) {
+        throw new IllegalArgumentException("unable to read clob value", exception);
+      }
+    }
+    return String.valueOf(value);
   }
 
   private String normalizedSlug(KnowledgeDraftRequest request) {
@@ -453,64 +414,5 @@ public class AdminKnowledgeStore {
 
   private String blankToDefault(String value, String fallback) {
     return StringUtils.hasText(value) ? value : fallback;
-  }
-
-  AdminKnowledgeDtos.InspectionReport inspect() {
-    var nodes = listNodes();
-    var findings = new java.util.ArrayList<AdminKnowledgeDtos.InspectionFinding>();
-    int warning = 0;
-    int critical = 0;
-
-    for (var node : nodes) {
-      var detail = detail(node.nodeId());
-      var versions = detail.versions();
-      var latestVersion = versions.isEmpty() ? null : versions.get(0);
-
-      if (latestVersion != null && (latestVersion.sourceUrl() == null || latestVersion.sourceUrl().isBlank())) {
-        findings.add(new AdminKnowledgeDtos.InspectionFinding(
-            "NO_SOURCE", node.nodeId(), node.title(),
-            "Latest version has no source URL. Add a reference to the original evidence."));
-      }
-
-      if (latestVersion != null && latestVersion.confidence() != null && latestVersion.confidence().doubleValue() < 0.7) {
-        findings.add(new AdminKnowledgeDtos.InspectionFinding(
-            "LOW_CONFIDENCE", node.nodeId(), node.title(),
-            "Confidence is below 0.7 (current: " + latestVersion.confidence() + "). Review and update with stronger evidence."));
-      }
-
-      if ("DRAFT".equals(node.status()) && node.updateTime() != null &&
-          node.updateTime().isBefore(LocalDateTime.now().minusDays(7))) {
-        findings.add(new AdminKnowledgeDtos.InspectionFinding(
-            "STALE_DRAFT", node.nodeId(), node.title(),
-            "Draft has not been updated in over 7 days. Consider submitting for review or discarding."));
-      }
-
-      boolean hasConflict = false;
-      for (int i = 0; i < versions.size() && !hasConflict; i++) {
-        for (int j = i + 1; j < versions.size() && !hasConflict; j++) {
-          if ("APPROVED".equals(versions.get(i).reviewStatus()) &&
-              "APPROVED".equals(versions.get(j).reviewStatus())) {
-            findings.add(new AdminKnowledgeDtos.InspectionFinding(
-                "DUPLICATE_APPROVED", node.nodeId(), node.title(),
-                "Multiple approved versions exist (V" + versions.get(j).versionNumber() +
-                " and V" + versions.get(i).versionNumber() +
-                "). Consider publishing one and archiving the other."));
-            hasConflict = true;
-          }
-        }
-      }
-    }
-
-    for (var finding : findings) {
-      if ("STALE_DRAFT".equals(finding.type()) || "DUPLICATE_APPROVED".equals(finding.type())) {
-        critical++;
-      } else {
-        warning++;
-      }
-    }
-
-    return new AdminKnowledgeDtos.InspectionReport(
-        findings, nodes.size(),
-        nodes.size() - warning - critical, warning, critical);
   }
 }
