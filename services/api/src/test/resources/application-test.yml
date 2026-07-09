@@ -1,14 +1,18 @@
 spring:
-  datasource:
-    url: jdbc:h2:mem:bizsage_test;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
-    username: sa
-    password:
+  flyway:
+    enabled: false
   sql:
     init:
       mode: always
-      schema-locations: classpath:schema-test.sql
+      schema-locations:
+        - classpath:db/migration/h2/V1__baseline.sql
+        - classpath:db/migration/h2/V2__admin_schema_and_seed.sql
 
 bizsage:
+  jwt:
+    secret: test-jwt-secret-0123456789abcdef
+  privacy:
+    key: 12345678901234567890123456789012
   admin:
     collection:
       scheduler-enabled: false

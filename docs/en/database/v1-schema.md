@@ -1,6 +1,9 @@
 # BizSage Database Design
 
-The baseline migration lives at `infra/mysql/init/001_v1_baseline.sql`.
+The manual baseline initialization script lives at `infra/mysql/init/001_v1_baseline.sql`.
+After the baseline script is executed, the API service uses Flyway incremental
+migrations from `services/api/src/main/resources/db/migration/mysql/` to validate
+and upgrade the schema on startup.
 
 ## Core Tables
 
@@ -30,9 +33,9 @@ Business tables include:
 - `region_id`
 - `industry_id`
 
-## V1/V2 Notes
+## Migration Notes
 
-- Runtime API currently uses in-memory stores for local MVP and V2 gray-release validation.
-- The MySQL schema now includes V2 persistence targets for the next repository pass.
-- Sensitive values are encrypted by the API `PrivacyService` before designed persistence.
+- A new MySQL database must run `001_v1_baseline.sql` manually before the API starts.
+- Flyway then records the baseline and applies newer schema/data upgrades automatically on service startup.
+- Sensitive values are encrypted by the API `PrivacyService` before persistence.
 - Full cold storage, full lineage, dynamic weights, orders, invoices, and member center are deferred beyond V2.

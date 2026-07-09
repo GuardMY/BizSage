@@ -33,7 +33,6 @@ public class SlaScheduler {
     this.jdbc = jdbc;
     this.store = store;
     this.retentionDays = retentionDays;
-    store.ensureSchema();
   }
 
   /** Aggregate the previous minute's data and insert a new data point. */

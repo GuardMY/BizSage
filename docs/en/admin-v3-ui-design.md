@@ -206,11 +206,11 @@ Each phase must update bilingual documentation and change logs, then add role pe
 
 ## 11. Current Admin-V3-1 / Admin-V3-2 Implementation Status
 
-The first complete vertical loop has entered implementation. Scope includes real database tables, startup auto-migration, `services/api` admin endpoints, the `apps/web` `/admin` console, and source-level regression tests.
+The first complete vertical loop has entered implementation. Scope includes real database tables, the manual MySQL baseline plus Flyway startup upgrades, `services/api` admin endpoints, the `apps/web` `/admin` console, and source-level regression tests.
 
 Implemented backend capabilities include dashboard aggregation, alert listing and acknowledge/claim/close actions, audit-log search, intelligence review and verdicts, ticket listing and transitions, and human-intelligence entry and review. Approved human intelligence is promoted into the main intelligence records; admin write actions create audit logs.
 
-Implemented tables include `admin_intelligence_reviews`, `admin_tickets`, and `admin_human_intelligence`, while reusing the existing `alert_events`, `audit_logs`, and `intelligence` tables. Table definitions are included in the MySQL initialization script and are also created by API startup migration for existing databases.
+Implemented tables include `admin_intelligence_reviews`, `admin_tickets`, and `admin_human_intelligence`, while reusing the existing `alert_events`, `audit_logs`, and `intelligence` tables. Table definitions are included in the MySQL initialization script, and existing databases are upgraded on startup through Flyway incremental migrations after the manual baseline has been applied.
 
 Implemented frontend capabilities include the standalone `/admin` route, admin sign-in and role gate, control center, alert center, audit logs, intelligence review, ticket ledger, and human-intelligence entry/review. The page calls `/api/admin/**` directly and does not use frontend mock data.
 
@@ -219,11 +219,11 @@ Admin-V3-1 enhancements (2026-07): On top of the base framework, the following w
 Verification note: the current execution environment does not provide `mvn`, `node`, or `npm`, so Maven and Web test commands cannot run here. `AdminV3ApiTest` and Web source regression tests were added and should be run in an environment with the required toolchain.
 ## 12. Current Admin-V3-3 Implementation Status
 
-Admin-V3-3 has now been connected as a real closed loop rather than a mock-only design slice. Scope includes formal knowledge-management tables, startup auto-migration, MySQL bootstrap definitions, `services/api` knowledge workflow endpoints, `/admin` knowledge-management UI, and regression coverage additions.
+Admin-V3-3 has now been connected as a real closed loop rather than a mock-only design slice. Scope includes formal knowledge-management tables, the manual MySQL baseline plus Flyway startup upgrades, `services/api` knowledge workflow endpoints, `/admin` knowledge-management UI, and regression coverage additions.
 
 Implemented backend capabilities include knowledge-node listing, node detail retrieval, draft creation, submit-for-review, second-person approval enforcement, publish, rollback, version diff, publication history, audit-log writes, and synchronization of published knowledge back into the existing `knowledge_items` table for user-side retrieval continuity.
 
-Implemented persistence includes `admin_knowledge_nodes`, `admin_knowledge_versions`, and `admin_knowledge_publications`. These definitions were added to the MySQL initialization script, the H2 test schema, and the API startup migration so existing databases can auto-create the missing tables on boot.
+Implemented persistence includes `admin_knowledge_nodes`, `admin_knowledge_versions`, and `admin_knowledge_publications`. These definitions were added to the MySQL initialization script, the H2 test schema, and Flyway upgrade migrations so existing databases can be aligned on boot after the baseline script is in place.
 
 Implemented frontend capabilities include a dedicated Knowledge workspace inside `/admin` with node navigation, draft editing, version history, compare baseline selection, diff display, review actions, publish actions, rollback actions, and publication log visibility. The page calls the real `/api/admin/knowledge/**` endpoints and does not use frontend mock knowledge data.
 
@@ -235,7 +235,7 @@ Admin-V3-4 has implemented the core collection scheduling engine, including data
 
 Implemented backend capabilities include: data source CRUD (`admin_collection_sources` table), keyword CRUD (`admin_collection_keywords` table, supporting INCLUDE/EXCLUDE match modes), collection job execution (manual trigger and `AdminCollectionScheduler` scheduled runs at a configurable default interval of 15s), circuit breaker (failure_count reaching failure_threshold → circuit_state switches to OPEN → recovers to CLOSED after cooldown_minutes), dead-letter queue (failed jobs written to `dead_letter_records`), keyword filtering (collected records filtered by include/exclude keywords before being persisted to `raw_records`), and `CollectorClient` (supporting HTTP remote mode and embedded fallback mode; embedded mode handles PUBLIC_PAGE / MOCK_API / FORM source types with HTML parsing and normalized record output).
 
-Implemented persistence includes: `admin_collection_sources`, `admin_collection_keywords`, `admin_collection_job_runs`, while reusing the existing `collection_jobs`, `dead_letter_records`, and `raw_records` tables. These table definitions were added to the MySQL initialization script, the H2 test schema, and the API startup migration logic.
+Implemented persistence includes: `admin_collection_sources`, `admin_collection_keywords`, `admin_collection_job_runs`, while reusing the existing `collection_jobs`, `dead_letter_records`, and `raw_records` tables. These table definitions were added to the MySQL initialization script, the H2 test schema, and Flyway upgrade logic.
 
 Implemented frontend capabilities include: a dedicated Collection workspace (`collection-workspace.tsx`) inside `/admin` with a three-column layout — source list on the left, source configuration editor (with keyword sub-panel) in the center, and run history plus dead-letter queue on the right. The workspace supports creating/editing data sources, creating/editing keywords, manual collection run triggering, and viewing recent run records and dead-letter records. The page calls the real `/api/admin/collection/**` endpoints.
 

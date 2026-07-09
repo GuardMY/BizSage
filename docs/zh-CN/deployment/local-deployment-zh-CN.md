@@ -37,6 +37,14 @@ infra\scripts\health-check.ps1
 
 ### API 服务
 
+首次启动 API 前，需要先初始化 MySQL 基线结构：
+
+```powershell
+mysql -h 127.0.0.1 -P 13306 -u bizsage -pbizsage bizsage < infra/mysql/init/001_v1_baseline.sql
+```
+
+基线准备完成后，API 启动时会由 Flyway 自动校验并执行后续增量迁移。
+
 ```powershell
 cd services\api
 mvn spring-boot:run
@@ -79,11 +87,11 @@ Web 应用监听 `http://localhost:3000`，并且只能直接调用 API 服务�
 
 ## 默认账号
 
-V1 基线迁移会创建三个开发账号。它们使用相同的本地测试密码哈希：
+V1 基线迁移会创建四个开发账号。它们使用相同的本地测试密码哈希：
 
 - `admin`
 - `operator`
 - `user`
+- `seed_paid`
 
 应用级认证会在 API 模块中定义本地可接受的实际密码。
-

@@ -206,11 +206,11 @@ P0 告警处置:
 
 ## 11. Admin-V3-1 / Admin-V3-2 当前实现状态
 
-首批完整闭环已进入实现，范围包括真实数据库表、启动自动补表、`services/api` 后台接口、`apps/web` `/admin` 管理页面和源码级回归测试。
+首批完整闭环已进入实现，范围包括真实数据库表、手工 MySQL 基线加 Flyway 启动升级、`services/api` 后台接口、`apps/web` `/admin` 管理页面和源码级回归测试。
 
 已实现的后端能力包括：总控台聚合、告警列表与确认/认领/关闭、审计日志检索、情报复核与裁决、工单列表与流转、人工情报录入与审核。人工情报审核通过后会同步提升为正式情报记录；后台写操作会写入审计日志。
 
-已实现的数据表包括：`admin_intelligence_reviews`、`admin_tickets`、`admin_human_intelligence`，并复用既有 `alert_events`、`audit_logs`、`intelligence` 表。表结构已进入 MySQL 初始化脚本，并由 API 启动迁移在既有库中自动补表。
+已实现的数据表包括：`admin_intelligence_reviews`、`admin_tickets`、`admin_human_intelligence`，并复用既有 `alert_events`、`audit_logs`、`intelligence` 表。表结构已进入 MySQL 初始化脚本；在先执行基线脚本的前提下，既有库会在 API 启动时通过 Flyway 增量迁移完成升级。
 
 已实现的前端能力包括：独立 `/admin` 路由、管理员登录与角色门禁、总控台、告警中心、日志审计、情报复核、台账工单、人工情报录入/审核。当前页面直接对接 `/api/admin/**`，不使用前端 mock 数据。
 
@@ -219,11 +219,11 @@ Admin-V3-1 增强（2026-07）：在基础框架之上补齐了导航分组（Ov
 验证说明：当前执行环境未提供 `mvn`、`node` 或 `npm` 可执行文件，因此本次无法在该环境运行 Maven 与 Web 测试命令；已补充 `AdminV3ApiTest` 和 Web 源码回归测试，待具备工具链的环境运行。
 ## 12. Admin-V3-3 当前实现状态
 
-Admin-V3-3 现已接入真实闭环，不再只是前端占位的设计切片。当前范围包括正式的知识管理数据表、启动时自动补表、MySQL 初始化定义、`services/api` 知识流程接口、`/admin` 知识管理界面，以及新增的回归覆盖。
+Admin-V3-3 现已接入真实闭环，不再只是前端占位的设计切片。当前范围包括正式的知识管理数据表、手工 MySQL 基线加 Flyway 启动升级、`services/api` 知识流程接口、`/admin` 知识管理界面，以及新增的回归覆盖。
 
 已实现的后端能力包括：知识节点列表、节点详情读取、草稿创建、提交复核、第二人审批约束、发布、回滚、版本对比、发布历史、审计日志写入，以及将已发布知识同步回既有 `knowledge_items` 表，以保证用户侧检索链路继续使用真实数据。
 
-已实现的持久化结构包括：`admin_knowledge_nodes`、`admin_knowledge_versions`、`admin_knowledge_publications`。这些表结构已经同时加入 MySQL 初始化脚本、H2 测试 schema 和 API 启动迁移逻辑，既有数据库在启动时也能自动补齐缺失表。
+已实现的持久化结构包括：`admin_knowledge_nodes`、`admin_knowledge_versions`、`admin_knowledge_publications`。这些表结构已经同时加入 MySQL 初始化脚本、H2 测试 schema 和 Flyway 升级脚本，在先执行基线脚本后，既有数据库可在启动时自动对齐。
 
 已实现的前端能力包括：`/admin` 下独立的 Knowledge 工作区，支持节点导航、草稿编辑、版本历史、对比基线选择、差异展示、复核动作、发布动作、回滚动作和发布日志查看。页面直接调用真实 `/api/admin/knowledge/**` 接口，不使用前端 mock 知识数据。
 
@@ -235,7 +235,7 @@ Admin-V3-4 已实现核心采集调度引擎，包括数据源管理、关键词
 
 已实现的后端能力包括：数据源 CRUD（`admin_collection_sources` 表）、关键词 CRUD（`admin_collection_keywords` 表，支持 INCLUDE/EXCLUDE 两种匹配模式）、采集任务执行（支持手动触发和 `AdminCollectionScheduler` 定时调度，默认间隔 15s，可配置）、熔断器（failure_count 达到 failure_threshold → circuit_state 切换为 OPEN → cooldown_minutes 后恢复 CLOSED）、死信队列（失败任务写入 `dead_letter_records` 表）、关键词过滤（采集结果按 include/exclude 关键词匹配后入库 `raw_records`）、以及 `CollectorClient` 采集客户端（支持 HTTP 远程模式和 embedded 内嵌模式，内嵌模式支持 PUBLIC_PAGE / MOCK_API / FORM 三种源类型的 HTML 解析和标准化输出）。
 
-已实现的持久化结构包括：`admin_collection_sources`、`admin_collection_keywords`、`admin_collection_job_runs`，并复用既有 `collection_jobs`、`dead_letter_records`、`raw_records` 表。这些表结构已经同时加入 MySQL 初始化脚本、H2 测试 schema 和 API 启动迁移逻辑。
+已实现的持久化结构包括：`admin_collection_sources`、`admin_collection_keywords`、`admin_collection_job_runs`，并复用既有 `collection_jobs`、`dead_letter_records`、`raw_records` 表。这些表结构已经同时加入 MySQL 初始化脚本、H2 测试 schema 和 Flyway 升级逻辑。
 
 已实现的前端能力包括：`/admin` 下独立的 Collection 工作区（`collection-workspace.tsx`），采用三栏布局——左侧源列表、中间源配置编辑器（含关键词子面板）、右侧运行日志和死信队列。支持新建/编辑数据源、新建/编辑关键词、手动触发采集运行、查看最近运行记录和死信记录。页面直接调用真实 `/api/admin/collection/**` 接口。
 

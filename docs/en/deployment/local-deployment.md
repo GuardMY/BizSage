@@ -40,6 +40,15 @@ started.
 
 ### API Service
 
+Initialize the MySQL schema before the first API start:
+
+```powershell
+mysql -h 127.0.0.1 -P 13306 -u bizsage -pbizsage bizsage < infra/mysql/init/001_v1_baseline.sql
+```
+
+After the baseline is present, Flyway validates and applies later incremental
+migrations automatically when the API boots.
+
 ```powershell
 cd services\api
 mvn spring-boot:run
@@ -83,13 +92,13 @@ service directly.
 
 ## Default Accounts
 
-The V1 baseline migration creates three development accounts. All use the same
+The V1 baseline migration creates four development accounts. All use the same
 development password hash intended for local testing only:
 
 - `admin`
 - `operator`
 - `user`
+- `seed_paid`
 
 Application-level authentication defines the actual accepted local password in
 the API module.
-

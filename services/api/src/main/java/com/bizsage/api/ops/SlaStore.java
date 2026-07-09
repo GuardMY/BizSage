@@ -22,24 +22,6 @@ public class SlaStore {
     this.jdbc = jdbc;
   }
 
-  /** Ensure the sla_data_points table exists (idempotent). */
-  public void ensureSchema() {
-    jdbc.execute("""
-        create table if not exists sla_data_points (
-          id bigint primary key auto_increment,
-          window_start timestamp not null,
-          window_end timestamp not null,
-          total_requests int not null default 0,
-          error_requests int not null default 0,
-          latency_p50_ms double null,
-          latency_p95_ms double null,
-          latency_p99_ms double null,
-          uptime_flag tinyint not null default 1,
-          create_time timestamp not null default current_timestamp
-        )
-        """);
-  }
-
   /** Insert an aggregated data point. */
   public void insert(SlaDataPoint point) {
     jdbc.update("""

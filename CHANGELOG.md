@@ -2,6 +2,23 @@
 
 ## 2026-07-09
 
+### Flyway Database Migration Adoption
+
+- Change type: functional repair.
+- Affected modules: `services/api`, `infra/mysql`, `docs/en`, `docs/zh-CN`, and both change logs.
+- Main changes:
+  - Added Flyway to the API service and configured startup validation/incremental migration execution from `services/api/src/main/resources/db/migration/mysql/`.
+  - Removed the runtime `AdminSchemaMigration` and `ConversationSchemaMigration` code paths plus SLA runtime table creation, so schema changes now come from SQL scripts instead of Java bean initialization.
+  - Expanded `infra/mysql/init/001_v1_baseline.sql` to include the latest admin risk-rule, collection-compliance, SLA, and admin seed data definitions, and added a matching Flyway incremental script for upgrades from the manual baseline.
+  - Repaired malformed `knowledge_items` seed SQL in the MySQL baseline so a brand-new database can import `001_v1_baseline.sql` without string-literal syntax failures before Flyway takes over.
+  - Replaced the test schema bootstrap with scripted H2 migration resources to keep test fixtures aligned with the production schema shape while preserving the local `password` login fixtures used by API tests.
+  - Updated paired English and Chinese database, deployment, and admin design documents to describe the new workflow: run the MySQL baseline manually first, then let Flyway validate and upgrade on service startup.
+- Verification results:
+  - Verified the API module still compiles after removing the runtime schema-migration classes and introducing Flyway dependencies.
+  - Planned targeted Maven verification for auth/admin/governance flows against the refreshed H2 bootstrap and for startup migration behavior against the new Flyway configuration.
+- Unfinished items:
+  - Execute the targeted Maven test suite and a real MySQL startup drill to confirm the manual-baseline-plus-Flyway path end to end.
+
 ### Gray-Release YAML Binding Repair
 
 - Change type: functional repair.

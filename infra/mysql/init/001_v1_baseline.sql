@@ -167,6 +167,7 @@ CREATE TABLE IF NOT EXISTS false_information_ledger (
   original_intelligence_id BIGINT NULL,
   title VARCHAR(255) NOT NULL,
   content TEXT NOT NULL,
+  content_hash VARCHAR(64) NULL,
   url VARCHAR(1024) NULL,
   conflict_reason VARCHAR(64) NOT NULL,
   matched_rumor_keyword VARCHAR(255) NULL,
@@ -181,8 +182,6 @@ CREATE TABLE IF NOT EXISTS false_information_ledger (
   INDEX idx_false_ledger_scope (industry_id, region_id),
   INDEX idx_false_ledger_hash (content_hash)
 );
-
-ALTER TABLE false_information_ledger ADD COLUMN content_hash VARCHAR(64) NULL AFTER content;
 
 CREATE TABLE IF NOT EXISTS conflict_resolutions (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -385,6 +384,8 @@ CREATE TABLE IF NOT EXISTS admin_collection_sources (
   link_id VARCHAR(64) NOT NULL DEFAULT 'collection',
   source_id VARCHAR(64) NOT NULL DEFAULT 'admin-collector',
   payload_json JSON NULL,
+  compliance_notes JSON NULL,
+  proxy_config JSON NULL,
   next_run_time DATETIME NULL,
   last_run_time DATETIME NULL,
   last_status VARCHAR(32) NOT NULL DEFAULT 'IDLE',
@@ -423,6 +424,36 @@ CREATE TABLE IF NOT EXISTS admin_collection_job_runs (
   INDEX idx_admin_collection_run_source (source_config_id, status, start_time),
   INDEX idx_admin_collection_run_job (job_id)
 );
+
+CREATE TABLE IF NOT EXISTS admin_risk_rules (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  rule_type VARCHAR(64) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  description TEXT NULL,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  threshold_value DECIMAL(8,4) NULL,
+  scope_json JSON NULL,
+  risk_level VARCHAR(16) NOT NULL DEFAULT 'MEDIUM',
+  change_mode VARCHAR(16) NOT NULL DEFAULT 'IMMEDIATE',
+  version INT NOT NULL DEFAULT 1,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS sla_data_points (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  window_start DATETIME NOT NULL,
+  window_end DATETIME NOT NULL,
+  total_requests INT NOT NULL DEFAULT 0,
+  error_requests INT NOT NULL DEFAULT 0,
+  latency_p50_ms DOUBLE NULL,
+  latency_p95_ms DOUBLE NULL,
+  latency_p99_ms DOUBLE NULL,
+  uptime_flag TINYINT NOT NULL DEFAULT 1,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_sla_window_start (window_start)
+);
+
 CREATE TABLE IF NOT EXISTS report_jobs (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   user_id BIGINT NOT NULL,
@@ -525,20 +556,103 @@ WHERE username = 'seed_paid';
 
 INSERT INTO knowledge_items (title, content, source_url, confidence, link_id, region_id, industry_id, source_id, weight)
 VALUES
-  ('餐饮门店现金流基础诊断', '餐饮门店诊断应优先核对客单价、翻台率、食材损耗率、平台佣金、租金占营收比例和现金回款周期。若缺少经营数据，应提示信息不足并引导补充�?, 'seed://v1/restaurant-cashflow', 0.9, 'sales-payment', 'cn-default', 'general', 'seed-baseline', 1.0),
-  ('实体供应链库存风�?, '库存周转天数、呆滞库存占比和上游账期会共同影响现金流风险。库存积压会压占资金，并倒逼渠道低价清货�?, 'seed://v1/inventory-risk', 0.85, 'warehouse', 'cn-default', 'general', 'seed-baseline', 0.85)
+  ('Restaurant cash-flow baseline diagnosis',
+   'Review average order value, table turnover, food waste rate, platform commission, rent ratio, and receivable cycle before drawing conclusions.',
+   'seed://v1/restaurant-cashflow', 0.9, 'sales-payment', 'cn-default', 'general', 'seed-baseline', 1.0),
+  ('Physical supply-chain inventory risk',
+   'Watch inventory days, slow-moving stock ratio, and supplier payment terms because they combine to amplify cash-flow pressure.',
+   'seed://v1/inventory-risk', 0.85, 'warehouse', 'cn-default', 'general', 'seed-baseline', 0.85)
+ON DUPLICATE KEY UPDATE
+  title = VALUES(title),
+  content = VALUES(content),
+  confidence = VALUES(confidence),
+  weight = VALUES(weight);
+
+INSERT INTO alert_events (alert_level, component, message, status, owner, region_id, industry_id)
+VALUES ('P1', 'collector', 'Crawler success rate dropped below review threshold.', 'OPEN', 'operator', 'cn-default', 'general')
+ON DUPLICATE KEY UPDATE message = VALUES(message);
+
+INSERT INTO intelligence
+  (title, content, url, status, confidence, link_id, region_id, industry_id, source_id, weight, content_hash)
+VALUES
+  ('Regional cash-flow pressure signal',
+   'Multiple local operators report longer account receivable cycles and higher rent pressure.',
+   'seed://admin/intelligence/cashflow',
+   'PENDING',
+   0.6200,
+   'sales-payment',
+   'cn-default',
+   'general',
+   'seed-admin',
+   0.6200,
+   'admin-seed-cashflow')
 ON DUPLICATE KEY UPDATE title = VALUES(title);
 
-UPDATE knowledge_items
-SET
-  title = '餐饮门店现金流基础诊断',
-  content = '餐饮门店诊断应优先核对客单价、翻台率、食材损耗率、平台佣金、租金占营收比例和现金回款周期。若缺少经营数据，应提示信息不足并引导补充�?
-WHERE source_url = 'seed://v1/restaurant-cashflow';
+INSERT INTO admin_intelligence_reviews (intelligence_id, review_status, reason, evidence_json, region_id, industry_id)
+VALUES (1, 'PENDING', 'Needs source and severity review', JSON_ARRAY(), 'cn-default', 'general');
 
-UPDATE knowledge_items
-SET
-  title = '实体供应链库存风�?,
-  content = '库存周转天数、滞销库存占比和上游账期会共同影响现金流风险。库存积压会压占资金，并倒逼渠道低价清货�?
-WHERE source_url = 'seed://v1/inventory-risk';
+INSERT INTO admin_tickets (ticket_type, severity, target_type, target_id, title, description, status, owner, next_action, region_id, industry_id)
+VALUES ('conflict', 'P1', 'intelligence', 1, 'Review old/new intelligence conflict',
+        'A newly collected local signal may conflict with an older baseline rule.', 'NEW', 'operator',
+        'Confirm whether this is short-term fluctuation or permanent rule change.', 'cn-default', 'general');
 
+INSERT INTO admin_human_intelligence (city, industry_id, link_id, content, source_type, collector, event_time, confidence, entitlement, status, region_id)
+VALUES ('Shanghai', 'general', 'sales-payment',
+        'Local store operators report increased supplier prepayment pressure this month.',
+        'local_visit', 'operator', '2026-07', 0.7200, 'PAID', 'PENDING_REVIEW', 'cn-default');
 
+INSERT INTO admin_knowledge_nodes (id, title, slug, industry_id, region_id, link_id, status, published_version_id, source_id, weight)
+VALUES (1, 'Store rent pressure playbook', 'store-rent-pressure-playbook',
+        'general', 'cn-default', 'sales-payment', 'PUBLISHED', 1, 'admin-knowledge', 1.0000);
+
+INSERT INTO admin_knowledge_versions
+  (id, node_id, version_number, title, summary, content, source_url, review_status,
+   author, reviewer, review_notes, change_notes, confidence, created_by_action)
+VALUES
+  (1, 1, 1, 'Store rent pressure playbook',
+   'Baseline guidance for evaluating rising rent pressure against cash-flow tolerance.',
+   'Track rent-to-revenue ratio, landlord payment cadence, and whether temporary promotions are masking structural cost pressure.',
+   'seed://admin/knowledge/rent-pressure',
+   'APPROVED', 'system', 'operator', 'Seed approved', 'Bootstrap baseline', 0.8800, 'SEED');
+
+INSERT INTO admin_knowledge_publications (node_id, version_id, action, actor, notes)
+VALUES (1, 1, 'PUBLISH', 'system', 'Bootstrap publication');
+
+INSERT INTO admin_collection_sources
+  (id, name, source_type, status, interval_minutes, max_retries, failure_threshold, cooldown_minutes,
+   circuit_state, failure_count, region_id, industry_id, link_id, source_id, payload_json, next_run_time, last_status)
+VALUES
+  (1, 'Shanghai rent pressure page', 'PUBLIC_PAGE', 'ENABLED', 60, 1, 3, 30,
+   'CLOSED', 0, 'cn-default', 'general', 'sales-payment', 'admin-collector-public',
+   JSON_OBJECT('url', 'https://example.com/shanghai-rent', 'html', '<html><title>Shanghai Rent Pressure</title><body>Landlords in Shanghai request shorter concession periods and faster payment cycles.</body></html>'),
+   CURRENT_TIMESTAMP, 'IDLE'),
+  (2, 'Supplier prepayment mock API', 'MOCK_API', 'ENABLED', 120, 1, 3, 30,
+   'CLOSED', 0, 'cn-default', 'general', 'supply-chain', 'admin-collector-mock',
+   JSON_OBJECT('items', JSON_ARRAY(JSON_OBJECT('title', 'Supplier prepayment pressure', 'content', 'Several suppliers now request larger advance payments.', 'url', 'https://example.com/mock/prepayment', 'confidence', 0.82, 'weight', 0.82, 'industry_id', 'general', 'region_id', 'cn-default', 'link_id', 'supply-chain'))),
+   CURRENT_TIMESTAMP, 'IDLE');
+
+INSERT INTO admin_collection_keywords (source_config_id, keyword, match_mode, status, notes)
+VALUES
+  (1, 'rent', 'INCLUDE', 'ACTIVE', 'Track rent pressure signals'),
+  (1, 'rumor', 'EXCLUDE', 'ACTIVE', 'Filter rumor-style content'),
+  (2, 'prepayment', 'INCLUDE', 'ACTIVE', 'Focus on supplier prepayment signals');
+
+INSERT INTO knowledge_items (title, content, source_url, confidence, link_id, region_id, industry_id, source_id, weight)
+VALUES
+  ('Store rent pressure playbook',
+   'Track rent-to-revenue ratio, landlord payment cadence, and whether temporary promotions are masking structural cost pressure.',
+   'seed://admin/knowledge/rent-pressure',
+   0.8800, 'sales-payment', 'cn-default', 'general', 'admin-node-1', 0.8800)
+ON DUPLICATE KEY UPDATE title = VALUES(title);
+
+INSERT INTO audit_logs (actor, action, target_type, target_id, result)
+VALUES ('system', 'ADMIN_V3_BOOTSTRAP', 'admin', 'seed', 'SUCCESS');
+
+INSERT INTO admin_risk_rules (rule_type, name, description, enabled, threshold_value, scope_json, risk_level, change_mode)
+VALUES
+  ('rumor_detection', 'Rumor keyword filter', 'Detect and flag content matching rumor patterns.', TRUE, 0.75, JSON_OBJECT('industries', JSON_ARRAY('all'), 'regions', JSON_ARRAY('all')), 'HIGH', 'IMMEDIATE'),
+  ('conflict_judgment', 'New/old conflict detection', 'Flag intelligence that contradicts existing approved records.', TRUE, 0.60, JSON_OBJECT('industries', JSON_ARRAY('all'), 'regions', JSON_ARRAY('all')), 'MEDIUM', 'GRAY'),
+  ('gray_content', 'Gray content sensitivity', 'Suppress borderline content from public APIs.', FALSE, 0.50, JSON_OBJECT('industries', JSON_ARRAY('general'), 'regions', JSON_ARRAY('cn-default')), 'MEDIUM', 'IMMEDIATE'),
+  ('ai_self_check', 'AI output self-check threshold', 'Minimum confidence for AI-generated answers to pass self-check.', TRUE, 0.80, JSON_OBJECT('industries', JSON_ARRAY('all'), 'regions', JSON_ARRAY('all')), 'HIGH', 'IMMEDIATE'),
+  ('api_abuse', 'API rate-limit protection', 'Detect and throttle abusive API request patterns.', TRUE, 0.90, JSON_OBJECT('industries', JSON_ARRAY('all'), 'regions', JSON_ARRAY('all')), 'CRITICAL', 'IMMEDIATE'),
+  ('paid_protection', 'Paid content watermark', 'Ensure paid intelligence is not served to free-tier users.', TRUE, 1.00, JSON_OBJECT('industries', JSON_ARRAY('all'), 'regions', JSON_ARRAY('all')), 'CRITICAL', 'IMMEDIATE');

@@ -2,6 +2,23 @@
 
 ## 2026-07-09
 
+### 引入 Flyway 数据库迁移
+
+- 变更类型：功能修复。
+- 影响模块：`services/api`、`infra/mysql`、`docs/en`、`docs/zh-CN` 和两份变更日志。
+- 主要变更：
+  - 为 API 服务引入 Flyway，并配置从 `services/api/src/main/resources/db/migration/mysql/` 执行启动校验与增量迁移。
+  - 移除了运行期 `AdminSchemaMigration`、`ConversationSchemaMigration` 以及 SLA 运行期建表逻辑，数据库结构变更统一改由 SQL 脚本驱动，不再依赖 Java Bean 初始化。
+  - 扩展 `infra/mysql/init/001_v1_baseline.sql`，补齐当前最新的后台风控规则、采集合规字段、SLA 表以及后台种子数据，并新增与之配套的 Flyway 增量升级脚本，用于从手工基线继续升级。
+  - 修复了 MySQL 基线脚本中 `knowledge_items` 种子数据的损坏 SQL 字面量，确保全新数据库在 Flyway 接管前可以先成功导入 `001_v1_baseline.sql`。
+  - 将测试库初始化改为脚本化 H2 迁移资源，尽量与生产 schema 保持一致，同时保留 API 测试依赖的本地 `password` 登录种子。
+  - 同步更新中英文数据库、部署和管理员后台设计文档，明确新的数据库流程：先手工执行 MySQL 基线脚本，再由 Flyway 在服务启动时校验并升级。
+- 验证结果：
+  - 已确认在移除运行期 schema 迁移类并引入 Flyway 依赖后，API 模块仍可继续编译。
+  - 已规划针对认证、后台、治理流程的 Maven 定向验证，以及基于新 Flyway 配置的启动迁移验证。
+- 未完成事项：
+  - 仍需执行定向 Maven 测试和一次真实 MySQL 启动演练，确认“手工基线 + Flyway 升级”链路端到端可用。
+
 ### 灰度发布 YAML 绑定修复
 
 - 变更类型：功能修复。
