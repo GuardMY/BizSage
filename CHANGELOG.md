@@ -2,6 +2,21 @@
 
 ## 2026-07-09
 
+### Flyway Startup Pause And MySQL Init Baseline
+
+- Change type: deployment configuration change.
+- Affected modules: `services/api`, `infra`, `.env.example`, and both change logs.
+- Main changes:
+  - Changed API Flyway startup migrations to be disabled by default through `BIZSAGE_FLYWAY_ENABLED=false`.
+  - Kept an explicit enable switch by wiring `BIZSAGE_FLYWAY_ENABLED` through both production and all-in-one compose API environments.
+  - Confirmed the MySQL initialization baseline already contains the current runtime schema, including Admin, collection, SLA, risk-rule, and user-memory uniqueness tables/indexes.
+- Verification results:
+  - Used CodeGraph to inspect API startup/configuration paths before editing.
+  - Verified with `mvn -DskipTests clean compile` in `services/api`; compilation succeeded.
+- Unfinished items:
+  - Docker is not installed in the current environment, so compose startup and MySQL initialization still need to be run in a Docker-enabled development environment.
+  - Existing databases still require manual schema alignment before starting with Flyway disabled, because disabled Flyway will not upgrade older schemas automatically.
+
 ### User Memory Flyway V3 Idempotency Fix
 
 - Change type: functional repair.

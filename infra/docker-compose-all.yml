@@ -95,6 +95,7 @@ services:
       DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-bizsage}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
       DB_USERNAME: ${MYSQL_USER:-bizsage}
       DB_PASSWORD: ${MYSQL_PASSWORD}
+      BIZSAGE_FLYWAY_ENABLED: ${BIZSAGE_FLYWAY_ENABLED:-false}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       JWT_SECRET: ${JWT_SECRET}

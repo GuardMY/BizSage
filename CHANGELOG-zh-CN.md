@@ -2,6 +2,21 @@
 
 ## 2026-07-09
 
+### Flyway 启动暂停与 MySQL 初始化基线
+
+- 变更类型：部署配置调整。
+- 影响模块：`services/api`、`infra`、`.env.example` 和两份变更日志。
+- 主要变更：
+  - 将 API 启动阶段的 Flyway 迁移改为通过 `BIZSAGE_FLYWAY_ENABLED=false` 默认停用。
+  - 保留显式启用开关，并在生产 compose 与全量 compose 的 API 环境变量中透传 `BIZSAGE_FLYWAY_ENABLED`。
+  - 确认 MySQL 初始化基线已经包含当前运行版本所需表结构，包括 Admin、采集、SLA、风控规则以及用户记忆唯一键相关表和索引。
+- 验证结果：
+  - 修改前已使用 CodeGraph 查看 API 启动与配置相关路径。
+  - 已在 `services/api` 中执行 `mvn -DskipTests clean compile`；编译通过。
+- 未完成事项：
+  - 当前环境未安装 Docker，因此 compose 启动与 MySQL 初始化仍需在具备 Docker 的开发环境中实际运行验证。
+  - 已存在的旧数据库仍需人工对齐 schema 后再以 Flyway 停用模式启动，因为停用 Flyway 后不会自动升级旧结构。
+
 ### 用户记忆 Flyway V3 幂等性修复
 
 - 变更类型：功能修复。
