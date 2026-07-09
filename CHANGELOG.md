@@ -700,6 +700,21 @@
 
 ## 2026-07-09
 
+### Alert Scheduler Collection Run Table Fix
+
+- Change type: functional bug fix.
+- Affected modules: `services/api` and both change logs.
+- Main changes:
+  - Updated `AlertRuleEngine` to read collector run telemetry from `admin_collection_job_runs` instead of the non-existent legacy table name `collection_job_runs`.
+  - Aligned the collector failure-rate window filter with the actual schema by using `start_time` instead of the unsupported `run_time` column.
+  - Restored scheduled alert evaluation compatibility with the Admin V3 collection telemetry schema already used by the rest of the API.
+- Verification results:
+  - Confirmed the failing scheduler stack trace points to `AlertRuleEngine.evaluateCollectorFailureRate`.
+  - Verified `admin_collection_job_runs` is the table created in both MySQL and H2 baseline schemas and the table used by the admin collection stores.
+  - Re-checked the API source tree after the fix to confirm the alert rule no longer references `collection_job_runs`.
+- Unfinished items:
+  - The scheduler should still be exercised against the target runtime database to confirm the alert cycle completes without SQL exceptions end to end.
+
 ### MySQL V2 Admin Migration Compatibility Fix
 
 - Change type: functional bug fix.

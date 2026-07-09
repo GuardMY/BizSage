@@ -78,13 +78,13 @@ public class AlertRuleEngine {
   void evaluateCollectorFailureRate() {
     // Recent collection job runs
     Integer totalRuns = jdbc.queryForObject("""
-        select count(*) from collection_job_runs
-         where run_time >= date_sub(current_timestamp, interval 15 minute)
+        select count(*) from admin_collection_job_runs
+         where start_time >= date_sub(current_timestamp, interval 15 minute)
         """, Integer.class);
     Integer failedRuns = jdbc.queryForObject("""
-        select count(*) from collection_job_runs
+        select count(*) from admin_collection_job_runs
          where status = 'FAILED'
-           and run_time >= date_sub(current_timestamp, interval 15 minute)
+           and start_time >= date_sub(current_timestamp, interval 15 minute)
         """, Integer.class);
 
     if (totalRuns == null || failedRuns == null || totalRuns == 0) return;

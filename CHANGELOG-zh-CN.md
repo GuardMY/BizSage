@@ -718,6 +718,21 @@
 
 ## 2026-07-09
 
+### Alert 调度器采集运行表修复
+
+- 变更类型：功能缺陷修复。
+- 影响模块：`services/api` 和两份变更日志。
+- 主要变更：
+  - 将 `AlertRuleEngine` 的采集运行遥测查询切换到真实存在的 `admin_collection_job_runs`，不再引用不存在的旧表名 `collection_job_runs`。
+  - 将采集失败率窗口统计的时间列改为真实 schema 中的 `start_time`，不再使用不存在的 `run_time` 列。
+  - 让定时告警评估重新与 Admin V3 已落地的采集遥测表结构保持一致。
+- 验证结果：
+  - 已确认调度器报错堆栈直接指向 `AlertRuleEngine.evaluateCollectorFailureRate`。
+  - 已核对 MySQL 与 H2 基线 schema 都创建的是 `admin_collection_job_runs`，且管理后台采集存储逻辑也统一使用该表。
+  - 已在修复后重新检索 API 源码，确认告警规则中不再残留 `collection_job_runs` 引用。
+- 未完成事项：
+  - 仍需在目标运行环境连真实数据库跑一次调度周期，确认告警评估已端到端不再抛出 SQL 异常。
+
 ### MySQL V2 管理后台迁移兼容性修复
 
 - 变更类型：功能缺陷修复。
