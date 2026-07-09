@@ -698,6 +698,23 @@
 - Unfinished items:
   - No runtime test suite was required for this documentation-only repair.
 
+## 2026-07-09
+
+### MySQL V2 Admin Migration Compatibility Fix
+
+- Change type: functional bug fix.
+- Affected modules: `services/api`, `infra/mysql`, and both change logs.
+- Main changes:
+  - Removed the two `ALTER TABLE admin_collection_sources ADD COLUMN IF NOT EXISTS ...` statements from the MySQL `V2__admin_schema_and_seed.sql` migration.
+  - Kept the V2 seed data intact because `compliance_notes` and `proxy_config` already exist in the baseline MySQL schema bootstrap.
+  - Prevented Flyway from failing on MySQL with SQL state `42000` / error code `1064` during V2 migration startup.
+- Verification results:
+  - Confirmed the failing statements were located in `services/api/src/main/resources/db/migration/mysql/V2__admin_schema_and_seed.sql`.
+  - Confirmed `admin_collection_sources` already includes `compliance_notes` and `proxy_config` in `infra/mysql/init/001_v1_baseline.sql`, so removing the duplicate V2 column additions preserves schema completeness.
+  - Performed static migration review to ensure the remaining V2 statements still execute in order after the duplicate column additions were removed.
+- Unfinished items:
+  - Flyway migration should still be re-run against the target MySQL environment to confirm startup succeeds end-to-end.
+
 ### Admin-V3-3 Knowledge Management Closed Loop
 
 - Change type: functional development.

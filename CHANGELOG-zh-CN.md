@@ -716,6 +716,23 @@
 - 未完成事项：
   - 本次仅为文档修复，无需运行服务测试套件。
 
+## 2026-07-09
+
+### MySQL V2 管理后台迁移兼容性修复
+
+- 变更类型：功能缺陷修复。
+- 影响模块：`services/api`、`infra/mysql` 和两份变更日志。
+- 主要变更：
+  - 从 MySQL 的 `V2__admin_schema_and_seed.sql` 迁移脚本中删除两条 `ALTER TABLE admin_collection_sources ADD COLUMN IF NOT EXISTS ...` 语句。
+  - 保留 V2 其余种子数据逻辑不变，因为 `compliance_notes` 与 `proxy_config` 已经存在于 MySQL 基线初始化 schema 中。
+  - 避免 Flyway 在执行 V2 迁移启动时因 MySQL 返回 SQL state `42000` / error code `1064` 而失败。
+- 验证结果：
+  - 已确认报错语句位于 `services/api/src/main/resources/db/migration/mysql/V2__admin_schema_and_seed.sql`。
+  - 已确认 `infra/mysql/init/001_v1_baseline.sql` 中的 `admin_collection_sources` 已包含 `compliance_notes` 和 `proxy_config`，删除 V2 中的重复补列不会破坏 schema 完整性。
+  - 已完成静态迁移检查，确认删除重复补列后其余 V2 语句的执行顺序保持不变。
+- 未完成事项：
+  - 仍需在目标 MySQL 环境重新执行 Flyway 迁移，确认应用启动已端到端恢复正常。
+
 ### Admin-V3-3 ֪ʶ������ʵ�ջ�
 
 - ������ͣ����ܿ�����

@@ -13,12 +13,6 @@ CREATE TABLE IF NOT EXISTS admin_risk_rules (
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
-ALTER TABLE admin_collection_sources
-  ADD COLUMN IF NOT EXISTS compliance_notes JSON NULL AFTER payload_json;
-
-ALTER TABLE admin_collection_sources
-  ADD COLUMN IF NOT EXISTS proxy_config JSON NULL AFTER compliance_notes;
-
 CREATE TABLE IF NOT EXISTS sla_data_points (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   window_start DATETIME NOT NULL,
