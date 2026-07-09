@@ -13,6 +13,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -21,7 +22,7 @@ import org.springframework.web.client.RestClient;
 
 @Component
 public class CollectorClient {
-  private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
+  private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE = new ParameterizedTypeReference<>() {
   };
   private static final TypeReference<List<Map<String, Object>>> LIST_OF_MAP_TYPE = new TypeReference<>() {
   };

@@ -1,5 +1,20 @@
-# Change Log
+﻿# Change Log
 
+## 2026-07-09
+
+### API Compile Compatibility Fixes
+
+- Change type: functional repair.
+- Affected modules: `services/api` and both change logs.
+- Main changes:
+  - Added the missing `java.io.IOException` import in `AdminCollectionStore` so JSON payload parsing compiles again.
+  - Updated `CollectorClient` to use Spring `ParameterizedTypeReference<Map<String, Object>>` with `RestClient.ResponseSpec.body(...)`, matching Spring Boot 3.3 / Spring Framework 6.1 expectations.
+  - Reworked `PdfReportGenerator` for PDFBox 3.0 by switching to `PDType1Font`, replacing removed `PDPageContentStream#getFont()` usage with explicit font tracking, and normalizing the affected report strings/comments.
+- Verification results:
+  - Static source verification completed for the three reported compiler failures and their dependency-specific API usage.
+  - Verified with `mvn -DskipTests compile` in `services/api`; the module now builds successfully.
+- Unfinished items:
+  - Re-run the Docker image build to confirm the containerized `services/api` path stays aligned with the local Maven compile result.
 ## 2026-07-08
 
 ### Dual-Agent Business Core: Learning Agent, Three-Tier Memory, Transition, and Standardized Output
@@ -9,16 +24,16 @@
 - Main changes:
   - **Industry Learning Agent**: Added `services/ai-worker/app/learning_agent.py` implementing the second half of BizSage's dual-Agent system. Supports intent classification (INDUSTRY_OVERVIEW, NODE_LEARNING, METRIC_QUESTION, RISK_QUESTION, HIDDEN_RULE, POLICY_QUESTION) with keyword-based chain-node matching across all 7 nodes. Three learning modes: FAST_START (overview), FULL_CHAIN (systematic deep learning), NODE_DEEP_DIVE (focused node study). Uses a learning-specific system prompt optimized for plain-language teaching. Added `POST /agent/learn` endpoint.
   - **Three-tier memory system**: Enhanced `services/ai-worker/app/memory.py` with five memory categories (PREFERENCE, BUSINESS_FACT, PAIN_POINT, INDUSTRY_CONTEXT, LEARNING_PROGRESS), lifecycle-aware expiry (90-365 days per category), intelligent forgetting via `forget_expired()`, learning-specific memory extraction via `extract_learning_memories()`, and enhanced diagnosis memory extraction with pain-point and industry-context pattern matching.
-  - **Dual-Agent transition**: Added `services/ai-worker/app/agent_transition.py` supporting context-preserving mode switches. Learning→Diagnosis transition carries the studied chain node as the diagnosis focus area. Diagnosis→Learning transition identifies weak areas and suggests targeted learning. Added `POST /agent/transition` unified endpoint with `TransitionContext` preview for frontend display.
+  - **Dual-Agent transition**: Added `services/ai-worker/app/agent_transition.py` supporting context-preserving mode switches. Learning鈫扗iagnosis transition carries the studied chain node as the diagnosis focus area. Diagnosis鈫扡earning transition identifies weak areas and suggests targeted learning. Added `POST /agent/transition` unified endpoint with `TransitionContext` preview for frontend display.
   - **Standardized dual-Agent output**: Added `services/ai-worker/app/agent_output.py` implementing a unified `AgentOutput` format used by both Agents. Structured sections (key findings, risk alerts, actionable steps, supporting evidence), source traceability, confidence labels, timeliness notes, compliance disclaimers, chain-node context (learning mode), and suggested next actions. Both `render_agent_output()` (full format) and `render_legacy_format()` (backward-compatible diagnosis format) output.
   - **Data model**: Extended `KnowledgeItem` with optional `link_id` field for chain-node filtering; updated `parse_knowledge()` to extract `linkId`/`link_id` from API payloads.
   - **Frontend**: Added `AgentLearnRequest`, `AgentTransitionRequest`, `AgentOutput`, `fetchAgentLearn()`, and `fetchAgentTransition()` to the API client.
 - Verification results:
   - 32 new Python tests across 3 test files (6 output, 18 learning agent, 8 transition), all passing.
-  - All 25 existing ai-worker tests (7 agent + 18 compressor) continue to pass — zero regressions.
+  - All 25 existing ai-worker tests (7 agent + 18 compressor) continue to pass 鈥?zero regressions.
   - Total: 57/57 tests passing in `services/ai-worker`.
 - Unfinished items:
-  - Browser-level end-to-end validation of Learning→Diagnosis→Learning transition loop.
+  - Browser-level end-to-end validation of Learning鈫扗iagnosis鈫扡earning transition loop.
   - Web UI: dedicated learning-mode workspace with chain-node navigator (follows existing DiagnosisWorkspace pattern).
 
 ### RAG Context Compression
@@ -27,13 +42,13 @@
 - Affected modules: `services/ai-worker` and both change logs.
 - Main changes:
   - Added `services/ai-worker/app/context_compressor.py` implementing a content-aware context compressor for RAG retrieval results. The compressor: (1) merges near-duplicate knowledge items via character-trigram Jaccard similarity (threshold 0.70), (2) distributes token budget proportionally by relevance score with configurable min/max per-item limits, (3) truncates long content at sentence boundaries preserving readability, (4) estimates token counts conservatively for mixed CJK/ASCII text.
-  - Integrated the compressor into `agent.py::diagnose()` — the naive `"\\n".join(...)` context builder is replaced with a `compress_context()` pipeline that memory-aware token budgeting (2100 tokens when memory context is present, 2400 otherwise).
+  - Integrated the compressor into `agent.py::diagnose()` 鈥?the naive `"\\n".join(...)` context builder is replaced with a `compress_context()` pipeline that memory-aware token budgeting (2100 tokens when memory context is present, 2400 otherwise).
   - Exposed optional `compress_config` in `DiagnoseRequest` allowing callers to tune `total_token_budget`, `min_chars_per_item`, `max_chars_per_item`, and `merge_similarity_threshold` per request.
 - Verification results:
   - 18 new unit tests in `test_context_compressor.py` cover trigram extraction, Jaccard similarity, merge logic (higher-score-as-primary), token estimation, single/multi-item compression, duplicate merging, score-proportional budget distribution, min-char guarantees, and sentence-boundary truncation.
   - All 7 existing `test_agent.py` tests continue to pass with the compression-integrated pipeline.
 - Unfinished items:
-  - None. Compression is transparent to existing callers — the default config matches previous behavior for short contexts while protecting against context-window overflow for long results.
+  - None. Compression is transparent to existing callers 鈥?the default config matches previous behavior for short contexts while protecting against context-window overflow for long results.
 
 ### Data Governance: Conflict Engine, Snapshots, and Data Isolation
 
@@ -302,7 +317,7 @@
 - Affected modules: `AGENTS.md`, `AGENTS-zh-CN.md`, `docs/en/standards`, `docs/zh-CN/standards`, and change logs.
 - Main changes:
   - Removed the "smallest clear, testable implementation" wording from the English root agent guidance and the English agent development standards.
-  - Removed the matching "最小、清晰、可测试的实现" wording from the Chinese root agent guidance and the Chinese agent development standards.
+  - Removed the matching "鏈€灏忋€佹竻鏅般€佸彲娴嬭瘯鐨勫疄鐜? wording from the Chinese root agent guidance and the Chinese agent development standards.
   - Kept the remaining milestone, bilingual-documentation, verification, and safety requirements unchanged.
 - Verification results:
   - Documentation-only change; no service test suite was required.
@@ -549,7 +564,7 @@
   - Mapped high availability, disaster recovery, multi-model routing, complete RBAC, and basic paid-user gray release to V2.
   - Mapped dynamic source weighting, full data lineage, complete commercial membership, full security, H5 mobile adaptation, audit console, operations reports, and 99.9% SLA readiness to V3.
 - Verification results:
-  - Reviewed `raw-docs/行业智能创业Agent平台全域完整架构设计文档（V4.0_全域封顶终版）配套分阶段落地开发规划说明书.pdf` through the extracted text in `raw-docs/txt/`.
+  - Reviewed `raw-docs/琛屼笟鏅鸿兘鍒涗笟Agent骞冲彴鍏ㄥ煙瀹屾暣鏋舵瀯璁捐鏂囨。锛圴4.0_鍏ㄥ煙灏侀《缁堢増锛夐厤濂楀垎闃舵钀藉湴寮€鍙戣鍒掕鏄庝功.pdf` through the extracted text in `raw-docs/txt/`.
   - Confirmed the previous roadmap did not match the source stage count because it included V4.
 - Unfinished items:
   - Superseded by the milestone detail completion entry above.
@@ -668,3 +683,4 @@
 - Unfinished items:
   - Run backend tests and Web tests in an environment with Maven and Node.js installed.
   - A live browser verification of the `/admin` knowledge workspace is still recommended after the frontend toolchain is available.
+

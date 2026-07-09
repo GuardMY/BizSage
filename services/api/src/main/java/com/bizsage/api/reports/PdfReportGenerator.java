@@ -3,16 +3,17 @@ package com.bizsage.api.reports;
 import java.io.ByteArrayOutputStream;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
-import org.apache.pdfbox.pdmodel.font.PDType0Font;
+import org.apache.pdfbox.pdmodel.font.PDFont;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
 /**
@@ -77,18 +78,16 @@ public class PdfReportGenerator {
     }
   }
 
-  // ── Drawing helpers ──────────────────────────────────────────
-
   private float drawHeader(PDPageContentStream cs, float y) throws Exception {
     cs.beginText();
-    cs.setFont(new PDType0Font(BOLD_FONT), 20);
+    cs.setFont(font(BOLD_FONT), 20);
     cs.newLineAtOffset(MARGIN, y);
-    cs.showText("BizSage — Diagnosis Report");
+    cs.showText("BizSage - Diagnosis Report");
     cs.endText();
 
     y -= 24;
     cs.beginText();
-    cs.setFont(new PDType0Font(BODY_FONT), 10);
+    cs.setFont(font(BODY_FONT), 10);
     cs.newLineAtOffset(MARGIN, y);
     cs.showText("Generated: " + ZonedDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z")));
     cs.endText();
@@ -104,21 +103,23 @@ public class PdfReportGenerator {
   }
 
   private float drawSection(PDPageContentStream cs, String title, String body, float y, boolean wrap) throws Exception {
-    // Section title
     cs.beginText();
-    cs.setFont(new PDType0Font(BOLD_FONT), 12);
+    cs.setFont(font(BOLD_FONT), 12);
     cs.newLineAtOffset(MARGIN, y);
     cs.showText(title);
     cs.endText();
     y -= 18;
 
-    // Section body — simple line wrapping
-    cs.setFont(new PDType0Font(BODY_FONT), 10);
+    PDFont bodyFont = font(BODY_FONT);
+    float bodyFontSize = 10f;
     float lineHeight = 14f;
-    List<String> lines = wrapLines(body, CONTENT_WIDTH, cs);
+    List<String> lines = wrap ? wrapLines(body, CONTENT_WIDTH, bodyFont, bodyFontSize) : List.of(safeText(body));
     for (String line : lines) {
-      if (y < BOTTOM_MARGIN) break; // Don't overflow page
+      if (y < BOTTOM_MARGIN) {
+        break;
+      }
       cs.beginText();
+      cs.setFont(bodyFont, bodyFontSize);
       cs.newLineAtOffset(MARGIN, y);
       cs.showText(line);
       cs.endText();
@@ -129,24 +130,28 @@ public class PdfReportGenerator {
 
   private float drawSources(PDPageContentStream cs, List<ReportSource> sources, float y) throws Exception {
     cs.beginText();
-    cs.setFont(new PDType0Font(BOLD_FONT), 12);
+    cs.setFont(font(BOLD_FONT), 12);
     cs.newLineAtOffset(MARGIN, y);
     cs.showText("Sources");
     cs.endText();
     y -= 18;
 
-    cs.setFont(new PDType0Font(BODY_FONT), 9);
+    PDFont bodyFont = font(BODY_FONT);
+    float bodyFontSize = 9f;
     float lineHeight = 13f;
     int idx = 1;
     for (ReportSource src : sources) {
-      if (y < BOTTOM_MARGIN) break;
-      String line = String.format("%d. [%s] %s  (confidence: %.0f%%)",
+      if (y < BOTTOM_MARGIN) {
+        break;
+      }
+      String line = String.format("%d. [%s] %s (confidence: %.0f%%)",
           idx++, src.sourceId(), src.title(), src.confidence() * 100);
-      List<String> wrapped = wrapLines(line, CONTENT_WIDTH - 12, cs);
-      for (String w : wrapped) {
+      List<String> wrapped = wrapLines(line, CONTENT_WIDTH - 12, bodyFont, bodyFontSize);
+      for (String entry : wrapped) {
         cs.beginText();
+        cs.setFont(bodyFont, bodyFontSize);
         cs.newLineAtOffset(MARGIN + 12, y);
-        cs.showText(w);
+        cs.showText(entry);
         cs.endText();
         y -= lineHeight;
       }
@@ -156,23 +161,25 @@ public class PdfReportGenerator {
 
   private float drawMetadata(PDPageContentStream cs, DiagnosisReport report, float y) throws Exception {
     cs.beginText();
-    cs.setFont(new PDType0Font(BOLD_FONT), 12);
+    cs.setFont(font(BOLD_FONT), 12);
     cs.newLineAtOffset(MARGIN, y);
     cs.showText("Report Metadata");
     cs.endText();
     y -= 18;
 
-    cs.setFont(new PDType0Font(BODY_FONT), 10);
+    PDFont bodyFont = font(BODY_FONT);
+    float bodyFontSize = 10f;
     float lineHeight = 15f;
     String[] meta = {
         "Confidence: " + report.confidence(),
         "Timeliness: " + report.timeliness(),
         "Self-Check Status: " + report.selfCheckStatus()
     };
-    for (String m : meta) {
+    for (String item : meta) {
       cs.beginText();
+      cs.setFont(bodyFont, bodyFontSize);
       cs.newLineAtOffset(MARGIN + 12, y);
-      cs.showText(m);
+      cs.showText(item);
       cs.endText();
       y -= lineHeight;
     }
@@ -180,12 +187,16 @@ public class PdfReportGenerator {
   }
 
   private float drawDisclaimer(PDPageContentStream cs, String disclaimer, float y) throws Exception {
-    cs.setFont(new PDType0Font(BODY_FONT), 8);
-    List<String> lines = wrapLines("Disclaimer: " + disclaimer, CONTENT_WIDTH, cs);
+    PDFont bodyFont = font(BODY_FONT);
+    float bodyFontSize = 8f;
     float lineHeight = 11f;
+    List<String> lines = wrapLines("Disclaimer: " + safeText(disclaimer), CONTENT_WIDTH, bodyFont, bodyFontSize);
     for (String line : lines) {
-      if (y < MARGIN) break;
+      if (y < MARGIN) {
+        break;
+      }
       cs.beginText();
+      cs.setFont(bodyFont, bodyFontSize);
       cs.newLineAtOffset(MARGIN, y);
       cs.showText(line);
       cs.endText();
@@ -198,31 +209,45 @@ public class PdfReportGenerator {
     try (PDPageContentStream cs = new PDPageContentStream(document, page,
         PDPageContentStream.AppendMode.APPEND, true)) {
       cs.beginText();
-      cs.setFont(new PDType0Font(BODY_FONT), 7);
+      cs.setFont(font(BODY_FONT), 7);
       cs.newLineAtOffset(MARGIN, 28);
-      cs.showText("BizSage Diagnosis Report — Generated by AI. Verify critical decisions independently.");
+      cs.showText("BizSage Diagnosis Report - Generated by AI. Verify critical decisions independently.");
       cs.endText();
     }
   }
 
-  // ── Simple line wrapping ─────────────────────────────────────
+  private PDFont font(Standard14Fonts.FontName fontName) {
+    return new PDType1Font(fontName);
+  }
 
-  private List<String> wrapLines(String text, float maxWidth, PDPageContentStream cs) throws Exception {
-    List<String> lines = new java.util.ArrayList<>();
+  private List<String> wrapLines(String text, float maxWidth, PDFont font, float fontSize) throws Exception {
+    String normalized = safeText(text);
+    if (normalized.isBlank()) {
+      return List.of("");
+    }
+
+    List<String> lines = new ArrayList<>();
     StringBuilder current = new StringBuilder();
-    for (String word : text.split(" ")) {
+    for (String word : normalized.split(" ")) {
       String candidate = current.isEmpty() ? word : current + " " + word;
-      float candidateWidth = cs.getFont().getStringWidth(candidate) / 1000f * cs.getFont().getFontSize();
+      float candidateWidth = font.getStringWidth(candidate) / 1000f * fontSize;
       if (candidateWidth > maxWidth && !current.isEmpty()) {
         lines.add(current.toString());
         current = new StringBuilder(word);
       } else {
-        if (!current.isEmpty()) current.append(" ");
+        if (!current.isEmpty()) {
+          current.append(" ");
+        }
         current.append(word);
       }
     }
-    if (!current.isEmpty()) lines.add(current.toString());
-    if (lines.isEmpty()) lines.add(text); // fallback for single very long words
-    return lines;
+    if (!current.isEmpty()) {
+      lines.add(current.toString());
+    }
+    return lines.isEmpty() ? List.of(normalized) : lines;
+  }
+
+  private String safeText(String text) {
+    return text == null ? "" : text.replaceAll("\\s+", " ").trim();
   }
 }

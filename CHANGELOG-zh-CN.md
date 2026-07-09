@@ -1,5 +1,20 @@
 ﻿# 变更日志
 
+## 2026-07-09
+
+### API 编译兼容性修复
+
+- 变更类型：功能修复。
+- 影响模块：`services/api` 和两份变更日志。
+- 主要变更：
+  - 在 `AdminCollectionStore` 中补回缺失的 `java.io.IOException` 导入，恢复 JSON 负载解析相关编译。
+  - 将 `CollectorClient` 调整为使用 Spring 的 `ParameterizedTypeReference<Map<String, Object>>` 调用 `RestClient.ResponseSpec.body(...)`，匹配 Spring Boot 3.3 / Spring Framework 6.1 的类型要求。
+  - 按 PDFBox 3.0 API 重写 `PdfReportGenerator` 的字体与换行处理：改用 `PDType1Font`，移除已不存在的 `PDPageContentStream#getFont()` 依赖，并顺手清理受影响的报表字符串与注释乱码。
+- 验证结果：
+  - 已针对本次日志里的三组编译失败及其依赖版本 API 用法完成静态源码核对。
+  - 已在 `services/api` 中通过 `mvn -DskipTests compile` 完成验证，模块现已恢复编译通过。
+- 未完成事项：
+  - 仍建议重新运行 Docker 镜像构建，确认容器内 `services/api` 的构建路径与本地 Maven 编译结果保持一致。
 ## 2026-07-08
 
 ### 双Agent业务核心：学习Agent、三级记忆、模式切换与标准化输出
@@ -686,3 +701,4 @@
 - δ������
   - ���ھ߱� Maven �� Node.js �������Ļ��������к�˲��Ժ� Web ���ԡ�
   - ��ǰ�˹��������ú��Խ���� `/admin` ֪ʶ������ִ��һ����ʵ�������֤��
+
