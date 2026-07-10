@@ -39,7 +39,23 @@
 - `POST /conversations/{id}/messages/stream`
   - 输出：`text/event-stream`
   - 请求体：`question`
-  - 发送 `event: diagnosis`，包含 answer、sources、confidence、timeliness 和 disclaimer。
+  - 在唯一的最终 `diagnosis` 事件前流式发送 `status`、`delta` 和可选的 `reset` 事件。
+- `POST /conversations/{id}/messages/learn/stream`
+  - 输出：`text/event-stream`
+  - 请求体：`question`，以及可选的 `chainNodeId`、`learningMode`。
+- `POST /conversations/{id}/messages/transition/stream`
+  - 输出：`text/event-stream`
+  - 请求体：`fromMode`、`toMode`、`question`，以及可选的 `chainNodeId`。
+
+三条 Agent 流统一使用以下事件契约：
+
+- `status`：包含状态（`started`、`validating` 或 `retrying`）、模式和尝试次数。
+- `delta`：下一段回答文本，客户端将其追加到当前候选。
+- `reset`：自检重试或提供方故障转移前清空当前候选。
+- `diagnosis`：唯一的最终结构化回答。
+- `error`：稳定的 worker 错误码和安全文案。
+
+只有最终结构化回答会作为助手消息持久化。
 
 ## 情报
 
@@ -83,3 +99,25 @@
 - `GET /ops/audit-logs`
   - 角色：`SUPER_ADMIN`、`OPERATOR`
   - 返回 V2 灰度指标、告警状态、可疑/冲突复核工单和审计日志。
+
+## Worker API
+
+Collector：
+
+- `POST /collect/form`
+- `POST /collect/public-page`
+- `POST /collect/mock-api`
+- `POST /govern`
+- V2 Collector 辅助能力覆盖增量指纹、重试、熔断状态、死信分类和最近快照回退。
+
+AI worker：
+
+- `POST /rag/search`
+  - 支持地域、行业和会员等级过滤。
+- `POST /agent/diagnose`
+  - 对可疑冲突或证据不足场景返回 selfCheckStatus 和受控输出。
+- `POST /agent/diagnose/stream`
+- `POST /agent/learn/stream`
+- `POST /agent/transition/stream`
+  - API 到 worker 的内部 SSE 端点，传递模型增量、reset 和唯一的最终 `result` 事件。
+  - 现有同步 Agent 端点继续用于报告生成和兼容场景。

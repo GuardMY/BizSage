@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
 
 from app.agent_output import (
@@ -31,7 +32,7 @@ from app.model_routing.router import ModelRouter
 from app.prompt_library.assembler import PromptAssembler
 from app.prompt_library.layers import AgentMode
 from app.rag import KnowledgeItem, SearchResult, search_knowledge
-from app.reasoning_checks.retry import run_with_retry
+from app.reasoning_checks.retry import run_with_retry, run_with_retry_stream
 
 
 # 行业链条节点：用于把宽泛学习问题落到可教学、可导航的业务环节上。
@@ -287,6 +288,117 @@ def learn(
         self_check_status=check_status,
     )
     return render_agent_output(output)
+
+
+def learn_stream(
+    question: str,
+    *,
+    knowledge: list[KnowledgeItem],
+    chain_node_id: str | None = None,
+    learning_mode: str = LearningMode.FAST_START,
+    recent_messages: list[dict] | None = None,
+    conversation_summary: str | None = None,
+    long_term_memories: list[dict] | None = None,
+    region_id: str | None = None,
+    industry_id: str | None = None,
+    membership_level: str = "FREE",
+    vector_store: object | None = None,
+    restrict_to_knowledge_ids: bool = False,
+    compress_config: CompressConfig | None = None,
+) -> Iterator[dict]:
+    """Yield learning deltas and one terminal result event."""
+    intent_type, detected_node = classify_learning_intent(question)
+    effective_node = chain_node_id or detected_node
+    node_knowledge = filter_knowledge_by_node(knowledge, effective_node)
+    results = search_knowledge(
+        question,
+        node_knowledge or knowledge,
+        region_id=region_id,
+        industry_id=industry_id,
+        membership_level=membership_level,
+        vector_store=vector_store,
+        restrict_to_knowledge_ids=restrict_to_knowledge_ids,
+    )
+
+    if not results:
+        result = render_agent_output(
+            format_learning_output(
+                answer="信息不足：当前知识库中没有检索到可支撑该学习问题的证据，"
+                       "请尝试选择其他链条节点或更具体的问题。",
+                sources=[],
+                chain_node_id=effective_node,
+                confidence="LOW",
+                self_check_status="INSUFFICIENT_EVIDENCE",
+            )
+        )
+        yield {"event": "delta", "text": result["answer"], "attempt": 1}
+        yield {"event": "result", "result": result, "attempt": 1}
+        return
+
+    result_dicts = _results_to_dicts(results)
+    memory_context = build_memory_context(
+        recent_messages, conversation_summary, long_term_memories
+    )
+    compress_cfg = compress_config or CompressConfig(
+        total_token_budget=2000 if memory_context else 2300,
+    )
+    compressed_text, _ = compress_context(result_dicts, config=compress_cfg)
+    learning_prompt = _build_learning_prompt(
+        question=question,
+        intent_type=intent_type,
+        learning_mode=learning_mode,
+        chain_node_id=effective_node,
+        context=compressed_text,
+        memory_context=memory_context,
+    )
+    system_prompt = _get_assembler().assemble(
+        mode=AgentMode.LEARNING.value,
+        industry_id=industry_id,
+        region_id=region_id,
+    )
+    initial_messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": learning_prompt},
+    ]
+    router = _get_router()
+
+    def llm_stream(messages: list[dict]) -> Iterator[dict]:
+        yield from router.stream(
+            messages=messages,
+            task_hint="balanced",
+            temperature=0.5,
+            max_tokens=1024,
+        )
+
+    for event in run_with_retry_stream(
+        llm_stream_fn=llm_stream,
+        messages=initial_messages,
+        evidence=result_dicts,
+        region_id=region_id,
+        output_format=system_prompt,
+    ):
+        if event["event"] != "result":
+            yield event
+            continue
+
+        answer = event["answer"]
+        result = render_agent_output(
+            format_learning_output(
+                answer=answer,
+                sources=_results_to_sources(results),
+                chain_node_id=effective_node,
+                memory_candidates=extract_learning_memories(
+                    question,
+                    answer,
+                    effective_node,
+                    existing_memories=long_term_memories,
+                ),
+                confidence="MEDIUM",
+                self_check_status=event["selfCheckStatus"],
+            )
+        )
+        yield {"event": "result", "result": result, "attempt": event["attempt"]}
+        return
 
 
 # ---------------------------------------------------------------------------

@@ -11,6 +11,7 @@ import com.bizsage.api.memory.UserMemoryStore;
 import com.bizsage.api.users.UserAccount;
 import com.bizsage.api.worker.AiWorkerClient;
 import com.bizsage.api.worker.AiWorkerException;
+import com.bizsage.api.worker.AgentStreamListener;
 import com.bizsage.api.worker.DiagnoseResponse;
 import com.bizsage.api.worker.LearningRequest;
 import com.bizsage.api.worker.TransitionRequest;
@@ -70,6 +71,20 @@ public class LearningService {
   public String learn(
       Conversation conversation, UserAccount user, String question,
       String chainNodeId, String learningMode) {
+    return learnInternal(
+        conversation, user, question, chainNodeId, learningMode, null);
+  }
+
+  public String learnStream(
+      Conversation conversation, UserAccount user, String question,
+      String chainNodeId, String learningMode, AgentStreamListener listener) {
+    return learnInternal(
+        conversation, user, question, chainNodeId, learningMode, listener);
+  }
+
+  private String learnInternal(
+      Conversation conversation, UserAccount user, String question,
+      String chainNodeId, String learningMode, AgentStreamListener listener) {
     // 1. 持久化用户学习问题，便于失败排查和后续摘要。
     long userMessageId = messageStore.append(
         conversation.id(), "USER", "LEARNING_QUESTION", question,
@@ -102,7 +117,9 @@ public class LearningService {
     // 5. 调用 AI Worker；学习失败同样严格抛出，不使用本地答案兜底。
     DiagnoseResponse response;
     try {
-      response = aiWorkerClient.learn(request);
+      response = listener == null
+          ? aiWorkerClient.learn(request)
+          : aiWorkerClient.streamLearn(request, listener);
     } catch (AiWorkerException ex) {
       log.error("AI worker learning failed for conversation {}: {}", conversation.id(), ex.getMessage());
       throw ex;
@@ -160,6 +177,22 @@ public class LearningService {
   public String transition(
       Conversation conversation, UserAccount user,
       String fromMode, String toMode, String question, String chainNodeId) {
+    return transitionInternal(
+        conversation, user, fromMode, toMode, question, chainNodeId, null);
+  }
+
+  public String transitionStream(
+      Conversation conversation, UserAccount user,
+      String fromMode, String toMode, String question, String chainNodeId,
+      AgentStreamListener listener) {
+    return transitionInternal(
+        conversation, user, fromMode, toMode, question, chainNodeId, listener);
+  }
+
+  private String transitionInternal(
+      Conversation conversation, UserAccount user,
+      String fromMode, String toMode, String question, String chainNodeId,
+      AgentStreamListener listener) {
     // 1. 持久化用户触发切换的问题。
     long userMessageId = messageStore.append(
         conversation.id(), "USER", "TRANSITION",
@@ -193,7 +226,9 @@ public class LearningService {
     // 5. 调用 AI Worker 的模式切换接口。
     DiagnoseResponse response;
     try {
-      response = aiWorkerClient.transition(request);
+      response = listener == null
+          ? aiWorkerClient.transition(request)
+          : aiWorkerClient.streamTransition(request, listener);
     } catch (AiWorkerException ex) {
       log.error("AI worker transition failed for conversation {}: {}", conversation.id(), ex.getMessage());
       throw ex;

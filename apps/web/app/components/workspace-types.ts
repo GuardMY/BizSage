@@ -39,6 +39,7 @@ export type WorkspaceMessages = {
   sendDiagnosis: string;
   diagnosisCreated: string;
   diagnosisFailed: string;
+  diagnosisRetrying: string;
   conversationArchived: string;
   loginRequired: string;
   workerUnreachable: string;

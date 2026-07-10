@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 
 from app.llm import LLMCallError, LLMNotConfiguredError
 from app.model_routing.models import ModelConfig, ModelTier, RouteResult
-from app.model_routing.providers import call_provider
+from app.model_routing.providers import call_provider, stream_provider
 
 # 某一档模型全部失败时的降档顺序；不包含 TASK_SPECIFIC，避免专用任务误降级。
 _DEGRADE_ORDER: tuple[ModelTier, ...] = (
@@ -188,5 +189,58 @@ class ModelRouter:
 
         raise LLMCallError(
             f"All models failed for tier {tier.value} "
+            f"(and degrade path exhausted): {last_error}"
+        )
+
+    def stream(
+        self,
+        messages: list[dict],
+        task_hint: str | None = None,
+        context: dict | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        require_tier: ModelTier | None = None,
+    ) -> Iterator[dict]:
+        """Yield model deltas and reset events while preserving route failover."""
+        tier = require_tier or self.resolve_tier(task_hint, context)
+        candidates: list[ModelConfig] = []
+        seen: set[tuple[str, str, str]] = set()
+
+        def add_candidates(configs: list[ModelConfig]) -> None:
+            for config in configs:
+                key = (config.tier.value, config.base_url, config.model_name)
+                if key not in seen:
+                    seen.add(key)
+                    candidates.append(config)
+
+        add_candidates(self._tiers.get(tier) or self._tiers.get(ModelTier.BALANCED, []))
+        for degrade_tier in _DEGRADE_ORDER:
+            if degrade_tier != tier:
+                add_candidates(self._tiers.get(degrade_tier, []))
+
+        if not candidates:
+            raise LLMNotConfiguredError(f"No model configured for tier {tier.value}")
+
+        last_error: LLMCallError | None = None
+        candidate_visible = False
+        for config in candidates:
+            if candidate_visible:
+                yield {"event": "reset", "reason": "PROVIDER_FAILOVER"}
+                candidate_visible = False
+            try:
+                for text in stream_provider(config, messages, temperature, max_tokens):
+                    candidate_visible = True
+                    yield {"event": "delta", "text": text}
+                return
+            except LLMNotConfiguredError:
+                raise
+            except LLMCallError as exc:
+                last_error = exc
+
+        if candidate_visible:
+            yield {"event": "reset", "reason": "PROVIDER_FAILOVER"}
+
+        raise LLMCallError(
+            f"All streaming models failed for tier {tier.value} "
             f"(and degrade path exhausted): {last_error}"
         )

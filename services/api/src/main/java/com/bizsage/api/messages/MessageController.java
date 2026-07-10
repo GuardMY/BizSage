@@ -5,9 +5,8 @@ import com.bizsage.api.common.RequestIds;
 import com.bizsage.api.conversations.ConversationStore;
 import com.bizsage.api.users.UserStore;
 import com.bizsage.api.worker.AiWorkerException;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.bizsage.api.worker.AgentStreamEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -15,11 +14,12 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.Principal;
-import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -57,23 +57,25 @@ public class MessageController {
   }
 
   @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-  StreamingResponseBody streamDiagnosis(
+  ResponseEntity<StreamingResponseBody> streamDiagnosis(
       @PathVariable long conversationId,
       @Valid @RequestBody MessageRequest request,
       Principal principal) {
     // 先校验会话归属，再返回 StreamingResponseBody，避免流式响应开始后才发现越权。
     var user = userStore.findByUsername(principal.getName()).orElseThrow();
     var conversation = conversationStore.getForOwner(principal.getName(), conversationId);
-    return outputStream -> {
-      writeEvent(outputStream, "status", "{\"state\":\"started\"}");
+    return streamResponse(outputStream -> {
+      writeEvent(outputStream, "status", startedPayload("DIAGNOSIS"));
       try {
-        String diagnosis = diagnosisService.diagnose(conversation, user, request.question());
-        writeDiagnosisFrames(outputStream, diagnosis);
+        String diagnosis = diagnosisService.diagnoseStream(
+            conversation, user, request.question(),
+            event -> forwardWorkerEvent(outputStream, event));
+        writeEvent(outputStream, "diagnosis", diagnosis);
       } catch (AiWorkerException ex) {
         log.error("Diagnosis failed — worker error (conversation={}): {}", conversationId, ex.getMessage());
         writeEvent(outputStream, "error", toErrorPayload(ex));
       }
-    };
+    });
   }
 
   // 学习 Agent SSE 端点。
@@ -84,25 +86,26 @@ public class MessageController {
    * <p>支持可选 chainNodeId 和 learningMode，用于前端引导式学习。
    */
   @PostMapping(value = "/learn/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-  StreamingResponseBody streamLearning(
+  ResponseEntity<StreamingResponseBody> streamLearning(
       @PathVariable long conversationId,
       @Valid @RequestBody LearnMessageRequest request,
       Principal principal) {
     // 学习流复用诊断帧格式，前端只需按统一 diagnosis 事件解析 payload。
     var user = userStore.findByUsername(principal.getName()).orElseThrow();
     var conversation = conversationStore.getForOwner(principal.getName(), conversationId);
-    return outputStream -> {
-      writeEvent(outputStream, "status", "{\"state\":\"started\",\"mode\":\"LEARNING\"}");
+    return streamResponse(outputStream -> {
+      writeEvent(outputStream, "status", startedPayload("LEARNING"));
       try {
-        String result = learningService.learn(
+        String result = learningService.learnStream(
             conversation, user, request.question(),
-            request.chainNodeId(), request.learningMode());
-        writeDiagnosisFrames(outputStream, result);
+            request.chainNodeId(), request.learningMode(),
+            event -> forwardWorkerEvent(outputStream, event));
+        writeEvent(outputStream, "diagnosis", result);
       } catch (AiWorkerException ex) {
         log.error("Learning failed — worker error (conversation={}): {}", conversationId, ex.getMessage());
         writeEvent(outputStream, "error", toErrorPayload(ex));
       }
-    };
+    });
   }
 
   /**
@@ -111,27 +114,27 @@ public class MessageController {
    * <p>在 LEARNING 与 DIAGNOSIS 之间切换时保留会话上下文。
    */
   @PostMapping(value = "/transition/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-  StreamingResponseBody streamTransition(
+  ResponseEntity<StreamingResponseBody> streamTransition(
       @PathVariable long conversationId,
       @Valid @RequestBody TransitionMessageRequest request,
       Principal principal) {
     // 切换请求仍绑定当前会话和当前用户，防止跨会话复用上下文。
     var user = userStore.findByUsername(principal.getName()).orElseThrow();
     var conversation = conversationStore.getForOwner(principal.getName(), conversationId);
-    return outputStream -> {
-      writeEvent(outputStream, "status",
-          "{\"state\":\"started\",\"mode\":\"" + request.toMode() + "\"}");
+    return streamResponse(outputStream -> {
+      writeEvent(outputStream, "status", startedPayload(request.toMode()));
       try {
-        String result = learningService.transition(
+        String result = learningService.transitionStream(
             conversation, user,
             request.fromMode(), request.toMode(),
-            request.question(), request.chainNodeId());
-        writeDiagnosisFrames(outputStream, result);
+            request.question(), request.chainNodeId(),
+            event -> forwardWorkerEvent(outputStream, event));
+        writeEvent(outputStream, "diagnosis", result);
       } catch (AiWorkerException ex) {
         log.error("Transition failed — worker error (conversation={}): {}", conversationId, ex.getMessage());
         writeEvent(outputStream, "error", toErrorPayload(ex));
       }
-    };
+    });
   }
 
   @GetMapping
@@ -164,47 +167,23 @@ public class MessageController {
     return value.replace("\\", "\\\\").replace("\"", "\\\"");
   }
 
-  private void writeDiagnosisFrames(OutputStream outputStream, String diagnosis) throws IOException {
-    // Worker 一次返回完整 JSON；这里切成逐步增长的快照，模拟打字式流式体验。
-    JsonNode payload = objectMapper.readTree(diagnosis);
-    String answer = payload.path("answer").asText("");
-    List<String> snapshots = progressiveAnswers(answer);
-
-    if (payload instanceof ObjectNode payloadObject) {
-      for (String snapshot : snapshots) {
-        ObjectNode partialPayload = payloadObject.deepCopy();
-        partialPayload.put("answer", snapshot);
-        writeEvent(outputStream, "diagnosis", objectMapper.writeValueAsString(partialPayload));
-      }
-    } else {
-      // 非对象 payload 无法安全替换 answer 字段，直接原样发送。
-      writeEvent(outputStream, "diagnosis", diagnosis);
-      return;
-    }
-
-    if (snapshots.isEmpty() || !answer.equals(snapshots.getLast())) {
-      writeEvent(outputStream, "diagnosis", diagnosis);
-    }
+  private ResponseEntity<StreamingResponseBody> streamResponse(StreamingResponseBody body) {
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CACHE_CONTROL, "no-cache")
+        .header("X-Accel-Buffering", "no")
+        .body(body);
   }
 
-  private static List<String> progressiveAnswers(String answer) {
-    // 固定字符步长让前端收到渐进快照；最后一帧必须包含完整答案。
-    if (answer == null || answer.isEmpty()) {
-      return List.of();
-    }
-    if (answer.length() == 1) {
-      return List.of(answer);
-    }
+  private String startedPayload(String mode) throws IOException {
+    return objectMapper.writeValueAsString(java.util.Map.of(
+        "state", "started",
+        "mode", mode,
+        "attempt", 1));
+  }
 
-    List<String> snapshots = new ArrayList<>();
-    int chunkSize = 24;
-    int end = Math.min(answer.length() - 1, chunkSize);
-    while (end < answer.length()) {
-      snapshots.add(answer.substring(0, end));
-      end += chunkSize;
-    }
-    snapshots.add(answer);
-    return snapshots;
+  private void forwardWorkerEvent(OutputStream outputStream, AgentStreamEvent event)
+      throws IOException {
+    writeEvent(outputStream, event.event(), objectMapper.writeValueAsString(event.data()));
   }
 
   private static void writeEvent(OutputStream outputStream, String eventName, String payload) throws IOException {

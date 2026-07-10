@@ -91,6 +91,7 @@ const messages: Record<Locale, WorkspaceMessages> = {
     sendDiagnosis: "发送诊断",
     diagnosisCreated: "诊断已生成。",
     diagnosisFailed: "诊断失败。",
+    diagnosisRetrying: "正在校验并优化回答…",
     conversationArchived: "会话已归档。",
     loginRequired: "请先登录。",
     workerUnreachable: "诊断服务暂时不可用，请稍后重试。",
@@ -157,6 +158,7 @@ const messages: Record<Locale, WorkspaceMessages> = {
     sendDiagnosis: "Send diagnosis",
     diagnosisCreated: "Diagnosis generated.",
     diagnosisFailed: "Diagnosis failed.",
+    diagnosisRetrying: "Validating and refining the answer...",
     conversationArchived: "Conversation archived.",
     loginRequired: "Please sign in first.",
     workerUnreachable: "Diagnosis service is currently unavailable. Please try again later.",
@@ -513,6 +515,11 @@ export default function Home() {
             sources: previous?.sources ?? [],
             timeliness: previous?.timeliness ?? "Streaming"
           }));
+        },
+        onStatus(status) {
+          if (status.state === "retrying") {
+            setNotice(t.diagnosisRetrying);
+          }
         }
       });
       setStreamingDiagnosis(nextDiagnosis);
@@ -521,6 +528,7 @@ export default function Home() {
       try {
         const updatedMessages = await fetchMessages(conversationId);
         setMessageHistory(updatedMessages);
+        setStreamingDiagnosis(null);
       } catch (error) {
         if (error instanceof AuthExpiredError) {
           handleSessionExpired();

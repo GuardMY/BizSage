@@ -2,6 +2,25 @@
 
 ## 2026-07-11
 
+### Agent 端到端真实流式输出
+
+- 变更类型：功能开发与流式协议更新。
+- 影响模块：`services/ai-worker`、`services/api`、`apps/web`、配对 API/架构文档和两份变更日志。
+- 主要变更：
+  - 为诊断、学习和双 Agent 模式切换新增 OpenAI-compatible 模型真实流式调用，覆盖仅回答正文的增量解析、提供方故障转移和通过关闭流实现的上游取消。
+  - 新增流式自检语义：候选完成后执行验证，失败候选在重试前发送 `reset`，重试耗尽后替换为受控的信息存疑文案，并且只有最终结果会持久化。
+  - 新增 AI Worker SSE 端点和 Java SSE 消费逻辑，同时保留 PDF/报告兼容所需的同步 Agent 端点。
+  - 移除 API 按 24 字符生成快照的模拟流，改为即时转发 `status`/`delta`/`reset`、发送唯一最终 `diagnosis`，补充无缓存/无缓冲响应头，并让三条 Agent 链路复用最终持久化逻辑。
+  - 重构 Web 流解码器，使其支持跨 chunk 帧、拆分的 UTF-8 字符、delta 追加和 reset 清空，并显示中英文重试状态。
+- 验证结果：
+  - 修改相关调用链前已同步并检查 CodeGraph。
+  - 已通过 `python -m pytest` 验证 AI Worker 的流式、路由、重试、诊断、学习和切换测试，所选 76 项全部通过。完整套件为 169 项通过、2 项既有非相关失败，分别涉及过时的 `generate_answer` mock 和向量 payload 预期。
+  - 已通过 `MessageStreamApiTest` 和 `AiWorkerClientStreamTest` 验证 API 流式链路，9 项测试全部通过；其中延迟本地 HTTP 测试确认最终结果完成前即可收到 delta。
+  - 已在 `apps/web` 执行 `npm test`（40/40 通过）和 `npm run build`；分片 SSE 解码测试与 Next.js 生产构建均通过。
+- 未完成事项：
+  - 当前环境未执行真实外部模型加 Docker/Nginx 的端到端时延演练；提供方行为由确定性流式测试替身验证，API 传输由延迟本地 HTTP 服务验证。
+  - 完整 AI Worker 套件中 2 项与本次无关的既有失败仍需单独维护测试。
+
 ### 诊断输入框初始草稿置空
 
 - 变更类型：功能修复。

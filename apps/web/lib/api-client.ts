@@ -36,11 +36,19 @@ export type DiagnosisError = {
   message: string;
 };
 
-type StreamDiagnosisOptions = {
-  onPartialAnswer?: (answer: string) => void;
+export type AgentStreamStatus = {
+  state: "started" | "validating" | "retrying";
+  mode?: "DIAGNOSIS" | "LEARNING";
+  attempt: number;
+  message?: string;
 };
 
-type SseEvent = {
+export type StreamDiagnosisOptions = {
+  onPartialAnswer?: (answer: string) => void;
+  onStatus?: (status: AgentStreamStatus) => void;
+};
+
+export type SseEvent = {
   event: string;
   data: string;
 };
@@ -415,34 +423,59 @@ async function streamSse<T>(
     throw new WorkerError("WORKER_ERROR", `${errorContext} stream body is unavailable`);
   }
 
-  const decoder = new TextDecoder();
-  let text = "";
-  let lastPartialAnswer = "";
+  const frameDecoder = new SseFrameDecoder();
+  let partialAnswer = "";
+  let finalEvent = "";
+
+  const handleEvent = (event: SseEvent) => {
+    if (event.event === "delta") {
+      const payload = JSON.parse(event.data) as { text?: unknown };
+      if (typeof payload.text === "string") {
+        partialAnswer += payload.text;
+        options.onPartialAnswer?.(partialAnswer);
+      }
+      return;
+    }
+    if (event.event === "reset") {
+      partialAnswer = "";
+      options.onPartialAnswer?.("");
+      return;
+    }
+    if (event.event === "status") {
+      options.onStatus?.(JSON.parse(event.data) as AgentStreamStatus);
+      return;
+    }
+    if (event.event === "diagnosis") {
+      finalEvent = `event: diagnosis\ndata: ${event.data}\n\n`;
+      return;
+    }
+    if (event.event === "error") {
+      let payload: DiagnosisError | null = null;
+      try {
+        payload = JSON.parse(event.data) as DiagnosisError;
+      } catch {
+        // The stable fallback below handles malformed worker errors.
+      }
+      throw new WorkerError(
+        payload?.error ?? "WORKER_ERROR",
+        payload?.message ?? `${errorContext} service returned an unknown streaming error`
+      );
+    }
+  };
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) {
-      text += decoder.decode();
+      for (const event of frameDecoder.finish()) handleEvent(event);
       break;
     }
-    text += decoder.decode(value, { stream: true });
-    const partialAnswer = readPartialAnswer(text);
-    if (partialAnswer != null && partialAnswer !== lastPartialAnswer) {
-      lastPartialAnswer = partialAnswer;
-      options.onPartialAnswer?.(partialAnswer);
-    }
+    for (const event of frameDecoder.push(value)) handleEvent(event);
   }
 
-  // Check for SSE error events (scans the last event first for efficiency)
-  if (text.includes("event: error")) {
-    const errorPayload = findLatestErrorPayload(text);
-    if (errorPayload) {
-      throw new WorkerError(errorPayload.error, errorPayload.message);
-    }
-    throw new WorkerError("WORKER_ERROR", `${errorContext} service returned an unknown streaming error`);
+  if (!finalEvent) {
+    throw new WorkerError("WORKER_ERROR", `${errorContext} stream ended without a final diagnosis event`);
   }
-
-  return parseResult(text);
+  return parseResult(finalEvent);
 }
 
 export async function streamDiagnosisEvents(
@@ -1353,11 +1386,38 @@ function authHeaders(): Record<string, string> {
   };
 }
 
-function readPartialAnswer(raw: string) {
-  return findLatestDiagnosisPayload(raw)?.answer ?? null;
+export class SseFrameDecoder {
+  private readonly decoder = new TextDecoder();
+  private buffer = "";
+
+  push(value: Uint8Array): SseEvent[] {
+    this.buffer += this.decoder.decode(value, { stream: true });
+    return this.drain(false);
+  }
+
+  finish(): SseEvent[] {
+    this.buffer += this.decoder.decode();
+    return this.drain(true);
+  }
+
+  private drain(includeRemainder: boolean): SseEvent[] {
+    const events: SseEvent[] = [];
+    let boundary = this.buffer.match(/\r?\n\r?\n/);
+    while (boundary?.index !== undefined) {
+      const end = boundary.index + boundary[0].length;
+      events.push(...parseSseEvents(this.buffer.slice(0, end)));
+      this.buffer = this.buffer.slice(end);
+      boundary = this.buffer.match(/\r?\n\r?\n/);
+    }
+    if (includeRemainder && this.buffer.trim()) {
+      events.push(...parseSseEvents(`${this.buffer}\n\n`));
+      this.buffer = "";
+    }
+    return events;
+  }
 }
 
-function parseSseEvents(raw: string): SseEvent[] {
+export function parseSseEvents(raw: string): SseEvent[] {
   const events: SseEvent[] = [];
 
   for (const block of raw.split(/\r?\n\r?\n/)) {

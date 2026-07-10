@@ -2,6 +2,25 @@
 
 ## 2026-07-11
 
+### End-To-End Agent Streaming
+
+- Change type: functional development and streaming protocol update.
+- Affected modules: `services/ai-worker`, `services/api`, `apps/web`, paired API/architecture documentation, and both change logs.
+- Main changes:
+  - Added real OpenAI-compatible model streaming for diagnosis, learning, and cross-agent transitions, including answer-only delta parsing, provider failover, and upstream cancellation through stream closure.
+  - Added streamed self-check semantics: candidate deltas are validated after generation, failed candidates emit `reset` before retry, exhausted retries are replaced by the controlled uncertain response, and only the final result is persisted.
+  - Added AI Worker SSE endpoints and Java SSE consumption while preserving synchronous Agent endpoints for PDF/report compatibility.
+  - Replaced API-side 24-character snapshots with immediate `status`/`delta`/`reset` forwarding, one final `diagnosis` event, no-cache/no-buffer headers, and shared final persistence for all three Agent paths.
+  - Reworked the Web stream decoder to handle fragmented frames and split UTF-8 characters, append deltas, clear reset candidates, and display a bilingual retry status.
+- Verification results:
+  - Synced and checked CodeGraph before editing the affected call paths.
+  - Verified AI Worker streaming, routing, retry, diagnosis, learning, and transition tests with `python -m pytest`; all 76 selected tests passed. The full suite reached 169 passed and 2 existing unrelated failures in stale `generate_answer` mocking and vector payload expectations.
+  - Verified API streaming with `MessageStreamApiTest` and `AiWorkerClientStreamTest`; all 9 tests passed, including a delayed local HTTP stream that delivers a delta before its final result.
+  - Verified `apps/web` with `npm test` (40/40 passed) and `npm run build`; the fragmented SSE decoder tests and Next.js production build passed.
+- Unfinished items:
+  - A live external model plus Docker/Nginx end-to-end timing drill was not run in this environment; provider behavior was verified with deterministic streaming doubles and the API transport with a delayed local HTTP server.
+  - The two unrelated pre-existing AI Worker full-suite failures remain for separate test-maintenance work.
+
 ### Empty Diagnosis Composer Initial Draft
 
 - Change type: functional repair.

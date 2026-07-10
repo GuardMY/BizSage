@@ -117,7 +117,7 @@ Notes:
 |------|---------------------|----------------|-----------------------|
 | `services/api/src/main/java/com/bizsage/api/conversations/ConversationController.java` | Create/list/archive/delete conversations with cache and data-scope enforcement. | Uses `ConversationStore`, `UserStore`, `CacheMetrics`, and `DataIsolationService`. | Reads/writes conversation rows in MySQL. |
 | `services/api/src/main/java/com/bizsage/api/conversations/ConversationStore.java` | SQL-backed conversation persistence. | Used by conversation and message flows. | MySQL read/write boundary. |
-| `services/api/src/main/java/com/bizsage/api/messages/MessageController.java` | SSE endpoints for diagnosis, learning, and cross-agent transition, plus message history listing. | Uses `DiagnosisService`, `LearningService`, `ConversationStore`, `ConversationMessageStore`, and `UserStore`. | Streams SSE responses back to the Web app. |
+| `services/api/src/main/java/com/bizsage/api/messages/MessageController.java` | Real incremental SSE endpoints for diagnosis, learning, and cross-agent transition. It forwards worker `status`/`delta`/`reset` events and emits one final `diagnosis`. | Uses `DiagnosisService`, `LearningService`, `ConversationStore`, `ConversationMessageStore`, and `UserStore`. | Flushes SSE events to the Web app with proxy buffering disabled. |
 | `services/api/src/main/java/com/bizsage/api/messages/DiagnosisService.java` | User-diagnosis orchestrator. Persists user/assistant turns, loads knowledge and memory context, calls the AI worker, stores memory candidates, and rolls summaries forward. | Uses `AiWorkerClient`, message/summary stores, `UserMemoryStore`, `KnowledgeStore`, and `IntelligenceStore`. | Calls AI worker; reads/writes MySQL. |
 | `services/api/src/main/java/com/bizsage/api/messages/LearningService.java` | Learning-agent and transition orchestrator with the same persistence pattern as diagnosis. | Uses `AiWorkerClient`, message/summary stores, memory store, knowledge store, and intelligence store. | Calls AI worker; reads/writes MySQL. |
 | `services/api/src/main/java/com/bizsage/api/messages/ConversationMessageStore.java` and `ConversationSummaryStore.java` | Persistent storage for raw messages and compressed conversation summaries. | Used by diagnosis/learning/report flows. | MySQL read/write boundary. |
@@ -131,7 +131,7 @@ Notes:
 | `services/api/src/main/java/com/bizsage/api/intelligence/PaidIntelligenceController.java` and `PaidIntelligenceStore.java` | Membership-gated intelligence list path used by the Web app. | Uses gray release and entitlement-aware storage filtering. | Returns paid intelligence data to the Web app. |
 | `services/api/src/main/java/com/bizsage/api/memory/UserMemoryStore.java` | User memory persistence, lifecycle refresh, and active-memory lookup. | Used by diagnosis/learning flows and memory sync scheduler. | MySQL memory access. |
 | `services/api/src/main/java/com/bizsage/api/memory/UserMemoryEmbeddingStore.java` and `MemorySyncScheduler.java` | Vector-sync staging for unstructured memories and scheduled pushing to the AI worker/Qdrant path. | Uses `AiWorkerClient`. | Syncs memory embeddings toward the AI worker. |
-| `services/api/src/main/java/com/bizsage/api/worker/AiWorkerClient.java` | Main HTTP adapter from API to AI worker. Handles diagnose, learn, transition, knowledge sync/delete, memory embedding sync, and worker health checks. | Used by diagnosis, learning, startup sync, and memory sync. | Calls FastAPI AI worker over HTTP. |
+| `services/api/src/main/java/com/bizsage/api/worker/AiWorkerClient.java` | Main HTTP adapter from API to AI worker. It supports synchronous calls plus incremental SSE consumption for diagnose, learn, and transition. | Used by diagnosis, learning, startup sync, and memory sync. | Calls FastAPI AI worker and closes the upstream stream when downstream delivery stops. |
 | `services/api/src/main/java/com/bizsage/api/worker/KnowledgeSyncInitializer.java` | Startup resync path from MySQL knowledge to worker/Qdrant. | Uses `KnowledgeStore` and `AiWorkerClient`. | Syncs the persistent vector knowledge store. |
 
 #### Reports, gray release, privacy, health, and ops
@@ -176,9 +176,9 @@ Notes:
 | `services/ai-worker/app/memory.py` | Three-tier memory context builder, LLM/regex memory extraction, forgetting, vector-sync eligibility, and memory consolidation. | Used by diagnosis, learning, and transitions. | Indirectly calls the LLM through model routing for extraction. |
 | `services/ai-worker/app/llm.py` | Compatibility wrapper around the OpenAI-compatible provider configuration and deprecated direct answer helpers. | Used indirectly by model routing and older wrappers. | Reads provider env vars and calls the LLM endpoint. |
 | `services/ai-worker/app/context_compressor.py` | Compresses retrieved evidence to fit model context budgets. | Used by diagnosis and learning. | No direct external interaction. |
-| `services/ai-worker/app/model_routing/router.py`, `models.py`, and `providers.py` | Select models/providers by task hint and execute provider calls. | Used by diagnosis, learning, memory extraction, and self-check retries. | Calls external OpenAI-compatible model providers. |
+| `services/ai-worker/app/model_routing/router.py`, `models.py`, and `providers.py` | Select models/providers and execute synchronous or `stream: true` calls. Streaming failover emits a reset before replacement output. | Used by diagnosis, learning, memory extraction, and self-check retries. | Parses external OpenAI-compatible SSE while forwarding answer content only. |
 | `services/ai-worker/app/prompt_library/assembler.py`, `layers.py`, and `defaults.py` | Layered prompt composition for diagnosis and learning modes. | Used by diagnosis and learning. | No direct external interaction. |
-| `services/ai-worker/app/reasoning_checks/checks.py` and `retry.py` | Post-generation self-check loop and retry policy. | Used by diagnosis and learning. | No direct external interaction besides repeated model calls. |
+| `services/ai-worker/app/reasoning_checks/checks.py` and `retry.py` | Post-generation checks for synchronous and streamed candidates. Failed streamed candidates are reset before retry and never become final results. | Used by diagnosis and learning. | No direct external interaction besides repeated model calls. |
 | `services/ai-worker/app/embeddings.py` | Deterministic embedding generation used for local/vector retrieval and memory sync. | Used by `rag.py`, `vector_store.py`, and `main.py`. | Supports Qdrant vector writes/searches. |
 | `services/ai-worker/app/agent_output.py` | Structured output formatting for learning/diagnosis responses. | Used mainly by the Learning Agent and transition path. | No direct external interaction. |
 
@@ -229,10 +229,11 @@ Browser
   -> MessageController
   -> DiagnosisService
   -> AiWorkerClient
-  -> AI Worker /agent/diagnose
-  -> rag.py + agent.py + model routing
-  -> Qdrant + external LLM
-  -> API SSE frames
+  -> AI Worker /agent/diagnose/stream
+  -> rag.py + agent.py + streaming model routing/self-check
+  -> Qdrant + external LLM SSE
+  -> API forwards status/delta/reset frames
+  -> API persists the final result and emits diagnosis
   -> Web progressive rendering
 ```
 
@@ -245,10 +246,10 @@ Browser
   -> MessageController
   -> LearningService
   -> AiWorkerClient
-  -> AI Worker /agent/learn or /agent/transition
+  -> AI Worker /agent/learn/stream or /agent/transition/stream
   -> learning_agent.py or agent_transition.py
-  -> Qdrant + external LLM
-  -> SSE response back to Web
+  -> Qdrant + external LLM SSE
+  -> status/delta/reset plus one final diagnosis event back to Web
 ```
 
 ### 4.3 Report export flow

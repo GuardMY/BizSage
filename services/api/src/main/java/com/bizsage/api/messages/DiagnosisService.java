@@ -11,6 +11,7 @@ import com.bizsage.api.memory.UserMemoryStore;
 import com.bizsage.api.users.UserAccount;
 import com.bizsage.api.worker.AiWorkerClient;
 import com.bizsage.api.worker.AiWorkerException;
+import com.bizsage.api.worker.AgentStreamListener;
 import com.bizsage.api.worker.DiagnoseRequest;
 import com.bizsage.api.worker.DiagnoseResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -62,6 +63,22 @@ public class DiagnosisService {
    * @throws AiWorkerException Worker 不可用或 LLM 未配置时抛出
    */
   public String diagnose(Conversation conversation, UserAccount user, String question) {
+    return diagnoseInternal(conversation, user, question, null);
+  }
+
+  public String diagnoseStream(
+      Conversation conversation,
+      UserAccount user,
+      String question,
+      AgentStreamListener listener) {
+    return diagnoseInternal(conversation, user, question, listener);
+  }
+
+  private String diagnoseInternal(
+      Conversation conversation,
+      UserAccount user,
+      String question,
+      AgentStreamListener listener) {
     // 1. 先持久化用户问题，保证 Worker 失败时也能追踪本次提问。
     long userMessageId = messageStore.append(
         conversation.id(),
@@ -99,7 +116,9 @@ public class DiagnosisService {
     // 5. 调用 AI Worker；严格失败，不做本地答案兜底。
     DiagnoseResponse response;
     try {
-      response = aiWorkerClient.diagnose(request);
+      response = listener == null
+          ? aiWorkerClient.diagnose(request)
+          : aiWorkerClient.streamDiagnose(request, listener);
     } catch (AiWorkerException ex) {
       log.error("AI worker diagnosis failed for conversation {}: {}", conversation.id(), ex.getMessage());
       throw ex;

@@ -2,6 +2,8 @@ package com.bizsage.api;
 
 import com.bizsage.api.worker.AiWorkerClient;
 import com.bizsage.api.worker.AiWorkerException;
+import com.bizsage.api.worker.AgentStreamEvent;
+import com.bizsage.api.worker.AgentStreamListener;
 import com.bizsage.api.worker.DiagnoseRequest;
 import com.bizsage.api.worker.DiagnoseResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -66,12 +68,26 @@ class MessageStreamApiTest {
 
   @BeforeEach
   void setUpWorkerMock() {
-    when(aiWorkerClient.diagnose(any(DiagnoseRequest.class)))
+    when(aiWorkerClient.streamDiagnose(
+        any(DiagnoseRequest.class), any(AgentStreamListener.class)))
         .thenAnswer(invocation -> {
           DiagnoseRequest req = invocation.getArgument(0);
           String answer = "For " + req.question()
               + ", review revenue, table turns, ingredient loss, platform fees, rent ratio, and collection timing first. "
               + "Cashflow baseline evidence was retrieved.";
+          emitDeltas(invocation.getArgument(1), answer);
+          return fakeResponse(answer);
+        });
+    when(aiWorkerClient.streamLearn(any(), any(AgentStreamListener.class)))
+        .thenAnswer(invocation -> {
+          String answer = "Learning guidance streamed from the worker.";
+          emitDeltas(invocation.getArgument(1), answer);
+          return fakeResponse(answer);
+        });
+    when(aiWorkerClient.streamTransition(any(), any(AgentStreamListener.class)))
+        .thenAnswer(invocation -> {
+          String answer = "Transition guidance streamed from the worker.";
+          emitDeltas(invocation.getArgument(1), answer);
           return fakeResponse(answer);
         });
   }
@@ -88,10 +104,15 @@ class MessageStreamApiTest {
       .andExpect(request().asyncStarted())
       .andReturn();
 
+    assertThat(initial.getResponse().getHeader("Cache-Control")).isEqualTo("no-cache");
+    assertThat(initial.getResponse().getHeader("X-Accel-Buffering")).isEqualTo("no");
     String body = awaitStreamBody(initial);
 
     assertThat(body).contains("event: diagnosis");
-    assertThat(body.split("event: diagnosis", -1).length).isGreaterThan(2);
+    assertThat(body).contains("event: delta");
+    assertThat(body.split("event: diagnosis", -1).length).isEqualTo(2);
+    assertThat(body.indexOf("event: status")).isLessThan(body.indexOf("event: delta"));
+    assertThat(body.indexOf("event: delta")).isLessThan(body.indexOf("event: diagnosis"));
     assertThat(body).contains("cashflow diagnosis");
     assertThat(body).contains("Cashflow baseline");
     assertThat(body).contains("Disclaimer");
@@ -144,7 +165,8 @@ class MessageStreamApiTest {
       .andReturn();
     awaitStreamBody(firstPass);
 
-    when(aiWorkerClient.diagnose(any(DiagnoseRequest.class)))
+    when(aiWorkerClient.streamDiagnose(
+        any(DiagnoseRequest.class), any(AgentStreamListener.class)))
         .thenAnswer(invocation -> {
           DiagnoseRequest req = invocation.getArgument(0);
           String answer = "We discussed the operating context already. Preference: CONCLUSION_FIRST. "
@@ -240,7 +262,8 @@ class MessageStreamApiTest {
 
   @Test
   void conversationMessageStreamKeepsUnstructuredMemoryInMysqlWithoutCreatingVectorEmbeddings() throws Exception {
-    when(aiWorkerClient.diagnose(any(DiagnoseRequest.class)))
+    when(aiWorkerClient.streamDiagnose(
+        any(DiagnoseRequest.class), any(AgentStreamListener.class)))
         .thenReturn(new DiagnoseResponse(
             "Narrative memory stored in MySQL only.",
             List.of(),
@@ -284,7 +307,8 @@ class MessageStreamApiTest {
 
   @Test
   void conversationMessageStreamRefreshesExistingMemoryInsteadOfCreatingDuplicateActiveRows() throws Exception {
-    when(aiWorkerClient.diagnose(any(DiagnoseRequest.class)))
+    when(aiWorkerClient.streamDiagnose(
+        any(DiagnoseRequest.class), any(AgentStreamListener.class)))
         .thenReturn(new DiagnoseResponse(
             "Updated preference memory.",
             List.of(),
@@ -352,7 +376,8 @@ class MessageStreamApiTest {
 
   @Test
   void conversationMessageStreamReturnsErrorWhenWorkerFails() throws Exception {
-    when(aiWorkerClient.diagnose(any(DiagnoseRequest.class)))
+    when(aiWorkerClient.streamDiagnose(
+        any(DiagnoseRequest.class), any(AgentStreamListener.class)))
         .thenThrow(new AiWorkerException("AI worker is not reachable"));
 
     String token = login("user");
@@ -370,6 +395,39 @@ class MessageStreamApiTest {
     assertThat(body).contains("event: error");
     assertThat(body).contains("WORKER_UNREACHABLE");
     assertThat(body).doesNotContain("event: diagnosis");
+  }
+
+  @Test
+  void learningAndTransitionStreamsForwardRealWorkerDeltas() throws Exception {
+    String token = login("user");
+    long conversationId = createConversation(token);
+
+    MvcResult learning = mvc.perform(post("/api/conversations/" + conversationId + "/messages/learn/stream")
+        .header("Authorization", "Bearer " + token)
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"question\":\"teach inventory\",\"learningMode\":\"FAST_START\"}"))
+      .andExpect(request().asyncStarted())
+      .andReturn();
+
+    String learningBody = awaitStreamBody(learning);
+    assertThat(learningBody).contains("event: delta", "Learning guidance", "event: diagnosis");
+
+    MvcResult transition = mvc.perform(post("/api/conversations/" + conversationId + "/messages/transition/stream")
+        .header("Authorization", "Bearer " + token)
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"fromMode\":\"LEARNING\",\"toMode\":\"DIAGNOSIS\",\"question\":\"apply it\"}"))
+      .andExpect(request().asyncStarted())
+      .andReturn();
+    String transitionBody = awaitStreamBody(transition);
+    assertThat(transitionBody).contains("event: delta", "Transition guidance", "event: diagnosis");
+  }
+
+  private void emitDeltas(AgentStreamListener listener, String answer) throws Exception {
+    int split = Math.max(1, answer.length() / 2);
+    listener.onEvent(new AgentStreamEvent(
+        "delta", objectMapper.valueToTree(Map.of("text", answer.substring(0, split), "attempt", 1))));
+    listener.onEvent(new AgentStreamEvent(
+        "delta", objectMapper.valueToTree(Map.of("text", answer.substring(split), "attempt", 1))));
   }
 
   private String login(String username) throws Exception {
@@ -397,7 +455,7 @@ class MessageStreamApiTest {
   }
 
   private String awaitStreamBody(MvcResult result) throws Exception {
-    result.getAsyncResult();
+    result.getAsyncResult(5_000);
     assertThat(result.getResponse().getStatus()).isEqualTo(200);
     return result.getResponse().getContentAsString();
   }

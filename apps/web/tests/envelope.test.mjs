@@ -1,6 +1,7 @@
 ﻿import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { SseFrameDecoder } from "../lib/api-client.ts";
 
 test("API client source normalizer preserves source details", async () => {
   const source = readFileSync(new URL("../lib/api-client.ts", import.meta.url), "utf8");
@@ -118,6 +119,25 @@ test("Web page returns to the login screen on auth expiry without clearing draft
   assert.doesNotMatch(source, /setMessage\(messages\["zh-CN"\]\.defaultQuestion\)/);
 });
 
+test("SSE decoder preserves fragmented frames, resets, and split UTF-8 characters", () => {
+  const decoder = new SseFrameDecoder();
+  const bytes = new TextEncoder().encode(
+    'event: delta\ndata: {"text":"经营"}\n\n' +
+    'event: reset\ndata: {"attempt":2}\n\n' +
+    'event: delta\ndata: {"text":"诊断"}\n\n'
+  );
+  const splitInsideChineseCharacter = bytes.indexOf(0xe7) + 1;
+
+  const first = decoder.push(bytes.slice(0, splitInsideChineseCharacter));
+  const second = decoder.push(bytes.slice(splitInsideChineseCharacter));
+  const final = decoder.finish();
+  const events = [...first, ...second, ...final];
+
+  assert.deepEqual(events.map((event) => event.event), ["delta", "reset", "delta"]);
+  assert.equal(JSON.parse(events[0].data).text, "经营");
+  assert.equal(JSON.parse(events[2].data).text, "诊断");
+});
+
 test("Web page starts the diagnosis composer without a default submit value", async () => {
   const pageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   const typeSource = readFileSync(new URL("../app/components/workspace-types.ts", import.meta.url), "utf8");
@@ -210,8 +230,16 @@ test("Diagnosis workspace auto-follows streaming conversation updates", async ()
 test("Diagnosis workspace avoids rendering a second standalone assistant bubble after history refresh", async () => {
   const source = readFileSync(new URL("../app/components/diagnosis-workspace.tsx", import.meta.url), "utf8");
   assert.match(source, /const hasAssistantReply = messageHistory\.some\(\(messageItem\) => messageItem\.sender === "ASSISTANT"\);/);
+  assert.match(source, /streamingDiagnosis \?\? \(!hasAssistantReply \? diagnosis : null\)/);
   assert.doesNotMatch(source, /\{diagnosis && \(\s*<div[\s\S]*?<Markdown content=\{diagnosis\.answer\} \/>[\s\S]*?\)\}/);
   assert.match(source, /\) : displayedDiagnosis \|\| hasAssistantReply \? \(/);
+});
+
+test("Diagnosis workspace shows follow-up streaming and clears it after history refresh", async () => {
+  const workspace = readFileSync(new URL("../app/components/diagnosis-workspace.tsx", import.meta.url), "utf8");
+  const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(workspace, /\{displayedDiagnosis && \(/);
+  assert.match(page, /setMessageHistory\(updatedMessages\);\s*setStreamingDiagnosis\(null\);/);
 });
 
 test("Admin V3 API client exposes real services/api endpoints for Admin-V3-1 and Admin-V3-2", async () => {

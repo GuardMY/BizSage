@@ -8,15 +8,19 @@ from __future__ import annotations
 """
 
 import hashlib
+import json
 import os
+from collections.abc import Iterator
 
 from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from qdrant_client import QdrantClient
 
-from app.agent import diagnose
-from app.agent_transition import AgentMode, execute_transition
-from app.learning_agent import LearningMode, learn
+from app.agent import diagnose, diagnose_stream
+from app.agent_transition import AgentMode, execute_transition, execute_transition_stream
+from app.learning_agent import LearningMode, learn, learn_stream
+from app.llm import LLMCallError, LLMNotConfiguredError
 from app.rag import KnowledgeItem, search_knowledge
 from app.vector_store import QdrantVectorStore
 
@@ -260,6 +264,46 @@ def diagnose_endpoint(request: DiagnoseRequest) -> dict:
         cleanup_request_collection(vector_store, request_knowledge)
 
 
+@app.post("/agent/diagnose/stream")
+def diagnose_stream_endpoint(request: DiagnoseRequest) -> StreamingResponse:
+    """真实流式诊断端点：模型 delta、自检 reset 和最终结果按 SSE 输出。"""
+    request_knowledge = parse_knowledge(request.knowledge)
+    knowledge = request_knowledge or SEED_KNOWLEDGE
+    vector_store = build_vector_store(build_request_collection_name(request_knowledge))
+
+    def events() -> Iterator[str]:
+        try:
+            vector_store.upsert_knowledge(knowledge)
+            from app.context_compressor import CompressConfig
+
+            compress_cfg = None
+            if request.compress_config is not None:
+                compress_cfg = CompressConfig(
+                    total_token_budget=request.compress_config.total_token_budget,
+                    min_chars_per_item=request.compress_config.min_chars_per_item,
+                    max_chars_per_item=request.compress_config.max_chars_per_item,
+                    merge_similarity_threshold=request.compress_config.merge_similarity_threshold,
+                )
+            yield from _encode_agent_events(diagnose_stream(
+                request.question,
+                knowledge=knowledge,
+                recent_messages=request.recent_messages,
+                conversation_summary=request.conversation_summary,
+                long_term_memories=request.long_term_memories,
+                region_id=request.region_id,
+                industry_id=request.industry_id,
+                membership_level=request.membership_level,
+                conflict_labels=request.conflict_labels,
+                vector_store=vector_store,
+                restrict_to_knowledge_ids=True,
+                compress_config=compress_cfg,
+            ))
+        finally:
+            cleanup_request_collection(vector_store, request_knowledge)
+
+    return _agent_stream_response(events())
+
+
 @app.post("/agent/learn")
 def learn_endpoint(request: LearnRequest) -> dict:
     """学习接口：按学习模式和链条节点执行 RAG + 学习 Agent。"""
@@ -304,6 +348,47 @@ def learn_endpoint(request: LearnRequest) -> dict:
         cleanup_request_collection(vector_store, request_knowledge)
 
 
+@app.post("/agent/learn/stream")
+def learn_stream_endpoint(request: LearnRequest) -> StreamingResponse:
+    """真实流式学习端点。"""
+    request_knowledge = parse_knowledge(request.knowledge)
+    knowledge = request_knowledge or SEED_KNOWLEDGE
+    vector_store = build_vector_store(build_request_collection_name(request_knowledge))
+
+    def events() -> Iterator[str]:
+        try:
+            vector_store.upsert_knowledge(knowledge)
+            from app.context_compressor import CompressConfig
+
+            compress_cfg = None
+            if request.compress_config is not None:
+                compress_cfg = CompressConfig(
+                    total_token_budget=request.compress_config.total_token_budget,
+                    min_chars_per_item=request.compress_config.min_chars_per_item,
+                    max_chars_per_item=request.compress_config.max_chars_per_item,
+                    merge_similarity_threshold=request.compress_config.merge_similarity_threshold,
+                )
+            yield from _encode_agent_events(learn_stream(
+                request.question,
+                knowledge=knowledge,
+                chain_node_id=request.chain_node_id,
+                learning_mode=request.learning_mode,
+                recent_messages=request.recent_messages,
+                conversation_summary=request.conversation_summary,
+                long_term_memories=request.long_term_memories,
+                region_id=request.region_id,
+                industry_id=request.industry_id,
+                membership_level=request.membership_level,
+                vector_store=vector_store,
+                restrict_to_knowledge_ids=True,
+                compress_config=compress_cfg,
+            ))
+        finally:
+            cleanup_request_collection(vector_store, request_knowledge)
+
+    return _agent_stream_response(events())
+
+
 @app.post("/agent/transition")
 def transition_endpoint(request: TransitionRequest) -> dict:
     """双 Agent 模式切换接口，保留上下文后路由到目标 Agent。"""
@@ -335,6 +420,37 @@ def transition_endpoint(request: TransitionRequest) -> dict:
         return result
     finally:
         cleanup_request_collection(vector_store, request_knowledge)
+
+
+@app.post("/agent/transition/stream")
+def transition_stream_endpoint(request: TransitionRequest) -> StreamingResponse:
+    """真实流式双 Agent 模式切换端点。"""
+    request_knowledge = parse_knowledge(request.knowledge)
+    knowledge = request_knowledge or SEED_KNOWLEDGE
+    vector_store = build_vector_store(build_request_collection_name(request_knowledge))
+
+    def events() -> Iterator[str]:
+        try:
+            vector_store.upsert_knowledge(knowledge)
+            yield from _encode_agent_events(execute_transition_stream(
+                from_mode=request.from_mode,
+                to_mode=request.to_mode,
+                user_question=request.question,
+                knowledge=knowledge,
+                chain_node_id=request.chain_node_id,
+                recent_messages=request.recent_messages,
+                conversation_summary=request.conversation_summary,
+                long_term_memories=request.long_term_memories,
+                region_id=request.region_id,
+                industry_id=request.industry_id,
+                membership_level=request.membership_level,
+                vector_store=vector_store,
+                restrict_to_knowledge_ids=True,
+            ))
+        finally:
+            cleanup_request_collection(vector_store, request_knowledge)
+
+    return _agent_stream_response(events())
 
 
 @app.post("/memory/sync")
@@ -477,6 +593,48 @@ def _check_llm_error(result: dict):
             "message": "The upstream LLM provider returned an error or empty response.",
         })
     return None
+
+
+def _encode_agent_events(events: Iterator[dict]) -> Iterator[str]:
+    """Convert internal Agent events to the Worker-to-API SSE protocol."""
+    try:
+        for item in events:
+            event_name = item["event"]
+            data = item["result"] if event_name == "result" else {
+                key: value for key, value in item.items() if key != "event"
+            }
+            yield _sse(event_name, data)
+    except LLMNotConfiguredError:
+        yield _sse("error", {
+            "error": "LLM_NOT_CONFIGURED",
+            "message": "The AI engine is not configured.",
+        })
+    except LLMCallError:
+        yield _sse("error", {
+            "error": "LLM_CALL_FAILED",
+            "message": "The upstream model call failed.",
+        })
+    except Exception:
+        yield _sse("error", {
+            "error": "WORKER_ERROR",
+            "message": "The AI worker could not complete the stream.",
+        })
+
+
+def _sse(event_name: str, data: dict) -> str:
+    payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    return f"event: {event_name}\ndata: {payload}\n\n"
+
+
+def _agent_stream_response(events: Iterator[str]) -> StreamingResponse:
+    return StreamingResponse(
+        events,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 def cleanup_request_collection(vector_store: QdrantVectorStore, request_knowledge: list[KnowledgeItem]) -> None:

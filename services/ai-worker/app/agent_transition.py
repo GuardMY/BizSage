@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from app.agent import diagnose
+from app.agent import diagnose, diagnose_stream
 from app.agent_output import (
     DISCLAIMER_DIAGNOSIS,
     DISCLAIMER_LEARNING,
@@ -23,7 +23,7 @@ from app.agent_output import (
     format_learning_output,
     render_agent_output,
 )
-from app.learning_agent import CHAIN_NODES, learn
+from app.learning_agent import CHAIN_NODES, learn, learn_stream
 from app.memory import MemoryCategory, build_memory_context, extract_transition_memories
 from app.rag import KnowledgeItem
 
@@ -189,6 +189,75 @@ def execute_transition(
         )
     else:
         raise ValueError(f"Unknown target mode: {to_mode}")
+
+
+def execute_transition_stream(
+    from_mode: str,
+    to_mode: str,
+    user_question: str,
+    *,
+    knowledge: list[KnowledgeItem],
+    chain_node_id: str | None = None,
+    recent_messages: list[dict] | None = None,
+    conversation_summary: str | None = None,
+    long_term_memories: list[dict] | None = None,
+    region_id: str | None = None,
+    industry_id: str | None = None,
+    membership_level: str = "FREE",
+    vector_store: object | None = None,
+    restrict_to_knowledge_ids: bool = False,
+):
+    """Stream a transition through the selected target Agent."""
+    augmented_question = build_transition_prompt(
+        from_mode=from_mode,
+        to_mode=to_mode,
+        user_question=user_question,
+        chain_node_id=chain_node_id,
+        conversation_summary=conversation_summary,
+    )
+    previous_answer = _extract_last_assistant_content(recent_messages)
+    transition_candidates = extract_transition_memories(
+        from_mode=from_mode,
+        to_mode=to_mode,
+        user_question=user_question,
+        previous_answer=previous_answer,
+        chain_node_id=chain_node_id,
+    )
+    all_memories = (long_term_memories or []) + transition_candidates
+    augmented_summary = _build_transition_summary(
+        from_mode, to_mode, conversation_summary
+    )
+
+    if to_mode == AgentMode.DIAGNOSIS:
+        yield from diagnose_stream(
+            augmented_question,
+            knowledge=knowledge,
+            recent_messages=recent_messages,
+            conversation_summary=augmented_summary,
+            long_term_memories=all_memories,
+            region_id=region_id,
+            industry_id=industry_id,
+            membership_level=membership_level,
+            vector_store=vector_store,
+            restrict_to_knowledge_ids=restrict_to_knowledge_ids,
+        )
+        return
+    if to_mode == AgentMode.LEARNING:
+        yield from learn_stream(
+            augmented_question,
+            knowledge=knowledge,
+            chain_node_id=chain_node_id,
+            recent_messages=recent_messages,
+            conversation_summary=augmented_summary,
+            long_term_memories=all_memories,
+            region_id=region_id,
+            industry_id=industry_id,
+            membership_level=membership_level,
+            vector_store=vector_store,
+            restrict_to_knowledge_ids=restrict_to_knowledge_ids,
+        )
+        return
+    raise ValueError(f"Unknown target mode: {to_mode}")
 
 
 # ---------------------------------------------------------------------------

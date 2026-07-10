@@ -47,7 +47,7 @@ export function DiagnosisWorkspace({
   t
 }: DiagnosisWorkspaceProps) {
   const hasAssistantReply = messageHistory.some((messageItem) => messageItem.sender === "ASSISTANT");
-  const displayedDiagnosis = streamingDiagnosis ?? diagnosis;
+  const displayedDiagnosis = streamingDiagnosis ?? (!hasAssistantReply ? diagnosis : null);
   const messagesRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -96,7 +96,7 @@ export function DiagnosisWorkspace({
             </div>
           )}
 
-          {!hasAssistantReply && displayedDiagnosis && (
+          {displayedDiagnosis && (
             <div
               className={`bubble agent${
                 displayedDiagnosis.selfCheckStatus && displayedDiagnosis.selfCheckStatus !== "PASSED"

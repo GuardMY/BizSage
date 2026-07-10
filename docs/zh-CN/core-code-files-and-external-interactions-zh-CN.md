@@ -117,7 +117,7 @@ Collector
 |------|----------|----------|----------|
 | `services/api/src/main/java/com/bizsage/api/conversations/ConversationController.java` | 创建/列出/归档/删除会话，并带有缓存与数据范围校验。 | 使用 `ConversationStore`、`UserStore`、`CacheMetrics` 与 `DataIsolationService`。 | 对 MySQL 中的会话数据读写。 |
 | `services/api/src/main/java/com/bizsage/api/conversations/ConversationStore.java` | 会话 SQL 持久化边界。 | 被会话与消息链路使用。 | MySQL 读写边界。 |
-| `services/api/src/main/java/com/bizsage/api/messages/MessageController.java` | 诊断、学习、模式切换三类 SSE 接口，以及消息历史列表接口。 | 使用 `DiagnosisService`、`LearningService`、`ConversationStore`、`ConversationMessageStore` 与 `UserStore`。 | 向 Web 返回 SSE 流。 |
+| `services/api/src/main/java/com/bizsage/api/messages/MessageController.java` | 诊断、学习、模式切换三类真实增量 SSE 接口。负责转发 worker 的 `status`/`delta`/`reset`，并发送唯一的最终 `diagnosis`。 | 使用 `DiagnosisService`、`LearningService`、`ConversationStore`、`ConversationMessageStore` 与 `UserStore`。 | 关闭代理缓冲并逐帧 flush 到 Web。 |
 | `services/api/src/main/java/com/bizsage/api/messages/DiagnosisService.java` | 诊断编排核心。持久化用户/助手消息，加载知识与记忆上下文，调用 AI worker，保存记忆候选，并推进会话摘要。 | 使用 `AiWorkerClient`、消息/摘要存储、`UserMemoryStore`、`KnowledgeStore` 与 `IntelligenceStore`。 | 调用 AI worker，并读写 MySQL。 |
 | `services/api/src/main/java/com/bizsage/api/messages/LearningService.java` | 学习 Agent 与双 Agent 切换编排核心，持久化模式与诊断服务类似。 | 使用 `AiWorkerClient`、消息/摘要存储、记忆存储、知识存储与情报存储。 | 调用 AI worker，并读写 MySQL。 |
 | `services/api/src/main/java/com/bizsage/api/messages/ConversationMessageStore.java` 与 `ConversationSummaryStore.java` | 原始消息与压缩会话摘要的持久化边界。 | 被诊断、学习、报告链路复用。 | MySQL 读写边界。 |
@@ -131,7 +131,7 @@ Collector
 | `services/api/src/main/java/com/bizsage/api/intelligence/PaidIntelligenceController.java` 与 `PaidIntelligenceStore.java` | 面向会员等级的付费情报列表接口。 | 结合灰度与权益过滤。 | 将付费情报返回给 Web。 |
 | `services/api/src/main/java/com/bizsage/api/memory/UserMemoryStore.java` | 用户记忆持久化、生命周期刷新与活跃记忆查询。 | 被诊断/学习链路和记忆同步调度使用。 | 访问 MySQL 记忆表。 |
 | `services/api/src/main/java/com/bizsage/api/memory/UserMemoryEmbeddingStore.java` 与 `MemorySyncScheduler.java` | 非结构化记忆的向量同步暂存与定时推送逻辑。 | 使用 `AiWorkerClient`。 | 将记忆向量同步到 AI worker/Qdrant 路径。 |
-| `services/api/src/main/java/com/bizsage/api/worker/AiWorkerClient.java` | API 到 AI worker 的主 HTTP 适配器。处理 diagnose、learn、transition、knowledge sync/delete、memory sync 与健康检查。 | 被诊断、学习、启动同步与记忆同步复用。 | 通过 HTTP 调用 FastAPI AI worker。 |
+| `services/api/src/main/java/com/bizsage/api/worker/AiWorkerClient.java` | API 到 AI worker 的主 HTTP 适配器。除同步调用外，还增量消费 diagnose、learn、transition 的 SSE。 | 被诊断、学习、启动同步与记忆同步复用。 | 调用 FastAPI AI worker；下游停止传输时关闭上游流。 |
 | `services/api/src/main/java/com/bizsage/api/worker/KnowledgeSyncInitializer.java` | 启动时从 MySQL 知识库向 worker/Qdrant 做全量重同步。 | 使用 `KnowledgeStore` 与 `AiWorkerClient`。 | 同步持久向量知识库。 |
 
 #### 报告、灰度、隐私、健康与运维
@@ -176,9 +176,9 @@ Collector
 | `services/ai-worker/app/memory.py` | 三层记忆上下文构建、LLM/正则记忆抽取、自动遗忘、向量同步判断与记忆合并。 | 被诊断、学习与模式切换复用。 | 记忆抽取时会间接通过模型路由调用 LLM。 |
 | `services/ai-worker/app/llm.py` | OpenAI-compatible 提供方配置封装与旧兼容方法。 | 被模型路由和旧封装路径间接使用。 | 读取提供方环境变量并访问外部 LLM 接口。 |
 | `services/ai-worker/app/context_compressor.py` | 将检索出的证据压缩到模型上下文预算内。 | 被诊断与学习流程调用。 | 无直接外部交互。 |
-| `services/ai-worker/app/model_routing/router.py`、`models.py` 与 `providers.py` | 根据任务类型选择模型/提供方并执行调用。 | 被诊断、学习、记忆抽取与自检重试使用。 | 调用外部 OpenAI-compatible 模型服务。 |
+| `services/ai-worker/app/model_routing/router.py`、`models.py` 与 `providers.py` | 根据任务选择模型/提供方，并执行同步或 `stream: true` 调用；流式故障转移会先 reset 再输出替代结果。 | 被诊断、学习、记忆抽取与自检重试使用。 | 解析外部 OpenAI-compatible SSE，只转发回答正文。 |
 | `services/ai-worker/app/prompt_library/assembler.py`、`layers.py` 与 `defaults.py` | 负责诊断/学习模式的分层 Prompt 组装。 | 被诊断与学习流程使用。 | 无直接外部交互。 |
-| `services/ai-worker/app/reasoning_checks/checks.py` 与 `retry.py` | 生成后自检与重试策略。 | 被诊断与学习流程使用。 | 除重复模型调用外，无其他外部交互。 |
+| `services/ai-worker/app/reasoning_checks/checks.py` 与 `retry.py` | 同步及流式候选的生成后自检与重试策略；未通过的流式候选会在重试前 reset，且不会成为最终结果。 | 被诊断与学习流程使用。 | 除重复模型调用外，无其他外部交互。 |
 | `services/ai-worker/app/embeddings.py` | 用于本地/向量检索和记忆同步的确定性向量生成。 | 被 `rag.py`、`vector_store.py` 与 `main.py` 使用。 | 支撑 Qdrant 向量写入与搜索。 |
 | `services/ai-worker/app/agent_output.py` | 学习/诊断响应的结构化输出格式化。 | 主要被学习 Agent 与模式切换路径使用。 | 无直接外部交互。 |
 
@@ -229,10 +229,11 @@ Collector
   -> MessageController
   -> DiagnosisService
   -> AiWorkerClient
-  -> AI Worker /agent/diagnose
-  -> rag.py + agent.py + model routing
-  -> Qdrant + 外部 LLM
-  -> API SSE 帧
+  -> AI Worker /agent/diagnose/stream
+  -> rag.py + agent.py + 流式模型路由/自检
+  -> Qdrant + 外部 LLM SSE
+  -> API 转发 status/delta/reset 帧
+  -> API 持久化最终结果并发送 diagnosis
   -> Web 渐进渲染
 ```
 
@@ -245,10 +246,10 @@ Collector
   -> MessageController
   -> LearningService
   -> AiWorkerClient
-  -> AI Worker /agent/learn 或 /agent/transition
+  -> AI Worker /agent/learn/stream 或 /agent/transition/stream
   -> learning_agent.py 或 agent_transition.py
-  -> Qdrant + 外部 LLM
-  -> SSE 返回 Web
+  -> Qdrant + 外部 LLM SSE
+  -> status/delta/reset 和唯一的最终 diagnosis 返回 Web
 ```
 
 ### 4.3 报告导出流程

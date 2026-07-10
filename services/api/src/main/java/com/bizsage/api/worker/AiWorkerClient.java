@@ -1,7 +1,12 @@
 package com.bizsage.api.worker;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.ConnectException;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -98,6 +103,11 @@ public class AiWorkerClient {
       throw new AiWorkerException(
           "Unexpected error calling AI worker: " + ex.getMessage(), ex);
     }
+  }
+
+  public DiagnoseResponse streamDiagnose(
+      DiagnoseRequest request, AgentStreamListener listener) {
+    return streamAgent("/agent/diagnose/stream", request, listener);
   }
 
   /**
@@ -271,6 +281,11 @@ public class AiWorkerClient {
     }
   }
 
+  public DiagnoseResponse streamLearn(
+      LearningRequest request, AgentStreamListener listener) {
+    return streamAgent("/agent/learn/stream", request, listener);
+  }
+
   /**
    * 执行学习与诊断之间的双 Agent 模式切换。
    */
@@ -308,6 +323,99 @@ public class AiWorkerClient {
     } catch (Exception ex) {
       throw new AiWorkerException("Unexpected error calling AI worker transition: " + ex.getMessage(), ex);
     }
+  }
+
+  public DiagnoseResponse streamTransition(
+      TransitionRequest request, AgentStreamListener listener) {
+    return streamAgent("/agent/transition/stream", request, listener);
+  }
+
+  private DiagnoseResponse streamAgent(
+      String path, Object requestBody, AgentStreamListener listener) {
+    try {
+      DiagnoseResponse result = restClient.post()
+          .uri(path)
+          .contentType(MediaType.APPLICATION_JSON)
+          .accept(MediaType.TEXT_EVENT_STREAM)
+          .body(requestBody)
+          .exchange((request, response) -> {
+            if (response.getStatusCode().isError()) {
+              String body = new String(response.getBody().readAllBytes(), StandardCharsets.UTF_8);
+              throw new AiWorkerException(
+                  "AI worker stream error (HTTP " + response.getStatusCode().value() + "): " + body,
+                  response.getStatusCode().value());
+            }
+            return readAgentStream(response.getBody(), listener);
+          });
+      if (result == null) {
+        throw new AiWorkerException("AI worker stream ended without a result event");
+      }
+      return result;
+    } catch (AiWorkerException ex) {
+      throw ex;
+    } catch (ResourceAccessException ex) {
+      Throwable root = ex.getCause();
+      if (root instanceof ConnectException) {
+        throw new AiWorkerException("AI worker is not reachable", ex);
+      }
+      if (root instanceof TimeoutException) {
+        throw new AiWorkerException("AI worker stream timed out", ex);
+      }
+      throw new AiWorkerException("AI worker connection failed: " + ex.getMessage(), ex);
+    } catch (Exception ex) {
+      throw new AiWorkerException("Unexpected error reading AI worker stream: " + ex.getMessage(), ex);
+    }
+  }
+
+  private DiagnoseResponse readAgentStream(
+      java.io.InputStream inputStream, AgentStreamListener listener) throws IOException {
+    try (BufferedReader reader = new BufferedReader(
+        new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+      String eventName = "message";
+      StringBuilder data = new StringBuilder();
+      DiagnoseResponse result = null;
+      String line;
+      while ((line = reader.readLine()) != null) {
+        if (line.isEmpty()) {
+          if (!data.isEmpty()) {
+            result = dispatchWorkerEvent(eventName, data.toString(), listener, result);
+          }
+          eventName = "message";
+          data.setLength(0);
+          continue;
+        }
+        if (line.startsWith("event:")) {
+          eventName = line.substring("event:".length()).trim();
+        } else if (line.startsWith("data:")) {
+          if (!data.isEmpty()) data.append('\n');
+          data.append(line.substring("data:".length()).stripLeading());
+        }
+      }
+      if (!data.isEmpty()) {
+        result = dispatchWorkerEvent(eventName, data.toString(), listener, result);
+      }
+      return result;
+    }
+  }
+
+  private DiagnoseResponse dispatchWorkerEvent(
+      String eventName,
+      String payload,
+      AgentStreamListener listener,
+      DiagnoseResponse currentResult) throws IOException {
+    JsonNode data = objectMapper.readTree(payload);
+    if ("result".equals(eventName)) {
+      return objectMapper.treeToValue(data, DiagnoseResponse.class);
+    }
+    if ("error".equals(eventName)) {
+      String code = data.path("error").asText("WORKER_ERROR");
+      String message = data.path("message").asText("AI worker stream failed");
+      throw new AiWorkerException(code + ": " + message);
+    }
+    if ("status".equals(eventName) || "delta".equals(eventName) || "reset".equals(eventName)) {
+      listener.onEvent(new AgentStreamEvent(eventName, data));
+    }
+    return currentResult;
   }
 
   /**

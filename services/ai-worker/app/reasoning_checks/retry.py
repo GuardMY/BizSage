@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from typing import Callable
 
 from app.reasoning_checks.checks import (
@@ -68,3 +69,81 @@ def run_with_retry(
 
     # 所有重试耗尽后，不输出未经验证的原始回答。
     return UNCERTAIN_RESPONSE, "SELF_CHECK_FAILED"
+
+
+def run_with_retry_stream(
+    llm_stream_fn: Callable[[list[dict]], Iterator[dict]],
+    messages: list[dict],
+    evidence: list[dict],
+    region_id: str | None = None,
+    output_format: str | None = None,
+    config: dict | None = None,
+    max_retries: int | None = None,
+) -> Iterator[dict]:
+    """Stream each candidate, then validate and reset before any retry."""
+    if max_retries is None:
+        max_retries = int(os.getenv("MAX_SELF_CHECK_RETRIES", "3"))
+
+    working_messages: list[dict] = list(messages)
+    for attempt_index in range(max_retries + 1):
+        attempt = attempt_index + 1
+        answer_parts: list[str] = []
+
+        for event in llm_stream_fn(working_messages):
+            if event["event"] == "delta":
+                answer_parts.append(event["text"])
+                yield {**event, "attempt": attempt}
+            elif event["event"] == "reset":
+                answer_parts.clear()
+                yield {**event, "attempt": attempt}
+
+        answer = "".join(answer_parts)
+        yield {"event": "status", "state": "validating", "attempt": attempt}
+        check_results = run_all_checks(
+            answer,
+            evidence,
+            region_id=region_id,
+            output_format=output_format,
+            config=config,
+        )
+        status = aggregate_check_results(check_results)
+        if status == "PASSED":
+            yield {
+                "event": "result",
+                "answer": answer,
+                "selfCheckStatus": "PASSED",
+                "attempt": attempt,
+            }
+            return
+
+        if attempt_index < max_retries:
+            feedback = build_feedback(check_results)
+            if feedback:
+                working_messages.append({"role": "assistant", "content": answer})
+                working_messages.append({"role": "user", "content": feedback})
+            yield {
+                "event": "reset",
+                "reason": "SELF_CHECK_RETRY",
+                "attempt": attempt + 1,
+            }
+            yield {
+                "event": "status",
+                "state": "retrying",
+                "attempt": attempt + 1,
+                "message": "正在校验并优化回答…",
+            }
+            continue
+
+        yield {
+            "event": "reset",
+            "reason": "SELF_CHECK_RETRY",
+            "attempt": attempt,
+        }
+        yield {"event": "delta", "text": UNCERTAIN_RESPONSE, "attempt": attempt}
+        yield {
+            "event": "result",
+            "answer": UNCERTAIN_RESPONSE,
+            "selfCheckStatus": "SELF_CHECK_FAILED",
+            "attempt": attempt,
+        }
+        return

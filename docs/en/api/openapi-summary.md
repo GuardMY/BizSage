@@ -39,7 +39,23 @@ All JSON endpoints return:
 - `POST /conversations/{id}/messages/stream`
   - Produces: `text/event-stream`
   - Body: `question`
-  - Emits `event: diagnosis` with answer, sources, confidence, timeliness, and disclaimer.
+  - Streams `status`, `delta`, and optional `reset` events before one terminal `diagnosis` event.
+- `POST /conversations/{id}/messages/learn/stream`
+  - Produces: `text/event-stream`
+  - Body: `question`, optional `chainNodeId` and `learningMode`.
+- `POST /conversations/{id}/messages/transition/stream`
+  - Produces: `text/event-stream`
+  - Body: `fromMode`, `toMode`, `question`, and optional `chainNodeId`.
+
+All three Agent streams use the same event contract:
+
+- `status`: state (`started`, `validating`, or `retrying`), mode, and attempt number.
+- `delta`: the next answer text; clients append it to the current candidate.
+- `reset`: clears the candidate before self-check retry or provider failover.
+- `diagnosis`: the single final structured answer.
+- `error`: a stable worker error code and safe message.
+
+Only the final structured answer is persisted as an assistant message.
 
 ## Intelligence
 
@@ -100,3 +116,8 @@ AI worker:
   - Supports V2 filters: region, industry, and membership level.
 - `POST /agent/diagnose`
   - Returns selfCheckStatus and controlled output for suspicious conflicts or insufficient evidence.
+- `POST /agent/diagnose/stream`
+- `POST /agent/learn/stream`
+- `POST /agent/transition/stream`
+  - Internal API-to-worker SSE endpoints that relay model deltas, resets, and one final `result` event.
+  - Existing synchronous Agent endpoints remain available for report generation and compatibility.
