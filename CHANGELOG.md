@@ -1,5 +1,22 @@
 ﻿# Change Log
 
+## 2026-07-10
+
+### Compose Service Endpoint Defaults
+
+- Change type: deployment configuration repair.
+- Affected modules: `.env.example`, `infra/docker-compose.yml`, `infra/docker-compose-all.yml`, and both change logs.
+- Main changes:
+  - Changed the example container-network endpoints from host-only addresses to Compose service names: `mysql`, `redis`, `qdrant`, `ai-worker`, and `collector`.
+  - Updated the example MySQL, Redis, and Qdrant ports to their in-network container ports: `3306`, `6379`, and `6333`.
+  - Passed `COLLECTOR_URL` into the API container in both compose files so scheduled collection calls the `collector` service instead of the API container's `localhost`.
+  - Kept API-to-AI-worker traffic on the Compose service endpoint `http://ai-worker:8100`, avoiding stale host-only values from existing `.env` files.
+- Verification results:
+  - Used CodeGraph and targeted file inspection to trace the scheduled collection failure through `AdminCollectionScheduler`, `AdminCollectionStore`, and `AdminCollectionMapper`.
+  - Searched the deployment configuration to confirm the remaining service-to-service defaults now use Compose service names for container networking.
+- Unfinished items:
+  - Docker CLI is not installed in the current environment, so `docker compose config` and a live `docker compose -f infra/docker-compose-all.yml up -d` verification still need to be run in a Docker-enabled environment.
+
 ## 2026-07-09
 
 ### Alert Rule Collection Source Table Alignment

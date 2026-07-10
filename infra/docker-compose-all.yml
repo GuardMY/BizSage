@@ -101,6 +101,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY}
       AI_WORKER_URL: http://ai-worker:8100
+      COLLECTOR_URL: http://collector:8200
     depends_on:
       mysql:
         condition: service_healthy

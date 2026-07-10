@@ -1,5 +1,22 @@
 ﻿# 变更日志
 
+## 2026-07-10
+
+### Compose 服务端点默认值修复
+
+- 变更类型：部署配置修复。
+- 影响模块：`.env.example`、`infra/docker-compose.yml`、`infra/docker-compose-all.yml` 和两份变更日志。
+- 主要变更：
+  - 将示例容器网络端点从仅宿主机可用的地址调整为 Compose 服务名：`mysql`、`redis`、`qdrant`、`ai-worker` 和 `collector`。
+  - 将示例 MySQL、Redis、Qdrant 端口改为容器网络内部端口：`3306`、`6379` 和 `6333`。
+  - 在两份 compose 文件中为 API 容器显式传入 `COLLECTOR_URL`，避免定时采集从 API 容器内访问自身的 `localhost`。
+  - 将 API 到 AI Worker 的流量固定到 Compose 服务端点 `http://ai-worker:8100`，避免既有 `.env` 中残留的宿主机地址覆盖容器网络配置。
+- 验证结果：
+  - 修改前已使用 CodeGraph 和定向文件检查追踪定时采集错误路径，覆盖 `AdminCollectionScheduler`、`AdminCollectionStore` 和 `AdminCollectionMapper`。
+  - 已检索部署配置，确认剩余服务间默认连接值使用 Compose 服务名以适配容器网络。
+- 未完成事项：
+  - 当前环境未安装 Docker CLI，因此仍需在具备 Docker 的环境中执行 `docker compose config` 和 `docker compose -f infra/docker-compose-all.yml up -d` 做实机验证。
+
 ## 2026-07-09
 
 ### 告警规则采集源表对齐
