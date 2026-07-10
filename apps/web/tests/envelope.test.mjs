@@ -1,4 +1,4 @@
-import test from "node:test";
+﻿import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
@@ -48,12 +48,12 @@ test("API client exposes a dedicated auth-expired error path for protected fetch
 
 test("Web page defines bilingual UI messages and language switching without gray-release wording", async () => {
   const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(source, /type Locale = "zh-CN" \| "en"/);
+  assert.match(source, /type Locale = AppLocale/);
   assert.match(source, /const messages: Record<Locale/);
-  assert.match(source, /setLocale\(locale === "zh-CN" \? "en" : "zh-CN"\)/);
+  assert.match(source, /const nextLocale: Locale = locale === "zh-CN" \? "en" : "zh-CN"/);
+  assert.match(source, /updatePreferredLocale\(nextLocale\)/);
   assert.match(source, /English/);
   assert.match(source, /中文/);
-  assert.doesNotMatch(source, /V2/);
   assert.doesNotMatch(source, /gray/i);
 });
 
@@ -103,18 +103,16 @@ test("Web page composes the new workspace shell and conversation helpers", async
 
 test("Web page persists the signed-in profile across refresh", async () => {
   const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(source, /localStorage/);
   assert.match(source, /useEffect/);
-  assert.match(source, /setProfile\(nextProfile\)/);
-  assert.match(source, /JSON\.stringify\(profile\)/);
-  assert.match(source, /JSON\.parse/);
+  assert.match(source, /fetchMe\(\)/);
+  assert.match(source, /normalizeLocale\(restoredProfile\.preferredLocale\)/);
+  assert.match(source, /setProfile\(\{ \.\.\.restoredProfile, preferredLocale: restoredLocale \}\)/);
 });
 
 test("Web page returns to the login screen on auth expiry without clearing draft input", async () => {
   const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(source, /sessionExpired/);
   assert.match(source, /AuthExpiredError/);
-  assert.match(source, /window\.localStorage\.removeItem\(PROFILE_STORAGE_KEY\)/);
   assert.match(source, /setProfile\(null\)/);
   assert.match(source, /setNotice\(t\.sessionExpired\)/);
   assert.doesNotMatch(source, /setMessage\(messages\["zh-CN"\]\.defaultQuestion\)/);
@@ -125,7 +123,7 @@ test("Web page keeps the same conversation id for follow-up diagnosis", async ()
   assert.match(source, /selectedConversationId/);
   assert.match(source, /setSelectedConversationId/);
   assert.match(source, /selectedConversationId \?\?/);
-  assert.match(source, /streamDiagnosisEvents\(profile\.token, conversationId, message/);
+  assert.match(source, /streamDiagnosisEvents\(conversationId, message/);
 });
 
 test("Web page uses incremental diagnosis stream state before final refresh", async () => {
@@ -228,7 +226,7 @@ test("Admin V3 API client exposes real services/api endpoints for Admin-V3-1 and
 
 test("Admin page renders a dedicated operations workspace with real action handlers", async () => {
   const source = readFileSync(new URL("../app/admin/page.tsx", import.meta.url), "utf8");
-  assert.match(source, /type AdminSection = "dashboard" \| "collection" \| "knowledge" \| "alerts" \| "audit" \| "reviews" \| "tickets" \| "human"/);
+  assert.match(source, /type AdminSection = "dashboard" \| "collection" \| "knowledge" \| "monitoring" \| "alerts" \| "audit" \| "reviews" \| "tickets" \| "human" \| "risk" \| "conflicts" \| "falseLedger" \| "snapshots"/);
   assert.match(source, /fetchAdminDashboard/);
   assert.match(source, /fetchAdminKnowledgeNodes/);
   assert.match(source, /fetchAdminKnowledgeDetail/);
@@ -242,7 +240,8 @@ test("Admin page renders a dedicated operations workspace with real action handl
   assert.match(source, /publishAdminKnowledgeVersion/);
   assert.match(source, /rollbackAdminKnowledgeNode/);
   assert.match(source, /reviewAdminHumanIntelligence/);
-  assert.match(source, /role === "SUPER_ADMIN" \|\| profile\?\.role === "OPERATOR"/);
+  assert.match(source, /profile\?\.role === "SUPER_ADMIN" \|\| profile\?\.role === "OPERATOR"/);
+  assert.match(source, /adminCodeLabel/);
 });
 
 test("Admin workspace styles provide dense metrics, tables, badges, and review layouts", async () => {

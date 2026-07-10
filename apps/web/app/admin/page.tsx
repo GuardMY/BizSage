@@ -84,7 +84,7 @@ import {
   type RiskRule,
   type RiskRuleUpsertInput
 } from "../../lib/api-client";
-import { adminText, normalizeLocale, type AdminLocale } from "./admin-i18n";
+import { adminCodeLabel, adminCodeWithRaw, adminText, normalizeLocale, type AdminLocale } from "./admin-i18n";
 
 type AdminSection = "dashboard" | "collection" | "knowledge" | "monitoring" | "alerts" | "audit" | "reviews" | "tickets" | "human" | "risk" | "conflicts" | "falseLedger" | "snapshots";
 type NavGroup = { label: string; items: { id: AdminSection; label: string; icon: typeof LayoutDashboard }[] };
@@ -452,9 +452,9 @@ export default function AdminPage() {
         human: nextHuman.items.filter(h => h.status === "PENDING_REVIEW").length,
       });
       await refreshKnowledge(preferredNodeId);
-      setNotice("Admin data refreshed from services/api.");
+      setNotice(t("管理端数据已从 services/api 刷新。", "Admin data refreshed from services/api."));
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Admin refresh failed.");
+      setNotice(error instanceof Error ? error.message : t("管理端刷新失败。", "Admin refresh failed."));
     } finally {
       setBusy(false);
     }
@@ -468,7 +468,7 @@ export default function AdminPage() {
       setNotice(success);
       await refreshAll(nodeHint);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Admin action failed.");
+      setNotice(error instanceof Error ? error.message : t("管理端操作失败。", "Admin action failed."));
     } finally {
       setBusy(false);
     }
@@ -502,7 +502,7 @@ export default function AdminPage() {
       setKnowledgeDiff(diff);
       setNotice(t(`已加载版本 ${compareVersionId} 与 ${selectedVersionId} 的差异。`, `Loaded diff between versions ${compareVersionId} and ${selectedVersionId}.`));
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Load diff failed.");
+      setNotice(error instanceof Error ? error.message : t("加载差异失败。", "Load diff failed."));
     } finally {
       setBusy(false);
     }
@@ -695,6 +695,7 @@ export default function AdminPage() {
           {activeSection === "knowledge" && (
             <KnowledgeView
               busy={busy}
+              locale={locale}
               nodes={knowledgeNodes}
               selectedNodeId={selectedNodeId}
               detail={knowledgeDetail}
@@ -703,29 +704,29 @@ export default function AdminPage() {
               selectedVersionId={selectedVersionId}
               compareVersionId={compareVersionId}
               inspectionReport={inspectionReport}
-              onSelectNode={(nodeId) => runAction(async () => { if (profile) await refreshKnowledge(nodeId); }, `Loaded node ${nodeId}.`, nodeId)}
+              onSelectNode={(nodeId) => runAction(async () => { if (profile) await refreshKnowledge(nodeId); }, t(`已加载节点 ${nodeId}。`, `Loaded node ${nodeId}.`), nodeId)}
               onStartNew={startNewKnowledgeNode}
               onDraftChange={setKnowledgeDraft}
               onSelectVersion={setSelectedVersionId}
               onSelectCompareVersion={setCompareVersionId}
               onLoadDiff={() => void loadKnowledgeDiff()}
-              onSaveDraft={() => runAction(() => saveAdminKnowledgeDraft(selectedNodeId ? { ...knowledgeDraft, nodeId: selectedNodeId } : knowledgeDraft), "Knowledge draft saved.", selectedNodeId ?? undefined)}
-              onSubmitReview={(versionId) => runAction(() => submitAdminKnowledgeReview(selectedNodeId ?? 0, versionId, "Submitted from Admin V3"), "Knowledge version submitted for review.", selectedNodeId ?? undefined)}
-              onApprove={(versionId) => runAction(() => approveAdminKnowledgeReview(selectedNodeId ?? 0, versionId, "Approved from Admin V3"), "Knowledge review approved.", selectedNodeId ?? undefined)}
-              onPublish={(versionId) => runAction(() => publishAdminKnowledgeVersion(selectedNodeId ?? 0, versionId, "Published from Admin V3"), "Knowledge version published.", selectedNodeId ?? undefined)}
-              onRollback={(versionId) => runAction(() => rollbackAdminKnowledgeNode(selectedNodeId ?? 0, versionId, "Rollback from Admin V3"), "Knowledge node rolled back.", selectedNodeId ?? undefined)}
-              onInspect={() => runAction(async () => { const report = await fetchAdminKnowledgeInspect(); setInspectionReport(report); }, "Knowledge inspection complete.")}
+              onSaveDraft={() => runAction(() => saveAdminKnowledgeDraft(selectedNodeId ? { ...knowledgeDraft, nodeId: selectedNodeId } : knowledgeDraft), t("知识草稿已保存。", "Knowledge draft saved."), selectedNodeId ?? undefined)}
+              onSubmitReview={(versionId) => runAction(() => submitAdminKnowledgeReview(selectedNodeId ?? 0, versionId, "Submitted from Admin V3"), t("知识版本已提交复核。", "Knowledge version submitted for review."), selectedNodeId ?? undefined)}
+              onApprove={(versionId) => runAction(() => approveAdminKnowledgeReview(selectedNodeId ?? 0, versionId, "Approved from Admin V3"), t("知识复核已通过。", "Knowledge review approved."), selectedNodeId ?? undefined)}
+              onPublish={(versionId) => runAction(() => publishAdminKnowledgeVersion(selectedNodeId ?? 0, versionId, "Published from Admin V3"), t("知识版本已发布。", "Knowledge version published."), selectedNodeId ?? undefined)}
+              onRollback={(versionId) => runAction(() => rollbackAdminKnowledgeNode(selectedNodeId ?? 0, versionId, "Rollback from Admin V3"), t("知识节点已回滚。", "Knowledge node rolled back."), selectedNodeId ?? undefined)}
+              onInspect={() => runAction(async () => { const report = await fetchAdminKnowledgeInspect(); setInspectionReport(report); }, t("知识巡检完成。", "Knowledge inspection complete."))}
             />
           )}
-          {activeSection === "alerts" && <AlertsView rows={alerts} busy={busy} onAction={(id, action) => runAction(() => updateAdminAlert(id, action), `Alert ${action} complete.`)} />}
+          {activeSection === "alerts" && <AlertsView locale={locale} rows={alerts} busy={busy} onAction={(id, action) => runAction(() => updateAdminAlert(id, action), t(`告警 ${adminCodeLabel(locale, action)} 已完成。`, `Alert ${adminCodeLabel(locale, action)} complete.`))} />}
           {activeSection === "audit" && <AuditView rows={auditLogs} query={auditQuery} setQuery={setAuditQuery} onSearch={() => runAction(async () => {
             const next = await fetchAdminAuditLogs(auditQuery);
             setAuditLogs(next.items);
-          }, "Audit logs filtered.")} />}
-          {activeSection === "reviews" && <ReviewsView rows={reviews} busy={busy} onVerdict={(id, verdict) => runAction(() => decideAdminReview(id, verdict, `Admin selected ${verdict}`), `Review ${verdict} complete.`)} reviewFilter={reviewFilter} onFilterChange={(status) => runAction(async () => { setReviewFilter(status); const next = await fetchAdminIntelligenceReviews(status || undefined); setReviews(next.items); }, `Reviews filtered: ${status || "all"}`)} />}
-          {activeSection === "tickets" && <TicketsView rows={tickets} busy={busy} onTransition={(id, status) => runAction(() => transitionAdminTicket(id, status, `Move ticket to ${status}`), "Ticket transition complete.")} ticketFilter={ticketFilter} ticketTypeFilter={ticketTypeFilter} onFilterChange={(status) => runAction(async () => { setTicketFilter(status); const next = await fetchAdminTickets(status || undefined); setTickets(next.items); }, `Tickets filtered: ${status || "all"}`)} onTypeFilterChange={(type) => setTicketTypeFilter(type)} />}
-          {activeSection === "human" && <HumanView rows={humanRows} busy={busy} draft={draftHuman} setDraft={setDraftHuman} onCreate={() => runAction(() => createAdminHumanIntelligence(draftHuman), "Human intelligence submitted.")} onReview={(id, verdict) => runAction(() => reviewAdminHumanIntelligence(id, verdict, `Admin selected ${verdict}`), "Human intelligence review complete.")} humanFilter={humanFilter} onFilterChange={(status) => runAction(async () => { setHumanFilter(status); const next = await fetchAdminHumanIntelligence(status || undefined); setHumanRows(next.items); }, `Human intel filtered: ${status || "all"}`)} />}
-          {activeSection === "risk" && <RiskRulesView rows={riskRules} busy={busy} onToggle={(id) => runAction(async () => { const updated = await toggleAdminRiskRule(id); setRiskRules(prev => prev.map(r => r.id === updated.id ? updated : r)); }, "Risk rule toggled.")} onSave={(payload) => runAction(async () => { const updated = await upsertAdminRiskRule(payload); setRiskRules(prev => { const idx = prev.findIndex(r => r.id === updated.id); if (idx >= 0) { const next = [...prev]; next[idx] = updated; return next; } return [...prev, updated]; }); }, "Risk rule saved.")} onRefresh={() => runAction(async () => { const rules = await fetchAdminRiskRules(); setRiskRules(rules); }, "Risk rules loaded.")} />}
+          }, t("审计日志已筛选。", "Audit logs filtered."))} locale={locale} />}
+          {activeSection === "reviews" && <ReviewsView locale={locale} rows={reviews} busy={busy} onVerdict={(id, verdict) => runAction(() => decideAdminReview(id, verdict, `Admin selected ${verdict}`), t(`复核 ${adminCodeLabel(locale, verdict)} 已完成。`, `Review ${adminCodeLabel(locale, verdict)} complete.`))} reviewFilter={reviewFilter} onFilterChange={(status) => runAction(async () => { setReviewFilter(status); const next = await fetchAdminIntelligenceReviews(status || undefined); setReviews(next.items); }, t(`复核筛选：${status ? adminCodeLabel(locale, status) : "全部"}`, `Reviews filtered: ${status ? adminCodeLabel(locale, status) : "all"}`))} />}
+          {activeSection === "tickets" && <TicketsView locale={locale} rows={tickets} busy={busy} onTransition={(id, status) => runAction(() => transitionAdminTicket(id, status, `Move ticket to ${status}`), t("工单状态已流转。", "Ticket transition complete."))} ticketFilter={ticketFilter} ticketTypeFilter={ticketTypeFilter} onFilterChange={(status) => runAction(async () => { setTicketFilter(status); const next = await fetchAdminTickets(status || undefined); setTickets(next.items); }, t(`工单筛选：${status ? adminCodeLabel(locale, status) : "全部"}`, `Tickets filtered: ${status ? adminCodeLabel(locale, status) : "all"}`))} onTypeFilterChange={(type) => setTicketTypeFilter(type)} />}
+          {activeSection === "human" && <HumanView locale={locale} rows={humanRows} busy={busy} draft={draftHuman} setDraft={setDraftHuman} onCreate={() => runAction(() => createAdminHumanIntelligence(draftHuman), t("人工情报已提交。", "Human intelligence submitted."))} onReview={(id, verdict) => runAction(() => reviewAdminHumanIntelligence(id, verdict, `Admin selected ${verdict}`), t("人工情报复核完成。", "Human intelligence review complete."))} humanFilter={humanFilter} onFilterChange={(status) => runAction(async () => { setHumanFilter(status); const next = await fetchAdminHumanIntelligence(status || undefined); setHumanRows(next.items); }, t(`人工情报筛选：${status ? adminCodeLabel(locale, status) : "全部"}`, `Human intel filtered: ${status ? adminCodeLabel(locale, status) : "all"}`))} />}
+          {activeSection === "risk" && <RiskRulesView locale={locale} rows={riskRules} busy={busy} onToggle={(id) => runAction(async () => { const updated = await toggleAdminRiskRule(id); setRiskRules(prev => prev.map(r => r.id === updated.id ? updated : r)); }, t("风控规则已切换。", "Risk rule toggled."))} onSave={(payload) => runAction(async () => { const updated = await upsertAdminRiskRule(payload); setRiskRules(prev => { const idx = prev.findIndex(r => r.id === updated.id); if (idx >= 0) { const next = [...prev]; next[idx] = updated; return next; } return [...prev, updated]; }); }, t("风控规则已保存。", "Risk rule saved."))} onRefresh={() => runAction(async () => { const rules = await fetchAdminRiskRules(); setRiskRules(rules); }, t("风控规则已加载。", "Risk rules loaded."))} />}
           {activeSection === "conflicts" && <ConflictsView locale={locale} />}
           {activeSection === "falseLedger" && <FalseLedgerView locale={locale} />}
           {activeSection === "snapshots" && <SnapshotsView locale={locale} />}
@@ -737,11 +738,12 @@ export default function AdminPage() {
 
 
 function KnowledgeView({
-  busy, nodes, selectedNodeId, detail, draft, diff, selectedVersionId, compareVersionId,
+  busy, locale, nodes, selectedNodeId, detail, draft, diff, selectedVersionId, compareVersionId,
   onSelectNode, onStartNew, onDraftChange, onSelectVersion, onSelectCompareVersion,
   onLoadDiff, onSaveDraft, onSubmitReview, onApprove, onPublish, onRollback, onInspect, inspectionReport
 }: {
   busy: boolean;
+  locale: AdminLocale;
   nodes: AdminKnowledgeNode[];
   selectedNodeId: number | null;
   detail: AdminKnowledgeDetail | null;
@@ -763,6 +765,7 @@ function KnowledgeView({
   onRollback: (versionId: number) => void;
   onInspect: () => void;
 }) {
+  const t = (zh: string, en: string) => adminText(locale, zh, en);
   const selectedVersion = detail?.versions.find((version) => version.versionId === selectedVersionId) ?? detail?.versions[0] ?? null;
   const [editorTab, setEditorTab] = useState<"form" | "json" | "inspect">("form");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(["general-sales-payment", "general-supply-chain", "general-channel"]));
@@ -791,7 +794,7 @@ function KnowledgeView({
     try {
       const parsed = JSON.parse(raw) as AdminKnowledgeDraftInput;
       onDraftChange(parsed);
-    } catch { setJsonError("Invalid JSON — fix syntax to sync back to form."); }
+    } catch { setJsonError(t("JSON 无效，请修正语法后同步回表单。", "Invalid JSON. Fix syntax to sync back to the form.")); }
   }
 
   const findingIcon = (type: string) => {
@@ -810,12 +813,12 @@ function KnowledgeView({
       <aside className="workspaceCard adminPanel knowledgeListPanel">
         <div className="sectionHead compact">
           <div className="sectionCopy">
-            <h2>Knowledge Tree</h2>
-            <p>{nodes.length} maintained records</p>
+            <h2>{t("知识树", "Knowledge tree")}</h2>
+            <p>{nodes.length} {t("条维护记录", "maintained records")}</p>
           </div>
           <button className="primary" onClick={onStartNew} type="button">
             <Plus size={16} />
-            New
+            {t("新建", "New")}
           </button>
         </div>
         <div className="knowledgeTreeNav">
@@ -823,7 +826,7 @@ function KnowledgeView({
             <div className="treeGroup" key={industryId}>
               <button className="treeGroupHeader" onClick={() => toggleGroup(industryId)} type="button">
                 <span className="treeToggle">{expandedGroups.has(industryId) ? "▾" : "▸"}</span>
-                <span className="treeIndustryLabel">{industryId}</span>
+                <span className="treeIndustryLabel">{adminCodeWithRaw(locale, industryId)}</span>
                 <small>{Array.from(linkMap.values()).flat().length}</small>
               </button>
               {expandedGroups.has(industryId) && Array.from(linkMap.entries()).map(([linkId, linkNodes]) => {
@@ -832,7 +835,7 @@ function KnowledgeView({
                   <div className="treeSubGroup" key={linkKey}>
                     <button className="treeSubHeader" onClick={() => toggleGroup(linkKey)} type="button">
                       <span className="treeToggle">{expandedGroups.has(linkKey) ? "▾" : "▸"}</span>
-                      <span className="treeLinkLabel">{linkId}</span>
+	                      <span className="treeLinkLabel">{adminCodeWithRaw(locale, linkId)}</span>
                       <small>{linkNodes.length}</small>
                     </button>
                     {expandedGroups.has(linkKey) && linkNodes.map((node) => (
@@ -842,7 +845,7 @@ function KnowledgeView({
                         onClick={() => onSelectNode(node.nodeId)}
                         type="button"
                       >
-                        <StatusBadge value={node.status} />
+	                        <StatusBadge value={node.status} locale={locale} />
                         <span>{node.title}</span>
                       </button>
                     ))}
@@ -851,17 +854,17 @@ function KnowledgeView({
               })}
             </div>
           ))}
-          {nodes.length === 0 && <div className="emptyRow">No knowledge nodes yet.</div>}
+	          {nodes.length === 0 && <div className="emptyRow">{t("暂无知识节点。", "No knowledge nodes yet.")}</div>}
         </div>
       </aside>
 
       {/* Center: Editor with tabs */}
       <section className="workspaceCard adminPanel knowledgeEditorPanel">
         <div className="knowledgeEditorTabs">
-          <button className={`knowledgeTab ${editorTab === "form" ? "active" : ""}`} onClick={() => setEditorTab("form")} type="button">Form</button>
-          <button className={`knowledgeTab ${editorTab === "json" ? "active" : ""}`} onClick={() => setEditorTab("json")} type="button">JSON</button>
-          <button className={`knowledgeTab ${editorTab === "inspect" ? "active" : ""}`} onClick={() => setEditorTab("inspect")} type="button">
-            Inspect
+	          <button className={`knowledgeTab ${editorTab === "form" ? "active" : ""}`} onClick={() => setEditorTab("form")} type="button">{t("表单", "Form")}</button>
+	          <button className={`knowledgeTab ${editorTab === "json" ? "active" : ""}`} onClick={() => setEditorTab("json")} type="button">JSON</button>
+	          <button className={`knowledgeTab ${editorTab === "inspect" ? "active" : ""}`} onClick={() => setEditorTab("inspect")} type="button">
+	            {t("巡检", "Inspect")}
             {inspectionReport && <span className="tabBadge">{inspectionReport.findings.length}</span>}
           </button>
         </div>
@@ -870,22 +873,22 @@ function KnowledgeView({
           <>
             <div className="sectionHead compact">
               <div className="sectionCopy">
-                <h2>Draft editor</h2>
-                <p>Save formal knowledge drafts with scope, confidence, and version notes.</p>
-              </div>
-              <button className="primary" onClick={onSaveDraft} disabled={busy} type="button">Save draft</button>
-            </div>
-            <div className="adminFormGrid knowledgeFormGrid">
-              <label>Title<input value={draft.title} onChange={(event) => onDraftChange({ ...draft, title: event.target.value })} /></label>
-              <label>Slug<input value={draft.slug} onChange={(event) => onDraftChange({ ...draft, slug: event.target.value })} /></label>
-              <label>Industry<input value={draft.industryId} onChange={(event) => onDraftChange({ ...draft, industryId: event.target.value })} /></label>
-              <label>Region<input value={draft.regionId} onChange={(event) => onDraftChange({ ...draft, regionId: event.target.value })} /></label>
-              <label>Chain node<input value={draft.linkId} onChange={(event) => onDraftChange({ ...draft, linkId: event.target.value })} /></label>
-              <label>Confidence<input value={draft.confidence} onChange={(event) => onDraftChange({ ...draft, confidence: Number(event.target.value) })} type="number" min="0" max="1" step="0.01" /></label>
-              <label className="wide">Summary<textarea value={draft.summary} onChange={(event) => onDraftChange({ ...draft, summary: event.target.value })} rows={4} /></label>
-              <label className="wide">Content<textarea value={draft.content} onChange={(event) => onDraftChange({ ...draft, content: event.target.value })} rows={12} /></label>
-              <label className="wide">Source URL<input value={draft.sourceUrl} onChange={(event) => onDraftChange({ ...draft, sourceUrl: event.target.value })} /></label>
-              <label className="wide">Change notes<textarea value={draft.changeNotes} onChange={(event) => onDraftChange({ ...draft, changeNotes: event.target.value })} rows={3} /></label>
+	                <h2>{t("草稿编辑器", "Draft editor")}</h2>
+	                <p>{t("保存带范围、置信度和版本说明的正式知识草稿。", "Save formal knowledge drafts with scope, confidence, and version notes.")}</p>
+	              </div>
+	              <button className="primary" onClick={onSaveDraft} disabled={busy} type="button">{t("保存草稿", "Save draft")}</button>
+	            </div>
+	            <div className="adminFormGrid knowledgeFormGrid">
+	              <label>{t("标题", "Title")}<input value={draft.title} onChange={(event) => onDraftChange({ ...draft, title: event.target.value })} /></label>
+	              <label>{t("Slug", "Slug")}<input value={draft.slug} onChange={(event) => onDraftChange({ ...draft, slug: event.target.value })} title={adminCodeWithRaw(locale, draft.slug)} /></label>
+	              <label>{t("行业", "Industry")}<input value={draft.industryId} onChange={(event) => onDraftChange({ ...draft, industryId: event.target.value })} title={adminCodeWithRaw(locale, draft.industryId)} /></label>
+	              <label>{t("区域", "Region")}<input value={draft.regionId} onChange={(event) => onDraftChange({ ...draft, regionId: event.target.value })} title={adminCodeWithRaw(locale, draft.regionId)} /></label>
+	              <label>{t("链路节点", "Chain node")}<input value={draft.linkId} onChange={(event) => onDraftChange({ ...draft, linkId: event.target.value })} title={adminCodeWithRaw(locale, draft.linkId)} /></label>
+	              <label>{t("置信度", "Confidence")}<input value={draft.confidence} onChange={(event) => onDraftChange({ ...draft, confidence: Number(event.target.value) })} type="number" min="0" max="1" step="0.01" /></label>
+	              <label className="wide">{t("摘要", "Summary")}<textarea value={draft.summary} onChange={(event) => onDraftChange({ ...draft, summary: event.target.value })} rows={4} /></label>
+	              <label className="wide">{t("内容", "Content")}<textarea value={draft.content} onChange={(event) => onDraftChange({ ...draft, content: event.target.value })} rows={12} /></label>
+	              <label className="wide">{t("来源 URL", "Source URL")}<input value={draft.sourceUrl} onChange={(event) => onDraftChange({ ...draft, sourceUrl: event.target.value })} /></label>
+	              <label className="wide">{t("变更说明", "Change notes")}<textarea value={draft.changeNotes} onChange={(event) => onDraftChange({ ...draft, changeNotes: event.target.value })} rows={3} /></label>
             </div>
           </>
         )}
@@ -894,10 +897,10 @@ function KnowledgeView({
           <div className="knowledgeJsonEditor">
             <div className="sectionHead compact">
               <div className="sectionCopy">
-                <h2>JSON editor</h2>
-                <p>Edit the full draft payload directly. Changes sync back to the form when JSON is valid.</p>
-              </div>
-              <button className="primary" onClick={onSaveDraft} disabled={busy} type="button">Save draft</button>
+	                <h2>{t("JSON 编辑器", "JSON editor")}</h2>
+	                <p>{t("直接编辑完整草稿载荷。JSON 有效时会同步回表单。", "Edit the full draft payload directly. Changes sync back to the form when JSON is valid.")}</p>
+	              </div>
+	              <button className="primary" onClick={onSaveDraft} disabled={busy} type="button">{t("保存草稿", "Save draft")}</button>
             </div>
             <textarea
               className="jsonTextarea"
@@ -914,34 +917,34 @@ function KnowledgeView({
           <div className="knowledgeInspectPanel">
             <div className="sectionHead compact">
               <div className="sectionCopy">
-                <h2>Batch inspection</h2>
-                <p>Covers expired records, missing sources, low confidence, and conflicts across all knowledge nodes.</p>
+	                <h2>{t("批量巡检", "Batch inspection")}</h2>
+	                <p>{t("覆盖所有知识节点中的过期记录、缺失来源、低置信度和冲突。", "Covers expired records, missing sources, low confidence, and conflicts across all knowledge nodes.")}</p>
               </div>
               <button className="primary" onClick={onInspect} disabled={busy} type="button">
                 <RefreshCw size={16} />
-                Run inspection
+	                {t("运行巡检", "Run inspection")}
               </button>
             </div>
             {inspectionReport ? (
               <>
                 <div className="inspectSummary">
-                  <span className={`adminBadge status-healthy`}>{inspectionReport.healthyNodes} healthy</span>
-                  <span className={`adminBadge status-${inspectionReport.warningNodes > 0 ? "pending" : "healthy"}`}>{inspectionReport.warningNodes} warnings</span>
-                  <span className={`adminBadge status-${inspectionReport.criticalNodes > 0 ? "p0" : "healthy"}`}>{inspectionReport.criticalNodes} critical</span>
-                  <small>{inspectionReport.totalNodes} total nodes inspected</small>
+	                  <span className={`adminBadge status-healthy`}>{inspectionReport.healthyNodes} {t("健康", "healthy")}</span>
+	                  <span className={`adminBadge status-${inspectionReport.warningNodes > 0 ? "pending" : "healthy"}`}>{inspectionReport.warningNodes} {t("警告", "warnings")}</span>
+	                  <span className={`adminBadge status-${inspectionReport.criticalNodes > 0 ? "p0" : "healthy"}`}>{inspectionReport.criticalNodes} {t("严重", "critical")}</span>
+	                  <small>{inspectionReport.totalNodes} {t("个节点已巡检", "total nodes inspected")}</small>
                 </div>
                 {inspectionReport.findings.length === 0 ? (
-                  <div className="emptyRow">All nodes pass inspection. No issues found.</div>
+	                  <div className="emptyRow">{t("所有节点均通过巡检，未发现问题。", "All nodes pass inspection. No issues found.")}</div>
                 ) : (
                   <div className="inspectFindingsList">
                     {inspectionReport.findings.map((finding, index) => (
                       <div className={`inspectFindingItem type-${finding.type.toLowerCase()}`} key={index}>
                         <div className="inspectFindingHead">
                           <span className="findingIcon">{findingIcon(finding.type)}</span>
-                          <StatusBadge value={finding.type} />
+	                          <StatusBadge value={finding.type} locale={locale} />
                           <strong>{finding.title}</strong>
                           <button className="inspectNavButton" onClick={() => { setEditorTab("form"); onSelectNode(finding.nodeId); }} type="button">
-                            Go to node →
+	                            {t("查看节点", "Go to node")}
                           </button>
                         </div>
                         <p>{finding.detail}</p>
@@ -951,7 +954,7 @@ function KnowledgeView({
                 )}
               </>
             ) : (
-              <div className="emptyRow">Click "Run inspection" to scan all knowledge nodes for issues.</div>
+	              <div className="emptyRow">{t("点击“运行巡检”扫描所有知识节点。", "Click Run inspection to scan all knowledge nodes for issues.")}</div>
             )}
           </div>
         )}
@@ -960,22 +963,22 @@ function KnowledgeView({
           <div className="knowledgeDiffPanel">
             <div className="sectionHead compact">
               <div className="sectionCopy">
-                <h2>Version diff</h2>
-                <p>Compare revision metadata and content before publish or rollback.</p>
+	                <h2>{t("版本差异", "Version diff")}</h2>
+	                <p>{t("发布或回滚前比较修订元数据和内容。", "Compare revision metadata and content before publish or rollback.")}</p>
               </div>
             </div>
             <div className="knowledgeDiffGrid">
               <article>
-                <small>Left</small>
+	                <small>{t("左侧", "Left")}</small>
                 <strong>{diff.leftTitle}</strong>
-                <StatusBadge value={diff.leftReviewStatus} />
+	                <StatusBadge value={diff.leftReviewStatus} locale={locale} />
                 <p>{diff.leftSummary}</p>
                 <pre>{diff.leftContent}</pre>
               </article>
               <article>
-                <small>Right</small>
+	                <small>{t("右侧", "Right")}</small>
                 <strong>{diff.rightTitle}</strong>
-                <StatusBadge value={diff.rightReviewStatus} />
+	                <StatusBadge value={diff.rightReviewStatus} locale={locale} />
                 <p>{diff.rightSummary}</p>
                 <pre>{diff.rightContent}</pre>
               </article>
@@ -988,12 +991,12 @@ function KnowledgeView({
       <aside className="workspaceCard adminPanel knowledgeVersionPanel">
         <div className="sectionHead compact">
           <div className="sectionCopy">
-            <h2>Versions</h2>
-            <p>{detail ? `${detail.status} / published ${detail.publishedVersionId ?? "-"}` : "Choose a node to inspect review and publication history."}</p>
+	            <h2>{t("版本", "Versions")}</h2>
+	            <p>{detail ? `${adminCodeLabel(locale, detail.status)} / ${t("已发布", "published")} ${detail.publishedVersionId ?? "-"}` : t("选择节点查看复核与发布历史。", "Choose a node to inspect review and publication history.")}</p>
           </div>
           <button className="ghost" onClick={onLoadDiff} disabled={!selectedVersionId || !compareVersionId || busy} type="button">
             <GitCompareArrows size={16} />
-            Diff
+	            {t("比较", "Diff")}
           </button>
         </div>
         <div className="knowledgeVersionList">
@@ -1002,34 +1005,34 @@ function KnowledgeView({
               <button className="knowledgeVersionSelect" onClick={() => onSelectVersion(version.versionId)} type="button">
                 <strong>V{version.versionNumber} {version.title}</strong>
                 <div className="knowledgeVersionMeta">
-                  <StatusBadge value={version.reviewStatus} />
+                  <StatusBadge value={version.reviewStatus} locale={locale} />
                   <small>{version.author} / {formatTime(version.updateTime)}</small>
                 </div>
               </button>
               <div className="adminRowActions wideActions">
-                <button onClick={() => onSelectCompareVersion(version.versionId)} type="button">Compare</button>
-                <button onClick={() => onSubmitReview(version.versionId)} disabled={busy || version.reviewStatus !== "DRAFT"} type="button">Submit</button>
-                <button onClick={() => onApprove(version.versionId)} disabled={busy || version.reviewStatus !== "IN_REVIEW"} type="button">Approve</button>
-                <button onClick={() => onPublish(version.versionId)} disabled={busy || version.reviewStatus !== "APPROVED"} type="button">Publish</button>
-                <button onClick={() => onRollback(version.versionId)} disabled={busy || detail?.publishedVersionId == null || version.reviewStatus !== "APPROVED"} type="button">Rollback</button>
+                <button onClick={() => onSelectCompareVersion(version.versionId)} type="button">{t("比较", "Compare")}</button>
+                <button onClick={() => onSubmitReview(version.versionId)} disabled={busy || version.reviewStatus !== "DRAFT"} type="button">{t("提交", "Submit")}</button>
+                <button onClick={() => onApprove(version.versionId)} disabled={busy || version.reviewStatus !== "IN_REVIEW"} type="button">{t("通过", "Approve")}</button>
+                <button onClick={() => onPublish(version.versionId)} disabled={busy || version.reviewStatus !== "APPROVED"} type="button">{t("发布", "Publish")}</button>
+                <button onClick={() => onRollback(version.versionId)} disabled={busy || detail?.publishedVersionId == null || version.reviewStatus !== "APPROVED"} type="button">{t("回滚", "Rollback")}</button>
               </div>
-              {compareVersionId === version.versionId && <small>Compare baseline selected.</small>}
+              {compareVersionId === version.versionId && <small>{t("已选择比较基线。", "Compare baseline selected.")}</small>}
             </article>
           ))}
-          {detail?.versions.length === 0 && <div className="emptyRow">No versions yet. Save a draft to begin.</div>}
+          {detail?.versions.length === 0 && <div className="emptyRow">{t("暂无版本，请先保存草稿。", "No versions yet. Save a draft to begin.")}</div>}
         </div>
         <div className="knowledgePublicationList">
           <div className="sectionHead compact">
             <div className="sectionCopy">
-              <h2>Publication log</h2>
-              <p>Published versions sync into legacy knowledge retrieval data.</p>
+              <h2>{t("发布日志", "Publication log")}</h2>
+              <p>{t("已发布版本会同步到旧版知识检索数据。", "Published versions sync into legacy knowledge retrieval data.")}</p>
             </div>
           </div>
           <div className="table">
             {(detail?.publications ?? []).map((publication) => (
               <div className="row" key={publication.publicationId}>
-                <strong>{publication.action} / V{publication.versionId}</strong>
-                <StatusBadge value={publication.action} />
+                <strong>{adminCodeLabel(locale, publication.action)} / V{publication.versionId}</strong>
+                <StatusBadge value={publication.action} locale={locale} />
                 <small>{publication.actor} / {formatTime(publication.createTime)} / {publication.notes ?? "-"}</small>
               </div>
             ))}
@@ -1040,22 +1043,23 @@ function KnowledgeView({
   );
 }
 
-function AlertsView({ rows, busy, onAction }: { rows: AdminAlert[]; busy: boolean; onAction: (id: number, action: "acknowledge" | "claim" | "close") => void }) {
+function AlertsView({ locale, rows, busy, onAction }: { locale: AdminLocale; rows: AdminAlert[]; busy: boolean; onAction: (id: number, action: "acknowledge" | "claim" | "close") => void }) {
+  const t = (zh: string, en: string) => adminText(locale, zh, en);
   return (
     <section className="workspaceCard adminPanel">
-      <PanelHead title="Alert center" detail="Acknowledge, claim, or close production alerts. Every action writes an audit log." />
+      <PanelHead title={t("告警中心", "Alert center")} detail={t("确认、认领或关闭生产告警。每个动作都会写入审计日志。", "Acknowledge, claim, or close production alerts. Every action writes an audit log.")} />
       <div className="adminTable">
-        <div className="adminTableHead"><span>Level</span><span>Component</span><span>Message</span><span>Status</span><span>Actions</span></div>
+        <div className="adminTableHead"><span>{t("级别", "Level")}</span><span>{t("组件", "Component")}</span><span>{t("消息", "Message")}</span><span>{t("状态", "Status")}</span><span>{t("操作", "Actions")}</span></div>
         {rows.map((row) => (
           <div className="adminTableRow" key={row.id}>
-            <StatusBadge value={row.level} />
+            <StatusBadge value={row.level} locale={locale} />
             <strong>{row.component}</strong>
             <span>{row.message}</span>
-            <StatusBadge value={row.status} />
+            <StatusBadge value={row.status} locale={locale} />
             <div className="adminRowActions">
-              <button title="Acknowledge alert" onClick={() => onAction(row.id, "acknowledge")} disabled={busy} type="button">Ack</button>
-              <button title="Claim alert" onClick={() => onAction(row.id, "claim")} disabled={busy} type="button">Claim</button>
-              <button title="Close alert" onClick={() => onAction(row.id, "close")} disabled={busy} type="button">Close</button>
+              <button title={t("确认告警", "Acknowledge alert")} onClick={() => onAction(row.id, "acknowledge")} disabled={busy} type="button">{t("确认", "Ack")}</button>
+              <button title={t("认领告警", "Claim alert")} onClick={() => onAction(row.id, "claim")} disabled={busy} type="button">{t("认领", "Claim")}</button>
+              <button title={t("关闭告警", "Close alert")} onClick={() => onAction(row.id, "close")} disabled={busy} type="button">{t("关闭", "Close")}</button>
             </div>
           </div>
         ))}
@@ -1064,28 +1068,29 @@ function AlertsView({ rows, busy, onAction }: { rows: AdminAlert[]; busy: boolea
   );
 }
 
-function AuditView({ rows, query, setQuery, onSearch }: { rows: AdminAuditLog[]; query: string; setQuery: (value: string) => void; onSearch: () => void }) {
+function AuditView({ locale, rows, query, setQuery, onSearch }: { locale: AdminLocale; rows: AdminAuditLog[]; query: string; setQuery: (value: string) => void; onSearch: () => void }) {
+  const t = (zh: string, en: string) => adminText(locale, zh, en);
   return (
     <section className="workspaceCard adminPanel">
       <div className="sectionHead">
         <div className="sectionCopy">
-          <h2>Audit logs</h2>
-          <p>Search by actor, action, target type, or target id.</p>
+          <h2>{t("审计日志", "Audit logs")}</h2>
+          <p>{t("按操作者、动作、目标类型或目标 ID 搜索。", "Search by actor, action, target type, or target id.")}</p>
         </div>
         <div className="adminSearch">
           <Search size={16} />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search audit logs" />
-          <button className="primary" onClick={onSearch} type="button">Search</button>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("搜索审计日志", "Search audit logs")} />
+          <button className="primary" onClick={onSearch} type="button">{t("搜索", "Search")}</button>
         </div>
       </div>
       <div className="adminTable">
-        <div className="adminTableHead"><span>Actor</span><span>Action</span><span>Target</span><span>Result</span><span>Time</span></div>
+        <div className="adminTableHead"><span>{t("操作者", "Actor")}</span><span>{t("动作", "Action")}</span><span>{t("目标", "Target")}</span><span>{t("结果", "Result")}</span><span>{t("时间", "Time")}</span></div>
         {rows.map((row) => (
           <div className="adminTableRow" key={row.id}>
             <strong>{row.actor}</strong>
-            <span>{row.action}</span>
-            <span>{row.targetType}:{row.targetId}</span>
-            <StatusBadge value={row.result} />
+            <span>{adminCodeLabel(locale, row.action)}</span>
+            <span>{adminCodeLabel(locale, row.targetType)}:{row.targetId}</span>
+            <StatusBadge value={row.result} locale={locale} />
             <small>{formatTime(row.createTime)}</small>
           </div>
         ))}
@@ -1094,13 +1099,15 @@ function AuditView({ rows, query, setQuery, onSearch }: { rows: AdminAuditLog[];
   );
 }
 
-function ReviewsView({ rows, busy, onVerdict, reviewFilter, onFilterChange }: {
+function ReviewsView({ locale, rows, busy, onVerdict, reviewFilter, onFilterChange }: {
+  locale: AdminLocale;
   rows: AdminIntelligenceReview[];
   busy: boolean;
   onVerdict: (id: number, verdict: "PASS" | "REJECT" | "FLAG" | "SUSPICIOUS" | "COMPLIANCE" | "PAID_INTEL" | "ARCHIVE") => void;
   reviewFilter: string;
   onFilterChange: (status: string) => void;
 }) {
+  const t = (zh: string, en: string) => adminText(locale, zh, en);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const toggleExpand = (id: number) => setExpandedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const pending = rows.filter(r => r.reviewStatus === "PENDING").length;
@@ -1109,20 +1116,20 @@ function ReviewsView({ rows, busy, onVerdict, reviewFilter, onFilterChange }: {
     <section className="workspaceCard adminPanel">
       <div className="sectionHead">
         <div className="sectionCopy">
-          <h2>Intelligence Review</h2>
-          <p>{pending} pending / {completed} completed / {rows.length} total</p>
+          <h2>{t("情报复核", "Intelligence review")}</h2>
+          <p>{pending} {t("待处理", "pending")} / {completed} {t("已完成", "completed")} / {rows.length} {t("总计", "total")}</p>
         </div>
         <div className="adminFilterBar">
-          <span className="adminFilterLabel">Status:</span>
+          <span className="adminFilterLabel">{t("状态：", "Status:")}</span>
           <select value={reviewFilter} onChange={e => onFilterChange(e.target.value)} className="adminFilterSelect">
-            <option value="">All reviews</option>
-            <option value="PENDING">Pending</option>
-            <option value="COMPLETED">Completed</option>
+            <option value="">{t("全部复核", "All reviews")}</option>
+            <option value="PENDING">{adminCodeLabel(locale, "PENDING")}</option>
+            <option value="COMPLETED">{adminCodeLabel(locale, "COMPLETED")}</option>
           </select>
         </div>
       </div>
       <div className="adminReviewList">
-        {rows.length === 0 && <div className="emptyRow">No reviews match the selected filter.</div>}
+        {rows.length === 0 && <div className="emptyRow">{t("没有匹配当前筛选的复核记录。", "No reviews match the selected filter.")}</div>}
         {rows.map((row) => {
           const expanded = expandedIds.has(row.id);
           const maxLen = 200;
@@ -1134,30 +1141,30 @@ function ReviewsView({ rows, busy, onVerdict, reviewFilter, onFilterChange }: {
                 <p>{expanded || !longContent ? row.content : row.content?.slice(0, maxLen) + "…"}</p>
                 {longContent && (
                   <button className="expandToggle" onClick={() => toggleExpand(row.id)} type="button">
-                    {expanded ? "Collapse" : "Read full content"}
+	                    {expanded ? t("收起", "Collapse") : t("阅读全文", "Read full content")}
                   </button>
                 )}
                 <div className="reviewMeta">
                   <small>{row.sourceId} / {row.regionId} / {row.industryId}</small>
-                  <small>Confidence: {row.confidence}</small>
-                  {row.verdict && <StatusBadge value={row.verdict} />}
-                  {row.reviewer && <small>Reviewer: {row.reviewer}</small>}
-                </div>
-                {row.reviewStatus === "COMPLETED" && row.reason && (
-                  <small className="reviewReason">Reason: {row.reason}</small>
-                )}
+	                  <small>{t("置信度：", "Confidence:")} {row.confidence}</small>
+	                  {row.verdict && <StatusBadge value={row.verdict} locale={locale} />}
+	                  {row.reviewer && <small>{t("复核人：", "Reviewer:")} {row.reviewer}</small>}
+	                </div>
+	                {row.reviewStatus === "COMPLETED" && row.reason && (
+	                  <small className="reviewReason">{t("原因：", "Reason:")} {row.reason}</small>
+	                )}
               </div>
               <div className="adminDecision">
-                <StatusBadge value={row.reviewStatus} />
+	                <StatusBadge value={row.reviewStatus} locale={locale} />
                 {row.reviewStatus !== "COMPLETED" && (
                   <>
-                    <button onClick={() => onVerdict(row.id, "PASS")} disabled={busy} type="button" title="Approve and publish">Pass</button>
-                    <button onClick={() => onVerdict(row.id, "REJECT")} disabled={busy} type="button" title="Reject permanently">Reject</button>
-                    <button onClick={() => onVerdict(row.id, "FLAG")} disabled={busy} type="button" title="Escalate for second review">Flag</button>
-                    <button onClick={() => onVerdict(row.id, "SUSPICIOUS")} disabled={busy} type="button" title="Mark as suspicious, create investigation ticket">Suspect</button>
-                    <button onClick={() => onVerdict(row.id, "COMPLIANCE")} disabled={busy} type="button" title="Route to legal/compliance team">Compliance</button>
-                    <button onClick={() => onVerdict(row.id, "PAID_INTEL")} disabled={busy} type="button" title="Approve as paid intelligence">Paid</button>
-                    <button onClick={() => onVerdict(row.id, "ARCHIVE")} disabled={busy} type="button" title="Archive without publishing">Archive</button>
+	                    <button onClick={() => onVerdict(row.id, "PASS")} disabled={busy} type="button" title={t("通过并发布", "Approve and publish")}>{adminCodeLabel(locale, "PASS")}</button>
+	                    <button onClick={() => onVerdict(row.id, "REJECT")} disabled={busy} type="button" title={t("永久拒绝", "Reject permanently")}>{adminCodeLabel(locale, "REJECT")}</button>
+	                    <button onClick={() => onVerdict(row.id, "FLAG")} disabled={busy} type="button" title={t("升级二次复核", "Escalate for second review")}>{adminCodeLabel(locale, "FLAG")}</button>
+	                    <button onClick={() => onVerdict(row.id, "SUSPICIOUS")} disabled={busy} type="button" title={t("标记为可疑并创建调查工单", "Mark as suspicious, create investigation ticket")}>{t("可疑", "Suspect")}</button>
+	                    <button onClick={() => onVerdict(row.id, "COMPLIANCE")} disabled={busy} type="button" title={t("转交法务/合规团队", "Route to legal/compliance team")}>{adminCodeLabel(locale, "COMPLIANCE")}</button>
+	                    <button onClick={() => onVerdict(row.id, "PAID_INTEL")} disabled={busy} type="button" title={t("批准为付费情报", "Approve as paid intelligence")}>{t("付费", "Paid")}</button>
+	                    <button onClick={() => onVerdict(row.id, "ARCHIVE")} disabled={busy} type="button" title={t("不发布并归档", "Archive without publishing")}>{adminCodeLabel(locale, "ARCHIVE")}</button>
                   </>
                 )}
               </div>
@@ -1169,7 +1176,8 @@ function ReviewsView({ rows, busy, onVerdict, reviewFilter, onFilterChange }: {
   );
 }
 
-function TicketsView({ rows, busy, onTransition, ticketFilter, ticketTypeFilter, onFilterChange, onTypeFilterChange }: {
+function TicketsView({ locale, rows, busy, onTransition, ticketFilter, ticketTypeFilter, onFilterChange, onTypeFilterChange }: {
+  locale: AdminLocale;
   rows: AdminTicket[];
   busy: boolean;
   onTransition: (id: number, status: string) => void;
@@ -1178,63 +1186,64 @@ function TicketsView({ rows, busy, onTransition, ticketFilter, ticketTypeFilter,
   onFilterChange: (status: string) => void;
   onTypeFilterChange: (type: string) => void;
 }) {
+  const t = (zh: string, en: string) => adminText(locale, zh, en);
   const openCount = rows.filter(t => t.status !== "CLOSED" && t.status !== "ARCHIVED").length;
   const sla = (createTime: string): { hours: number; label: string; cls: string } => {
-    if (!createTime) return { hours: 0, label: "—", cls: "" };
+    if (!createTime) return { hours: 0, label: "-", cls: "" };
     const diff = (Date.now() - new Date(createTime).getTime()) / (1000 * 60 * 60);
-    if (diff < 4) return { hours: diff, label: `${Math.round(diff * 60)}m ago`, cls: "sla-fresh" };
-    if (diff < 24) return { hours: diff, label: `${Math.round(diff)}h ago`, cls: "sla-warn" };
-    return { hours: diff, label: `${Math.round(diff / 24)}d ago`, cls: "sla-overdue" };
+    if (diff < 4) return { hours: diff, label: t(`${Math.round(diff * 60)} 分钟前`, `${Math.round(diff * 60)}m ago`), cls: "sla-fresh" };
+    if (diff < 24) return { hours: diff, label: t(`${Math.round(diff)} 小时前`, `${Math.round(diff)}h ago`), cls: "sla-warn" };
+    return { hours: diff, label: t(`${Math.round(diff / 24)} 天前`, `${Math.round(diff / 24)}d ago`), cls: "sla-overdue" };
   };
   const displayedRows = ticketTypeFilter ? rows.filter(r => r.ticketType === ticketTypeFilter) : rows;
   return (
     <section className="workspaceCard adminPanel">
       <div className="sectionHead">
         <div className="sectionCopy">
-          <h2>Ticket Ledger</h2>
-          <p>{openCount} open / {rows.length} total</p>
+          <h2>{t("工单台账", "Ticket ledger")}</h2>
+          <p>{openCount} {t("未结", "open")} / {rows.length} {t("总计", "total")}</p>
         </div>
         <div className="adminFilterBar">
-          <span className="adminFilterLabel">Status:</span>
+          <span className="adminFilterLabel">{t("状态：", "Status:")}</span>
           <select value={ticketFilter} onChange={e => onFilterChange(e.target.value)} className="adminFilterSelect">
-            <option value="">All</option>
-            <option value="NEW">New</option>
-            <option value="IN_PROGRESS">In Progress</option>
-            <option value="WAITING_REVIEW">Waiting Review</option>
-            <option value="CLOSED">Closed</option>
-            <option value="ARCHIVED">Archived</option>
+            <option value="">{t("全部", "All")}</option>
+            <option value="NEW">{adminCodeLabel(locale, "NEW")}</option>
+            <option value="IN_PROGRESS">{adminCodeLabel(locale, "IN_PROGRESS")}</option>
+            <option value="WAITING_REVIEW">{adminCodeLabel(locale, "WAITING_REVIEW")}</option>
+            <option value="CLOSED">{adminCodeLabel(locale, "CLOSED")}</option>
+            <option value="ARCHIVED">{adminCodeLabel(locale, "ARCHIVED")}</option>
           </select>
-          <span className="adminFilterLabel">Type:</span>
+          <span className="adminFilterLabel">{t("类型：", "Type:")}</span>
           <select value={ticketTypeFilter} onChange={e => onTypeFilterChange(e.target.value)} className="adminFilterSelect">
-            <option value="">All types</option>
-            <option value="review_escalation">Review Escalation</option>
-            <option value="suspicious_review">Suspicious Review</option>
-            <option value="compliance_review">Compliance</option>
-            <option value="conflict">Conflict</option>
+            <option value="">{t("全部类型", "All types")}</option>
+            <option value="review_escalation">{adminCodeLabel(locale, "review_escalation")}</option>
+            <option value="suspicious_review">{adminCodeLabel(locale, "suspicious_review")}</option>
+            <option value="compliance_review">{adminCodeLabel(locale, "compliance_review")}</option>
+            <option value="conflict">{adminCodeLabel(locale, "conflict")}</option>
           </select>
         </div>
       </div>
       <div className="adminTable">
-        <div className="adminTableHead ticketHead"><span>Severity</span><span>Title</span><span>Owner</span><span>Status</span><span>SLA</span><span>Actions</span></div>
-        {displayedRows.length === 0 && <div className="emptyRow">No tickets match filters.</div>}
+        <div className="adminTableHead ticketHead"><span>{t("严重级别", "Severity")}</span><span>{t("标题", "Title")}</span><span>{t("负责人", "Owner")}</span><span>{t("状态", "Status")}</span><span>SLA</span><span>{t("操作", "Actions")}</span></div>
+        {displayedRows.length === 0 && <div className="emptyRow">{t("没有匹配筛选条件的工单。", "No tickets match filters.")}</div>}
         {displayedRows.map((row) => {
           const slaInfo = sla(row.createTime);
           return (
             <div className="adminTableRow ticketRow" key={row.id}>
-              <StatusBadge value={row.severity} />
+	              <StatusBadge value={row.severity} locale={locale} />
               <div>
                 <strong>{row.title}</strong>
-                <small>{row.ticketType} / {row.nextAction ?? "—"}</small>
-              </div>
-              <span>{row.owner ?? "Unassigned"}</span>
-              <StatusBadge value={row.status} />
+	                <small>{adminCodeLabel(locale, row.ticketType)} / {row.nextAction ?? "-"}</small>
+	              </div>
+	              <span>{row.owner ?? t("未分配", "Unassigned")}</span>
+	              <StatusBadge value={row.status} locale={locale} />
               <span className={`slaCell ${slaInfo.cls}`}>{slaInfo.label}</span>
               <div className="adminRowActions">
-                {row.status === "NEW" && <button onClick={() => onTransition(row.id, "CLAIMED")} disabled={busy} type="button">Claim</button>}
-                {(row.status === "NEW" || row.status === "CLAIMED") && <button onClick={() => onTransition(row.id, "IN_PROGRESS")} disabled={busy} type="button">Start</button>}
-                {row.status === "IN_PROGRESS" && <button onClick={() => onTransition(row.id, "WAITING_REVIEW")} disabled={busy} type="button">Review</button>}
-                {row.status === "WAITING_REVIEW" && <button onClick={() => onTransition(row.id, "CLOSED")} disabled={busy} type="button">Close</button>}
-                {row.status === "CLOSED" && <button onClick={() => onTransition(row.id, "ARCHIVED")} disabled={busy} type="button">Archive</button>}
+	                {row.status === "NEW" && <button onClick={() => onTransition(row.id, "CLAIMED")} disabled={busy} type="button">{t("认领", "Claim")}</button>}
+	                {(row.status === "NEW" || row.status === "CLAIMED") && <button onClick={() => onTransition(row.id, "IN_PROGRESS")} disabled={busy} type="button">{t("开始", "Start")}</button>}
+	                {row.status === "IN_PROGRESS" && <button onClick={() => onTransition(row.id, "WAITING_REVIEW")} disabled={busy} type="button">{t("复核", "Review")}</button>}
+	                {row.status === "WAITING_REVIEW" && <button onClick={() => onTransition(row.id, "CLOSED")} disabled={busy} type="button">{t("关闭", "Close")}</button>}
+	                {row.status === "CLOSED" && <button onClick={() => onTransition(row.id, "ARCHIVED")} disabled={busy} type="button">{t("归档", "Archive")}</button>}
               </div>
             </div>
           );
@@ -1244,7 +1253,8 @@ function TicketsView({ rows, busy, onTransition, ticketFilter, ticketTypeFilter,
   );
 }
 
-function HumanView({ rows, busy, draft, setDraft, onCreate, onReview, humanFilter, onFilterChange }: {
+function HumanView({ locale, rows, busy, draft, setDraft, onCreate, onReview, humanFilter, onFilterChange }: {
+  locale: AdminLocale;
   rows: AdminHumanIntelligence[];
   busy: boolean;
   draft: HumanDraft;
@@ -1254,15 +1264,16 @@ function HumanView({ rows, busy, draft, setDraft, onCreate, onReview, humanFilte
   humanFilter: string;
   onFilterChange: (status: string) => void;
 }) {
+  const t = (zh: string, en: string) => adminText(locale, zh, en);
   const pending = rows.filter(r => r.status === "PENDING_REVIEW").length;
   const approved = rows.filter(r => r.status === "APPROVED").length;
   const entitlementLabel = (e: string) => {
     switch (e) {
-      case "FREE": return "Free (not visible)";
-      case "SEED_PAID": return "Seed Paid (visible)";
-      case "PAID": return "Paid (premium)";
-      case "INTERNAL": return "Internal only";
-      case "LEGAL_FREEZE": return "Legal freeze (blocked)";
+      case "FREE": return t("免费（不可见）", "Free (not visible)");
+      case "SEED_PAID": return t("种子付费（可见）", "Seed paid (visible)");
+      case "PAID": return t("付费（高级内容）", "Paid (premium)");
+      case "INTERNAL": return t("仅内部可见", "Internal only");
+      case "LEGAL_FREEZE": return t("法务冻结（阻断）", "Legal freeze (blocked)");
       default: return e;
     }
   };
@@ -1281,108 +1292,110 @@ function HumanView({ rows, busy, draft, setDraft, onCreate, onReview, humanFilte
       <section className="workspaceCard adminPanel">
         <div className="sectionHead">
           <div className="sectionCopy">
-            <h2>Human Intelligence Entry</h2>
-            <p>Record local insights. Enters review before user-facing use.</p>
+            <h2>{t("人工情报录入", "Human intelligence entry")}</h2>
+            <p>{t("记录本地洞察。面向用户使用前会进入复核。", "Record local insights. Enters review before user-facing use.")}</p>
           </div>
           <button className="primary" onClick={onCreate} disabled={busy} type="button">
             <Plus size={16} />
-            Submit
+            {t("提交", "Submit")}
           </button>
         </div>
         <div className="adminFormGrid">
-          <label>City<input value={draft.city} onChange={(event) => setDraft({ ...draft, city: event.target.value })} /></label>
-          <label>Industry ID<input value={draft.industryId} onChange={(event) => setDraft({ ...draft, industryId: event.target.value })} /></label>
-          <label>Chain Node<input value={draft.linkId} onChange={(event) => setDraft({ ...draft, linkId: event.target.value })} /></label>
-          <label>Region ID<input value={draft.regionId} onChange={(event) => setDraft({ ...draft, regionId: event.target.value })} /></label>
-          <label>Source Type
+          <label>{t("城市", "City")}<input value={draft.city} onChange={(event) => setDraft({ ...draft, city: event.target.value })} /></label>
+          <label>{t("行业 ID", "Industry ID")}<input value={draft.industryId} onChange={(event) => setDraft({ ...draft, industryId: event.target.value })} title={adminCodeWithRaw(locale, draft.industryId)} /></label>
+          <label>{t("链路节点", "Chain node")}<input value={draft.linkId} onChange={(event) => setDraft({ ...draft, linkId: event.target.value })} title={adminCodeWithRaw(locale, draft.linkId)} /></label>
+          <label>{t("区域 ID", "Region ID")}<input value={draft.regionId} onChange={(event) => setDraft({ ...draft, regionId: event.target.value })} title={adminCodeWithRaw(locale, draft.regionId)} /></label>
+          <label>{t("来源类型", "Source type")}
             <select value={draft.sourceType} onChange={(event) => setDraft({ ...draft, sourceType: event.target.value })} className="adminFilterSelect" style={{ width: "100%" }}>
-              <option value="local_visit">Local Visit</option>
-              <option value="partner_report">Partner Report</option>
-              <option value="user_submission">User Submission</option>
-              <option value="field_survey">Field Survey</option>
-              <option value="expert_interview">Expert Interview</option>
+              <option value="local_visit">{adminCodeLabel(locale, "local_visit")}</option>
+              <option value="partner_report">{adminCodeLabel(locale, "partner_report")}</option>
+              <option value="user_submission">{adminCodeLabel(locale, "user_submission")}</option>
+              <option value="field_survey">{adminCodeLabel(locale, "field_survey")}</option>
+              <option value="expert_interview">{adminCodeLabel(locale, "expert_interview")}</option>
             </select>
           </label>
-          <label>Collector<input value={draft.collector} onChange={(event) => setDraft({ ...draft, collector: event.target.value })} /></label>
-          <label>Source ID<input value={draft.sourceId} onChange={(event) => setDraft({ ...draft, sourceId: event.target.value })} /></label>
-          <label>Event Time<input value={draft.eventTime} onChange={(event) => setDraft({ ...draft, eventTime: event.target.value })} placeholder="e.g. 2026-07" /></label>
-          <label>Confidence
+          <label>{t("采集人", "Collector")}<input value={draft.collector} onChange={(event) => setDraft({ ...draft, collector: event.target.value })} title={adminCodeWithRaw(locale, draft.collector)} /></label>
+          <label>{t("来源 ID", "Source ID")}<input value={draft.sourceId} onChange={(event) => setDraft({ ...draft, sourceId: event.target.value })} title={adminCodeWithRaw(locale, draft.sourceId)} /></label>
+          <label>{t("事件时间", "Event time")}<input value={draft.eventTime} onChange={(event) => setDraft({ ...draft, eventTime: event.target.value })} placeholder={t("例如 2026-07", "e.g. 2026-07")} /></label>
+          <label>{t("置信度", "Confidence")}
             <div className="confidenceRow">
               <input type="range" min="0" max="1" step="0.01" value={draft.confidence} onChange={(event) => setDraft({ ...draft, confidence: Number(event.target.value) })} className="flex1" />
               <span className="adminBadge">{draft.confidence.toFixed(2)}</span>
             </div>
           </label>
-          <label>Entitlement
+          <label>{t("权益", "Entitlement")}
             <select value={draft.entitlement} onChange={(event) => setDraft({ ...draft, entitlement: event.target.value })} className="adminFilterSelect" style={{ width: "100%" }}>
-              <option value="FREE">Free (not visible to free users)</option>
-              <option value="SEED_PAID">Seed Paid (visible)</option>
-              <option value="PAID">Paid (premium content)</option>
-              <option value="INTERNAL">Internal Only</option>
-              <option value="LEGAL_FREEZE">Legal Freeze (blocked)</option>
+              <option value="FREE">{t("免费（免费用户不可见）", "Free (not visible to free users)")}</option>
+              <option value="SEED_PAID">{t("种子付费（可见）", "Seed paid (visible)")}</option>
+              <option value="PAID">{t("付费（高级内容）", "Paid (premium content)")}</option>
+              <option value="INTERNAL">{t("仅内部", "Internal only")}</option>
+              <option value="LEGAL_FREEZE">{t("法务冻结（阻断）", "Legal freeze (blocked)")}</option>
             </select>
           </label>
-          <label className="wide">Content<input value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.target.value })} /></label>
+          <label className="wide">{t("内容", "Content")}<input value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.target.value })} /></label>
         </div>
       </section>
       <section className="workspaceCard adminPanel">
         <div className="sectionHead compact">
           <div className="sectionCopy">
-            <h2>Queue</h2>
-            <p>Approved records are promoted into intelligence for retrieval/report use.</p>
+            <h2>{t("队列", "Queue")}</h2>
+            <p>{t("通过的记录会提升为情报，用于检索和报告。", "Approved records are promoted into intelligence for retrieval/report use.")}</p>
           </div>
           <div className="adminFilterBar">
             <select value={humanFilter} onChange={e => onFilterChange(e.target.value)} className="adminFilterSelect">
-              <option value="">All</option>
-              <option value="PENDING_REVIEW">Pending</option>
-              <option value="APPROVED">Approved</option>
-              <option value="REJECTED">Rejected</option>
+              <option value="">{t("全部", "All")}</option>
+              <option value="PENDING_REVIEW">{adminCodeLabel(locale, "PENDING_REVIEW")}</option>
+              <option value="APPROVED">{adminCodeLabel(locale, "APPROVED")}</option>
+              <option value="REJECTED">{adminCodeLabel(locale, "REJECTED")}</option>
             </select>
           </div>
         </div>
         <div className="table humanQueueTable">
-          {rows.length === 0 && <div className="emptyRow">No human intelligence records yet.</div>}
+          {rows.length === 0 && <div className="emptyRow">{t("暂无人工情报记录。", "No human intelligence records yet.")}</div>}
           {rows.map((row) => (
             <div className={`row humanQueueRow ${row.status === "PENDING_REVIEW" ? "human-pending" : ""}`} key={row.id}>
               <div>
                 <strong>{row.city} / {row.linkId}</strong>
                 <div className="humanQueueMeta">
-                  <StatusBadge value={row.status} />
-                  <span className={`entBadge ${entitlementClass(row.entitlement)}`} title={entitlementLabel(row.entitlement)}>{row.entitlement}</span>
-                  <small>Conf: {row.confidence}</small>
-                  <small>{row.sourceType} / {row.collector}</small>
+	                  <StatusBadge value={row.status} locale={locale} />
+	                  <span className={`entBadge ${entitlementClass(row.entitlement)}`} title={entitlementLabel(row.entitlement)}>{adminCodeLabel(locale, row.entitlement)}</span>
+	                  <small>{t("置信度：", "Conf:")} {row.confidence}</small>
+	                  <small>{adminCodeLabel(locale, row.sourceType)} / {adminCodeLabel(locale, row.collector)}</small>
                 </div>
               </div>
               <small className="humanQueueContent">{row.content}</small>
               {row.status === "PENDING_REVIEW" && (
                 <div className="adminRowActions wideActions">
-                  <button onClick={() => onReview(row.id, "PASS")} disabled={busy} type="button">Approve</button>
-                  <button onClick={() => onReview(row.id, "REJECT")} disabled={busy} type="button">Reject</button>
-                </div>
-              )}
-              {row.reviewer && <small className="humanReviewer">Reviewed by {row.reviewer}{row.reviewNotes ? ` — ${row.reviewNotes}` : ""}</small>}
+	                  <button onClick={() => onReview(row.id, "PASS")} disabled={busy} type="button">{t("通过", "Approve")}</button>
+	                  <button onClick={() => onReview(row.id, "REJECT")} disabled={busy} type="button">{t("拒绝", "Reject")}</button>
+	                </div>
+	              )}
+	              {row.reviewer && <small className="humanReviewer">{t("复核人", "Reviewed by")} {row.reviewer}{row.reviewNotes ? ` - ${row.reviewNotes}` : ""}</small>}
             </div>
           ))}
         </div>
-        {pending > 0 && <div className="monitoringSummary"><small>{pending} pending review, {approved} approved</small></div>}
+	        {pending > 0 && <div className="monitoringSummary"><small>{pending} {t("待复核", "pending review")}, {approved} {t("已通过", "approved")}</small></div>}
       </section>
     </div>
   );
 }
 
-function RiskRulesView({ rows, busy, onToggle, onSave, onRefresh }: {
+function RiskRulesView({ locale, rows, busy, onToggle, onSave, onRefresh }: {
+  locale: AdminLocale;
   rows: RiskRule[];
   busy: boolean;
   onToggle: (id: number) => void;
   onSave: (payload: RiskRuleUpsertInput) => void;
   onRefresh: () => void;
 }) {
+  const t = (zh: string, en: string) => adminText(locale, zh, en);
   const TABS: { key: string; label: string }[] = [
-    { key: "rumor_detection", label: "Rumor" },
-    { key: "conflict_judgment", label: "Conflict" },
-    { key: "gray_content", label: "Gray Content" },
-    { key: "ai_self_check", label: "AI Self-Check" },
-    { key: "api_abuse", label: "API Abuse" },
-    { key: "paid_protection", label: "Paid Protection" },
+    { key: "rumor_detection", label: adminCodeLabel(locale, "rumor_detection") },
+    { key: "conflict_judgment", label: adminCodeLabel(locale, "conflict_judgment") },
+    { key: "gray_content", label: adminCodeLabel(locale, "gray_content") },
+    { key: "ai_self_check", label: adminCodeLabel(locale, "ai_self_check") },
+    { key: "api_abuse", label: adminCodeLabel(locale, "api_abuse") },
+    { key: "paid_protection", label: adminCodeLabel(locale, "paid_protection") },
   ];
   const [activeTab, setActiveTab] = useState("rumor_detection");
   const [editId, setEditId] = useState<number | null>(null);
@@ -1400,10 +1413,10 @@ function RiskRulesView({ rows, busy, onToggle, onSave, onRefresh }: {
     <section className="workspaceCard adminPanel">
       <div className="sectionHead">
         <div className="sectionCopy">
-          <h2>Risk Control Rules</h2>
-          <p>Configure detection thresholds, enable/disable rules, and set activation modes across six risk categories.</p>
+          <h2>{t("风控规则", "Risk control rules")}</h2>
+          <p>{t("配置六类风险的检测阈值、启停状态和生效模式。", "Configure detection thresholds, enable/disable rules, and set activation modes across six risk categories.")}</p>
         </div>
-        <button className="ghost" onClick={onRefresh} disabled={busy} type="button"><RefreshCw size={14} /> Refresh</button>
+        <button className="ghost" onClick={onRefresh} disabled={busy} type="button"><RefreshCw size={14} /> {t("刷新", "Refresh")}</button>
       </div>
       <div className="riskTabs">
         {TABS.map(tab => (
@@ -1413,30 +1426,30 @@ function RiskRulesView({ rows, busy, onToggle, onSave, onRefresh }: {
         ))}
       </div>
       <div className="riskRuleList">
-        {filtered.length === 0 && <div className="emptyRow">No rules configured for this category. Seed data creates default rules on first startup.</div>}
+        {filtered.length === 0 && <div className="emptyRow">{t("该类别暂无已配置规则。首次启动时种子数据会创建默认规则。", "No rules configured for this category. Seed data creates default rules on first startup.")}</div>}
         {filtered.map(rule => (
           <div className={`riskRuleItem ${rule.enabled ? "" : "rule-disabled"}`} key={rule.id}>
             {editId === rule.id ? (
               <div className="riskRuleEdit">
                 <div className="adminFormGrid">
-                  <label>Name<input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} /></label>
-                  <label>Risk Level
-                    <select value={editForm.riskLevel} onChange={e => setEditForm({ ...editForm, riskLevel: e.target.value })} className="adminFilterSelect" style={{ width: "100%" }}>
-                      <option value="LOW">Low</option><option value="MEDIUM">Medium</option><option value="HIGH">High</option><option value="CRITICAL">Critical</option>
-                    </select>
-                  </label>
-                  <label>Change Mode
-                    <select value={editForm.changeMode} onChange={e => setEditForm({ ...editForm, changeMode: e.target.value })} className="adminFilterSelect" style={{ width: "100%" }}>
-                      <option value="IMMEDIATE">Immediate</option><option value="GRAY">Gray Release</option><option value="SCHEDULED">Scheduled</option>
-                    </select>
-                  </label>
-                  <label>Threshold (0–1)<input value={editForm.thresholdValue ?? ""} onChange={e => setEditForm({ ...editForm, thresholdValue: e.target.value ? Number(e.target.value) : null })} type="number" min="0" max="1" step="0.01" /></label>
-                  <label className="wide">Description<textarea value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} rows={3} /></label>
-                  <label className="wide">Scope JSON<textarea value={editForm.scopeJson ?? ""} onChange={e => setEditForm({ ...editForm, scopeJson: e.target.value })} rows={3} /></label>
+	                  <label>{t("名称", "Name")}<input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} /></label>
+	                  <label>{t("风险级别", "Risk level")}
+	                    <select value={editForm.riskLevel} onChange={e => setEditForm({ ...editForm, riskLevel: e.target.value })} className="adminFilterSelect" style={{ width: "100%" }}>
+	                      <option value="LOW">{adminCodeLabel(locale, "LOW")}</option><option value="MEDIUM">{adminCodeLabel(locale, "MEDIUM")}</option><option value="HIGH">{adminCodeLabel(locale, "HIGH")}</option><option value="CRITICAL">{adminCodeLabel(locale, "CRITICAL")}</option>
+	                    </select>
+	                  </label>
+	                  <label>{t("变更模式", "Change mode")}
+	                    <select value={editForm.changeMode} onChange={e => setEditForm({ ...editForm, changeMode: e.target.value })} className="adminFilterSelect" style={{ width: "100%" }}>
+	                      <option value="IMMEDIATE">{adminCodeLabel(locale, "IMMEDIATE")}</option><option value="GRAY">{adminCodeLabel(locale, "GRAY")}</option><option value="SCHEDULED">{adminCodeLabel(locale, "SCHEDULED")}</option>
+	                    </select>
+	                  </label>
+	                  <label>{t("阈值 (0-1)", "Threshold (0-1)")}<input value={editForm.thresholdValue ?? ""} onChange={e => setEditForm({ ...editForm, thresholdValue: e.target.value ? Number(e.target.value) : null })} type="number" min="0" max="1" step="0.01" /></label>
+	                  <label className="wide">{t("描述", "Description")}<textarea value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} rows={3} /></label>
+	                  <label className="wide">{t("范围 JSON", "Scope JSON")}<textarea value={editForm.scopeJson ?? ""} onChange={e => setEditForm({ ...editForm, scopeJson: e.target.value })} rows={3} /></label>
                 </div>
                 <div className="adminRowActions adminFormActions">
-                  <button className="primary" onClick={handleSave} disabled={busy} type="button">Save</button>
-                  <button className="ghost" onClick={cancelEdit} type="button">Cancel</button>
+	                  <button className="primary" onClick={handleSave} disabled={busy} type="button">{t("保存", "Save")}</button>
+	                  <button className="ghost" onClick={cancelEdit} type="button">{t("取消", "Cancel")}</button>
                 </div>
               </div>
             ) : (
@@ -1444,19 +1457,19 @@ function RiskRulesView({ rows, busy, onToggle, onSave, onRefresh }: {
                 <div className="riskRuleInfo">
                   <div className="riskRuleHead">
                     <strong>{rule.name}</strong>
-                    <span className={`adminBadge status-${rule.riskLevel.toLowerCase() === "critical" ? "p0" : rule.riskLevel.toLowerCase() === "high" ? "open" : "healthy"}`}>{rule.riskLevel}</span>
-                    <span className={`adminBadge ${rule.enabled ? "status-healthy" : "status-rejected"}`}>{rule.enabled ? "ENABLED" : "DISABLED"}</span>
-                    <small>v{rule.version} / {rule.changeMode}</small>
+	                    <span className={`adminBadge status-${rule.riskLevel.toLowerCase() === "critical" ? "p0" : rule.riskLevel.toLowerCase() === "high" ? "open" : "healthy"}`}>{adminCodeLabel(locale, rule.riskLevel)}</span>
+	                    <span className={`adminBadge ${rule.enabled ? "status-healthy" : "status-rejected"}`}>{adminCodeLabel(locale, rule.enabled ? "ENABLED" : "DISABLED")}</span>
+	                    <small>v{rule.version} / {adminCodeLabel(locale, rule.changeMode)}</small>
                   </div>
                   <p>{rule.description}</p>
                   <div className="riskRuleMeta">
-                    {rule.thresholdValue != null && <small>Threshold: {rule.thresholdValue}</small>}
-                    {rule.scopeJson && <small>Scope: {rule.scopeJson}</small>}
+	                    {rule.thresholdValue != null && <small>{t("阈值：", "Threshold:")} {rule.thresholdValue}</small>}
+	                    {rule.scopeJson && <small>{t("范围：", "Scope:")} {rule.scopeJson}</small>}
                   </div>
                 </div>
                 <div className="adminRowActions">
-                  <button onClick={() => startEdit(rule)} type="button">Edit</button>
-                  <button onClick={() => onToggle(rule.id)} disabled={busy} type="button">{rule.enabled ? "Disable" : "Enable"}</button>
+	                  <button onClick={() => startEdit(rule)} type="button">{t("编辑", "Edit")}</button>
+	                  <button onClick={() => onToggle(rule.id)} disabled={busy} type="button">{rule.enabled ? t("停用", "Disable") : t("启用", "Enable")}</button>
                 </div>
               </div>
             )}
@@ -1471,7 +1484,7 @@ function RiskRulesView({ rows, busy, onToggle, onSave, onRefresh }: {
 function ListPanel<T>({ title, rows, render }: { title: string; rows: T[]; render: (row: T) => ReactNode }) {
   return (
     <section className="workspaceCard adminPanel">
-      <PanelHead title={title} detail={`${rows.length} records`} />
+      <PanelHead title={title} detail={`${rows.length}`} />
       <div className="table">{rows.map((row, index) => <div className="row" key={index}>{render(row)}</div>)}</div>
     </section>
   );
@@ -1498,18 +1511,11 @@ function PanelHead({ title, detail }: { title: string; detail: string }) {
   );
 }
 
-function StatusBadge({ value }: { value: string }) {
-  return <span className={`adminBadge status-${value.toLowerCase().replaceAll("_", "-")}`}>{value}</span>;
+function StatusBadge({ value, locale = "zh-CN" }: { value: string; locale?: AdminLocale }) {
+  return <span className={`adminBadge status-${value.toLowerCase().replaceAll("_", "-")}`}>{adminCodeLabel(locale, value)}</span>;
 }
 
 function formatTime(value: string) {
   if (!value) return "-";
   return value.replace("T", " ").slice(0, 16);
 }
-
-
-
-
-
-
-

@@ -10,7 +10,7 @@ import {
   type FalseLedgerItem,
   type SnapshotSummary
 } from "../../lib/api-client";
-import { adminText, type AdminLocale } from "./admin-i18n";
+import { adminCodeLabel, adminText, type AdminLocale } from "./admin-i18n";
 
 export function ConflictsView({ locale }: { locale: AdminLocale }) {
   const [rows, setRows] = useState<ConflictResolutionRecord[]>([]);
@@ -52,10 +52,10 @@ export function ConflictsView({ locale }: { locale: AdminLocale }) {
         {rows.length === 0 && <div className="emptyRow">{t("暂无冲突记录。新情报采集时会自动检测冲突。", "No conflict records yet. Conflicts are detected automatically when new intelligence is collected.")}</div>}
         {rows.map((row) => (
           <div className="adminTableRow" key={row.id}>
-            <StatusBadge value={row.conflictBranch} />
+            <StatusBadge value={row.conflictBranch} locale={locale} />
             <span>{row.simHashDistance}</span>
-            <span>{row.routingAction}</span>
-            <small>in: {row.incomingWeight.toFixed(2)} / ex: {row.existingWeight.toFixed(2)}</small>
+            <span>{adminCodeLabel(locale, row.routingAction)}</span>
+            <small>{t("新", "in")}: {row.incomingWeight.toFixed(2)} / {t("旧", "ex")}: {row.existingWeight.toFixed(2)}</small>
             <small>{row.resolvedBy || "-"}</small>
           </div>
         ))}
@@ -105,7 +105,7 @@ export function FalseLedgerView({ locale }: { locale: AdminLocale }) {
         {rows.map((row) => (
           <div className="adminTableRow" key={row.id}>
             <strong>{row.title}</strong>
-            <span>{row.conflictReason}</span>
+            <span>{adminCodeLabel(locale, row.conflictReason)}</span>
             <small>{row.matchedRumorKeyword || "-"}</small>
             <small>{row.archivedBy}</small>
           </div>
@@ -168,7 +168,7 @@ export function SnapshotsView({ locale }: { locale: AdminLocale }) {
         {rows.length === 0 && <div className="emptyRow">{t("未找到快照。调度器会自动创建快照。", "No snapshots found. Snapshots are created automatically by the scheduler.")}</div>}
         {rows.map((row) => (
           <div className="adminTableRow" key={row.id}>
-            <StatusBadge value={row.snapshotType} />
+            <StatusBadge value={row.snapshotType} locale={locale} />
             <span>{row.scopeKey}</span>
             <span>{row.recordCount}</span>
             <small>{row.retentionDays}d</small>
@@ -181,8 +181,8 @@ export function SnapshotsView({ locale }: { locale: AdminLocale }) {
   );
 }
 
-function StatusBadge({ value }: { value: string }) {
-  return <span className={`adminBadge status-${value.toLowerCase().replaceAll("_", "-")}`}>{value}</span>;
+function StatusBadge({ value, locale }: { value: string; locale: AdminLocale }) {
+  return <span className={`adminBadge status-${value.toLowerCase().replaceAll("_", "-")}`}>{adminCodeLabel(locale, value)}</span>;
 }
 
 function formatTime(value: string) {

@@ -1,7 +1,7 @@
 "use client";
 
 import type { AdminDashboard } from "../../lib/api-client";
-import { adminText, type AdminLocale } from "./admin-i18n";
+import { adminCodeLabel, adminText, type AdminLocale } from "./admin-i18n";
 
 function PanelHead({ title, detail }: { title: string; detail: string }) {
   return (
@@ -14,8 +14,8 @@ function PanelHead({ title, detail }: { title: string; detail: string }) {
   );
 }
 
-function StatusBadge({ value }: { value: string }) {
-  return <span className={`adminBadge status-${value.toLowerCase().replaceAll("_", "-")}`}>{value}</span>;
+function StatusBadge({ value, locale }: { value: string; locale: AdminLocale }) {
+  return <span className={`adminBadge status-${value.toLowerCase().replaceAll("_", "-")}`}>{adminCodeLabel(locale, value)}</span>;
 }
 
 export function DashboardView({ dashboard, locale }: { dashboard: AdminDashboard | null; locale: AdminLocale }) {
@@ -68,11 +68,11 @@ export function DashboardView({ dashboard, locale }: { dashboard: AdminDashboard
               {dashboard.urgentAlerts.map((alert) => (
                 <div className={`dashboardRow status-${alert.level === "P0" ? "critical" : "warning"}`} key={`alert-${alert.id}`}>
                   <div className="dashboardRowMain">
-                    <StatusBadge value={alert.level} />
+                    <StatusBadge value={alert.level} locale={locale} />
                     <strong>{alert.message}</strong>
                   </div>
                   <div className="dashboardRowMeta">
-                    <small>{alert.component} / {alert.status}</small>
+                    <small>{alert.component} / {adminCodeLabel(locale, alert.status)}</small>
                     <small>{alert.owner ?? t("未分配", "Unassigned")}</small>
                   </div>
                 </div>
@@ -80,11 +80,11 @@ export function DashboardView({ dashboard, locale }: { dashboard: AdminDashboard
               {dashboard.openTickets.map((ticket) => (
                 <div className={`dashboardRow status-${ticket.severity === "P0" ? "critical" : "warning"}`} key={`ticket-${ticket.id}`}>
                   <div className="dashboardRowMain">
-                    <StatusBadge value={ticket.severity} />
+                    <StatusBadge value={ticket.severity} locale={locale} />
                     <strong>{ticket.title}</strong>
                   </div>
                   <div className="dashboardRowMeta">
-                    <small>{ticket.ticketType} / {ticket.status}</small>
+                    <small>{adminCodeLabel(locale, ticket.ticketType)} / {adminCodeLabel(locale, ticket.status)}</small>
                     <small>{ticket.owner ?? t("未分配", "Unassigned")}</small>
                   </div>
                 </div>
@@ -120,7 +120,7 @@ export function DashboardView({ dashboard, locale }: { dashboard: AdminDashboard
           <PanelHead title={t("情报生产", "Intelligence Production")} detail={t("待复核、人工情报队列和知识记录。", "Pending reviews, human intelligence queue, and knowledge records.")} />
           <div className="dashboardRow status-warning">
             <div className="dashboardRowMain">
-              <StatusBadge value="PENDING" />
+              <StatusBadge value="PENDING" locale={locale} />
               <strong>{t("待复核", "Pending reviews")}</strong>
             </div>
             <div className="dashboardRowMeta">

@@ -2,6 +2,25 @@
 
 ## 2026-07-10
 
+### Consolidated Flyway V1 And Admin I18n Isolation
+
+- Change type: database migration consolidation, frontend internationalization, documentation, and test maintenance.
+- Affected modules: `services/api`, `apps/web`, `docs/en`, `docs/zh-CN`, and both change logs.
+- Main changes:
+  - Consolidated source Flyway migrations into `services/api/src/main/resources/db/migration/mysql/V1__baseline.sql` and removed the obsolete MySQL `V2` through `V4` migration files for resettable environments.
+  - Merged the H2 admin seed/SLA setup into `services/api/src/test/resources/db/migration/h2/V1__baseline.sql` and changed the test profile to load only the H2 V1 baseline.
+  - Added admin i18n helpers for backend enum/status/code labels and wired admin dashboard, collection, monitoring, governance, knowledge, alerts, audit, reviews, tickets, human intelligence, and risk-rule views through localized display text.
+  - Kept API payload values stable while translating displayed enum/status values, entitlement labels, source types, risk-rule categories, and common business codes such as `general`, `cn-default`, and `sales-payment`.
+  - Updated source-map documentation to describe the single consolidated MySQL Flyway baseline.
+  - Updated frontend source-assertion tests to match the current user-profile restore flow and expanded admin workspace sections.
+- Verification results:
+  - Used CodeGraph before manual file inspection and synced CodeGraph after source edits.
+  - Verified `apps/web` with `npm run build`; the Next.js production build passed.
+  - Verified `apps/web` with `npm test`; all 38 frontend tests passed.
+  - Verified `services/api` with `mvn test`; all 38 API tests passed with the consolidated H2 V1 baseline.
+- Unfinished items:
+  - Live MySQL Flyway execution against a freshly reset database was not run in this environment.
+
 ### Flyway-Owned MySQL Baseline And Idempotent Migrations
 
 - Change type: database migration and deployment configuration change.

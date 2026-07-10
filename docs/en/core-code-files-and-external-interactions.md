@@ -161,7 +161,7 @@ Notes:
 
 | File | Main responsibility | Internal calls | External interactions |
 |------|---------------------|----------------|-----------------------|
-| `services/api/src/main/resources/db/migration/mysql/V1__baseline.sql`, `V2__admin_schema_and_seed.sql`, `V3__user_memory_profile_uniqueness.sql`, and `V4__user_preferred_locale.sql` | Idempotent Flyway migrations for the MySQL baseline, admin schema and seed data, memory uniqueness, and user locale preference. | Loaded at API startup. | Creates and upgrades MySQL schema as the single schema source. |
+| `services/api/src/main/resources/db/migration/mysql/V1__baseline.sql` | Consolidated idempotent Flyway baseline for the MySQL schema, admin schema and seed data, memory uniqueness, and user locale preference. | Loaded at API startup. | Creates the MySQL schema as the single Flyway-managed schema source for resettable environments. |
 
 ### 3.4 `services/ai-worker`
 

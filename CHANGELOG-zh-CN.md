@@ -2,6 +2,25 @@
 
 ## 2026-07-10
 
+### 合并 Flyway V1 与 admin 国际化隔离
+
+- 变更类型：数据库迁移合并、前端国际化、文档与测试维护。
+- 影响模块：`services/api`、`apps/web`、`docs/en`、`docs/zh-CN` 和两份变更日志。
+- 主要变更：
+  - 将源 Flyway 迁移合并到 `services/api/src/main/resources/db/migration/mysql/V1__baseline.sql`，并删除面向可重置环境已不再需要的 MySQL `V2` 至 `V4` 迁移文件。
+  - 将 H2 的 admin 种子数据和 SLA 初始化合入 `services/api/src/test/resources/db/migration/h2/V1__baseline.sql`，并将测试 profile 改为只加载 H2 V1 基线。
+  - 新增 admin 枚举/状态/code 标签的 i18n helper，并将 admin 仪表盘、采集、监控、治理、知识、告警、审计、复核、工单、人工情报和风控规则视图接入本地化显示文案。
+  - 保持提交给 API 的 payload 值稳定，同时翻译界面展示的枚举/状态、权益标签、来源类型、风控规则类别，以及 `general`、`cn-default`、`sales-payment` 等常见业务 code。
+  - 更新源码地图文档，说明当前 MySQL Flyway 只保留合并后的 V1 基线。
+  - 更新前端源码断言测试，使其匹配当前用户资料恢复流程和扩展后的 admin 工作台页面集合。
+- 验证结果：
+  - 修改前已使用 CodeGraph 检查相关路径，源码修改后已同步 CodeGraph。
+  - 已在 `apps/web` 执行 `npm run build`；Next.js 生产构建通过。
+  - 已在 `apps/web` 执行 `npm test`；38 个前端测试全部通过。
+  - 已在 `services/api` 执行 `mvn test`；合并后的 H2 V1 基线下 38 个 API 测试全部通过。
+- 未完成事项：
+  - 当前环境未对全新重置的真实 MySQL 数据库执行 Flyway 实机验证。
+
 ### Flyway 托管的 MySQL 基线与幂等迁移
 
 - 变更类型：数据库迁移与部署配置调整。

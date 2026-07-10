@@ -12,7 +12,7 @@ import type {
   AdminTicket
 } from "../../lib/api-client";
 import { fetchAdminCollectionTelemetry, fetchOpsSla, type CollectionTelemetry, type SlaStats } from "../../lib/api-client";
-import { adminText, type AdminLocale } from "./admin-i18n";
+import { adminCodeLabel, adminText, type AdminLocale } from "./admin-i18n";
 
 export function MonitoringView({
   locale, sources, jobs, deadLetters, knowledgeNodes, alerts, tickets, reviews, humanRows
@@ -52,11 +52,11 @@ export function MonitoringView({
     <div className="adminStack">
       <div className="adminMonitoringGrid">
         <MonitoringCard title={t("服务健康", "Service Health")} detail={t("来自告警聚合与采集链路的实时状态。", "Real-time status from alert aggregation and collection pipeline.")}>
-          <MetricRow label="API Gateway" badge={openAlerts > 0 ? "DEGRADED" : "HEALTHY"} badgeClass={openAlerts > 0 ? "open" : "healthy"} detail={`${openAlerts} ${t("个未处理告警", "open alerts")}`} />
-          <MetricRow label={t("爬虫链路", "Crawler Pipeline")} badge={openCircuits > 0 ? "DEGRADED" : "HEALTHY"} badgeClass={openCircuits > 0 ? "open" : "healthy"} detail={`${openCircuits} ${t("个开启熔断", "open circuits")}`} />
-          <MetricRow label={t("AI 推理", "AI Inference")} badge={sources.length > 0 || jobs.length > 0 ? "OPERATIONAL" : "NO DATA"} badgeClass={sources.length > 0 || jobs.length > 0 ? "healthy" : "pending"} detail={t("通过采集链路活动自检", "Self-check via collection pipeline activity")} />
-          <MetricRow label={t("数据库", "Database")} badge="MONITORED" badgeClass="healthy" detail={t("来自 /admin/dashboard 接口", "Via API /admin/dashboard endpoint")} />
-          <MetricRow label={t("缓存层", "Cache Layer")} badge="MONITORED" badgeClass="healthy" detail={t("来自 Redis 熔断状态", "Via Redis circuit breaker state")} />
+          <MetricRow label="API Gateway" badge={adminCodeLabel(locale, openAlerts > 0 ? "DEGRADED" : "HEALTHY")} badgeClass={openAlerts > 0 ? "open" : "healthy"} detail={`${openAlerts} ${t("个未处理告警", "open alerts")}`} />
+          <MetricRow label={t("爬虫链路", "Crawler Pipeline")} badge={adminCodeLabel(locale, openCircuits > 0 ? "DEGRADED" : "HEALTHY")} badgeClass={openCircuits > 0 ? "open" : "healthy"} detail={`${openCircuits} ${t("个开启熔断", "open circuits")}`} />
+          <MetricRow label={t("AI 推理", "AI Inference")} badge={adminCodeLabel(locale, sources.length > 0 || jobs.length > 0 ? "OPERATIONAL" : "NO_DATA")} badgeClass={sources.length > 0 || jobs.length > 0 ? "healthy" : "pending"} detail={t("通过采集链路活动自检", "Self-check via collection pipeline activity")} />
+          <MetricRow label={t("数据库", "Database")} badge={adminCodeLabel(locale, "MONITORED")} badgeClass="healthy" detail={t("来自 /admin/dashboard 接口", "Via API /admin/dashboard endpoint")} />
+          <MetricRow label={t("缓存层", "Cache Layer")} badge={adminCodeLabel(locale, "MONITORED")} badgeClass="healthy" detail={t("来自 Redis 熔断状态", "Via Redis circuit breaker state")} />
         </MonitoringCard>
 
         <MonitoringCard title={t("采集链路", "Collection Pipeline")} detail={t("调度器、采集源、任务和死信队列。", "Scheduler, sources, jobs, and dead-letter queue.")}>
@@ -70,7 +70,7 @@ export function MonitoringView({
           <MetricRow label={t("知识节点", "Knowledge nodes")} badge={`${knowledgeNodes.length}`} badgeClass="healthy" detail={t("维护总量", "Total maintained")} />
           <MetricRow label={t("情报复核", "Intelligence reviews")} badge={`${reviews.length}`} badgeClass="healthy" detail={`${pendingReviews} ${t("待处理", "pending")}`} />
           <MetricRow label={t("人工情报", "Human intelligence")} badge={`${humanRows.length}`} badgeClass="healthy" detail={`${pendingHuman} ${t("待处理", "pending")}`} />
-          <MetricRow label={t("审计日志", "Audit logs")} badge="Active" badgeClass="healthy" detail={t("预写审计记录", "Write-ahead logging")} />
+          <MetricRow label={t("审计日志", "Audit logs")} badge={adminCodeLabel(locale, "ACTIVE")} badgeClass="healthy" detail={t("预写审计记录", "Write-ahead logging")} />
         </MonitoringCard>
 
         <MonitoringCard title={t("告警摘要", "Alert Summary")} detail={t("按严重级别和状态统计告警。", "Alert distribution by severity and status.")}>

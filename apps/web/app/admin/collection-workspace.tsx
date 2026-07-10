@@ -10,7 +10,7 @@ import type {
   AdminCollectionSourceDetail,
   AdminCollectionSourceInput
 } from "../../lib/api-client";
-import { adminText, type AdminLocale } from "./admin-i18n";
+import { adminCodeLabel, adminCodeWithRaw, adminText, type AdminLocale } from "./admin-i18n";
 
 type Props = {
   busy: boolean;
@@ -69,8 +69,8 @@ export function CollectionWorkspace({
             <button key={source.sourceConfigId} className={`knowledgeNodeItem ${selectedSourceId === source.sourceConfigId ? "active" : ""}`} onClick={() => onSelectSource(source.sourceConfigId)} type="button">
               <strong>{source.name}</strong>
               <div className="knowledgeNodeMeta">
-                <span className={`adminBadge status-${source.status.toLowerCase()}`}>{source.status}</span>
-                <small>{source.sourceType} / {source.intervalMinutes}m / {source.circuitState}</small>
+                <span className={`adminBadge status-${source.status.toLowerCase()}`}>{adminCodeLabel(locale, source.status)}</span>
+                <small>{adminCodeWithRaw(locale, source.sourceType)} / {source.intervalMinutes}m / {adminCodeLabel(locale, source.circuitState)}</small>
               </div>
             </button>
           ))}
@@ -108,7 +108,7 @@ export function CollectionWorkspace({
           <label>{t("行业", "Industry")}<input value={sourceDraft.industryId} onChange={(event) => onSourceDraftChange({ ...sourceDraft, industryId: event.target.value })} /></label>
           <label>{t("链路节点", "Chain node")}<input value={sourceDraft.linkId} onChange={(event) => onSourceDraftChange({ ...sourceDraft, linkId: event.target.value })} /></label>
           <label>{t("来源 ID", "Source ID")}<input value={sourceDraft.sourceId} onChange={(event) => onSourceDraftChange({ ...sourceDraft, sourceId: event.target.value })} /></label>
-          <label className="wide">Payload JSON<textarea value={sourceDraft.payloadJson} onChange={(event) => onSourceDraftChange({ ...sourceDraft, payloadJson: event.target.value })} rows={10} /></label>
+          <label className="wide">{t("Payload JSON", "Payload JSON")}<textarea value={sourceDraft.payloadJson} onChange={(event) => onSourceDraftChange({ ...sourceDraft, payloadJson: event.target.value })} rows={10} /></label>
         </div>
         <div className="adminGridTwo collectionBottomGrid">
           <section className="nestedPanel">
@@ -129,8 +129,8 @@ export function CollectionWorkspace({
               {(detail?.keywords ?? []).map((keyword: AdminCollectionKeyword) => (
                 <div className="row" key={keyword.keywordId}>
                   <strong>{keyword.keyword}</strong>
-                  <span>{keyword.matchMode}</span>
-                  <small>{keyword.status} / {keyword.notes ?? "-"}</small>
+                  <span>{adminCodeLabel(locale, keyword.matchMode)}</span>
+                  <small>{adminCodeLabel(locale, keyword.status)} / {keyword.notes ?? "-"}</small>
                 </div>
               ))}
             </div>
@@ -145,9 +145,9 @@ export function CollectionWorkspace({
             <div className="table">
               {(detail?.recentRuns ?? []).map((run) => (
                 <div className="row" key={run.runId}>
-                  <strong>{run.triggerType} / {run.status}</strong>
+                  <strong>{adminCodeLabel(locale, run.triggerType)} / {adminCodeLabel(locale, run.status)}</strong>
                   <span>{run.recordsPersisted} {t("保留", "kept")}</span>
-                  <small>{run.sourceType} / retry {run.retryCount} / {run.errorMessage ?? t("无错误", "no error")}</small>
+                  <small>{adminCodeWithRaw(locale, run.sourceType)} / {t("重试", "retry")} {run.retryCount} / {run.errorMessage ?? t("无错误", "no error")}</small>
                 </div>
               ))}
             </div>
@@ -174,8 +174,8 @@ export function CollectionWorkspace({
               {jobs.slice(0, 8).map((job) => (
                 <div className="row" key={job.runId}>
                   <strong>{job.sourceName}</strong>
-                  <span>{job.status}</span>
-                  <small>{job.triggerType} / {t("采集", "collected")} {job.recordsCollected} / {t("入库", "persisted")} {job.recordsPersisted}</small>
+                  <span>{adminCodeLabel(locale, job.status)}</span>
+                  <small>{adminCodeLabel(locale, job.triggerType)} / {t("采集", "collected")} {job.recordsCollected} / {t("入库", "persisted")} {job.recordsPersisted}</small>
                 </div>
               ))}
             </div>
@@ -191,7 +191,7 @@ export function CollectionWorkspace({
               {deadLetters.slice(0, 8).map((letter) => (
                 <div className="row" key={letter.deadLetterId}>
                   <strong>{letter.sourceName ?? t("未知来源", "Unknown source")}</strong>
-                  <span>{letter.reason}</span>
+                  <span>{adminCodeLabel(locale, letter.reason)}</span>
                   <small>{letter.errorMessage}</small>
                 </div>
               ))}

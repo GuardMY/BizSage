@@ -161,7 +161,7 @@ Collector
 
 | 文件 | 主要职责 | 内部调用 | 外部交互 |
 |------|----------|----------|----------|
-| `services/api/src/main/resources/db/migration/mysql/V1__baseline.sql`、`V2__admin_schema_and_seed.sql`、`V3__user_memory_profile_uniqueness.sql` 与 `V4__user_preferred_locale.sql` | 幂等 Flyway 迁移，负责 MySQL 基线、管理后台 schema 与种子数据、记忆唯一性约束和用户语言偏好。 | 在 API 启动时加载。 | 作为唯一 schema 来源创建并升级 MySQL schema。 |
+| `services/api/src/main/resources/db/migration/mysql/V1__baseline.sql` | 合并后的幂等 Flyway 基线，负责 MySQL schema、管理后台 schema 与种子数据、记忆唯一性约束和用户语言偏好。 | 在 API 启动时加载。 | 面向可重置环境，作为唯一 Flyway 托管 schema 来源创建 MySQL schema。 |
 
 ### 3.4 `services/ai-worker`
 
