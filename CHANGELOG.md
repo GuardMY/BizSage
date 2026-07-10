@@ -1,5 +1,22 @@
 ﻿# Change Log
 
+## 2026-07-11
+
+### Empty Diagnosis Composer Initial Draft
+
+- Change type: functional repair.
+- Affected modules: `apps/web` and both change logs.
+- Main changes:
+  - Changed the diagnosis composer draft state to start as an empty string so the input has no default submit-ready text.
+  - Removed the unused bilingual default-question message field from the web page message contract.
+  - Added a frontend source assertion that the diagnosis composer starts empty and no longer defines `defaultQuestion`.
+- Verification results:
+  - Used CodeGraph before manual file inspection to locate the diagnosis workspace and page state paths.
+  - Verified `apps/web` with `npm test`; all 39 frontend tests passed.
+  - Verified `apps/web` with `npm run build`; the Next.js production build passed after installing lockfile dependencies with `npm ci`.
+- Unfinished items:
+  - None.
+
 ## 2026-07-10
 
 ### Consolidated Flyway V1 And Admin I18n Isolation

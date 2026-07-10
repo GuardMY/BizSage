@@ -87,7 +87,6 @@ const messages: Record<Locale, WorkspaceMessages> = {
     evidenceLine: "先看证据，再给建议。",
     newConversation: "新建会话",
     diagnosisConversation: "诊断会话",
-    defaultQuestion: "餐饮门店现金流怎么诊断？",
     busyDiagnosis: "正在连接 API 并生成诊断...",
     sendDiagnosis: "发送诊断",
     diagnosisCreated: "诊断已生成。",
@@ -154,7 +153,6 @@ const messages: Record<Locale, WorkspaceMessages> = {
     evidenceLine: "Evidence first, answer second.",
     newConversation: "New conversation",
     diagnosisConversation: "Diagnosis chat",
-    defaultQuestion: "How should a restaurant diagnose cash flow?",
     busyDiagnosis: "Connecting to the API and generating diagnosis...",
     sendDiagnosis: "Send diagnosis",
     diagnosisCreated: "Diagnosis generated.",
@@ -206,7 +204,7 @@ export default function Home() {
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messageHistory, setMessageHistory] = useState<ConversationMessage[]>([]);
-  const [message, setMessage] = useState(messages["zh-CN"].defaultQuestion);
+  const [message, setMessage] = useState("");
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
   const [streamingDiagnosis, setStreamingDiagnosis] = useState<Diagnosis | null>(null);
   const [report, setReport] = useState<DiagnosisReport | null>(null);

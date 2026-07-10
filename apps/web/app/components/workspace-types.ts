@@ -35,7 +35,6 @@ export type WorkspaceMessages = {
   evidenceLine: string;
   newConversation: string;
   diagnosisConversation: string;
-  defaultQuestion: string;
   busyDiagnosis: string;
   sendDiagnosis: string;
   diagnosisCreated: string;

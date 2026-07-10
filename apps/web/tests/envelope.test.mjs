@@ -118,6 +118,14 @@ test("Web page returns to the login screen on auth expiry without clearing draft
   assert.doesNotMatch(source, /setMessage\(messages\["zh-CN"\]\.defaultQuestion\)/);
 });
 
+test("Web page starts the diagnosis composer without a default submit value", async () => {
+  const pageSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const typeSource = readFileSync(new URL("../app/components/workspace-types.ts", import.meta.url), "utf8");
+  assert.match(pageSource, /const \[message, setMessage\] = useState\(""\);/);
+  assert.doesNotMatch(pageSource, /defaultQuestion/);
+  assert.doesNotMatch(typeSource, /defaultQuestion/);
+});
+
 test("Web page keeps the same conversation id for follow-up diagnosis", async () => {
   const source = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(source, /selectedConversationId/);
