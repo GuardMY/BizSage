@@ -11,5 +11,6 @@ public record UserView(
     String regionId,
     String industryId,
     String membershipLevel,
-    String consultationPreferences) {
+    String consultationPreferences,
+    String preferredLocale) {
 }

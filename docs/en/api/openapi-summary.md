@@ -17,13 +17,18 @@ All JSON endpoints return:
 
 - `POST /auth/login`
   - Body: `username`, `password`
-  - Returns: token, username, role, regionId, industryId, membershipLevel, consultationPreferences.
+  - Returns: token, username, role, regionId, industryId, membershipLevel, consultationPreferences, preferredLocale.
 
 ## Users
 
 - `GET /users`
   - Roles: `SUPER_ADMIN`, `OPERATOR`
   - Returns masked phone and identity fields plus V2 profile fields.
+- `GET /users/me`
+  - Returns the current authenticated user's profile, including `preferredLocale`.
+- `PUT /users/me/locale`
+  - Body: `preferredLocale` (`zh-CN` or `en`)
+  - Persists the current user's shared web/admin language preference and returns the updated profile.
 
 ## Conversations
 

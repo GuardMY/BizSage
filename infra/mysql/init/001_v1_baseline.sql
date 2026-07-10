@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
   identity_encrypted VARCHAR(255) NULL,
   membership_level VARCHAR(32) NOT NULL DEFAULT 'FREE',
   consultation_preferences VARCHAR(255) NOT NULL DEFAULT '',
+  preferred_locale VARCHAR(16) NOT NULL DEFAULT 'zh-CN',
   region_id VARCHAR(64) NOT NULL DEFAULT 'default-region',
   industry_id VARCHAR(64) NOT NULL DEFAULT 'default-industry',
   source_id VARCHAR(64) NOT NULL DEFAULT 'system',

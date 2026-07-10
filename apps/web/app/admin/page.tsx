@@ -59,7 +59,9 @@ import {
   submitAdminKnowledgeReview,
   transitionAdminTicket,
   updateAdminAlert,
+  updatePreferredLocale,
   AuthExpiredError,
+  type AppLocale,
   type AdminAlert,
   type AdminAuditLog,
   type AdminCollectionDeadLetter,
@@ -82,6 +84,7 @@ import {
   type RiskRule,
   type RiskRuleUpsertInput
 } from "../../lib/api-client";
+import { adminText, normalizeLocale, type AdminLocale } from "./admin-i18n";
 
 type AdminSection = "dashboard" | "collection" | "knowledge" | "monitoring" | "alerts" | "audit" | "reviews" | "tickets" | "human" | "risk" | "conflicts" | "falseLedger" | "snapshots";
 type NavGroup = { label: string; items: { id: AdminSection; label: string; icon: typeof LayoutDashboard }[] };
@@ -135,45 +138,51 @@ const emptyKnowledgeDraft = (): AdminKnowledgeDraftInput => ({
   changeNotes: ""
 });
 
-const navGroups: NavGroup[] = [
-  { label: "Overview", items: [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+function navGroupsFor(locale: AdminLocale): NavGroup[] {
+  const t = (zh: string, en: string) => adminText(locale, zh, en);
+  return [
+  { label: t("总览", "Overview"), items: [
+    { id: "dashboard", label: t("仪表盘", "Dashboard"), icon: LayoutDashboard },
   ]},
-  { label: "Knowledge & Intel", items: [
-    { id: "knowledge", label: "Knowledge", icon: BookCopy },
-    { id: "reviews", label: "Reviews", icon: ClipboardCheck },
-    { id: "human", label: "Human Intel", icon: UserCheck },
-    { id: "tickets", label: "Tickets", icon: ShieldCheck },
+  { label: t("知识与情报", "Knowledge & Intel"), items: [
+    { id: "knowledge", label: t("知识", "Knowledge"), icon: BookCopy },
+    { id: "reviews", label: t("复核", "Reviews"), icon: ClipboardCheck },
+    { id: "human", label: t("人工情报", "Human Intel"), icon: UserCheck },
+    { id: "tickets", label: t("工单", "Tickets"), icon: ShieldCheck },
   ]},
-  { label: "Collection", items: [
-    { id: "collection", label: "Collection", icon: DatabaseZap },
-    { id: "snapshots", label: "Snapshots", icon: GitCompareArrows },
-    { id: "risk", label: "Risk Rules", icon: ShieldCheck },
+  { label: t("采集", "Collection"), items: [
+    { id: "collection", label: t("采集", "Collection"), icon: DatabaseZap },
+    { id: "snapshots", label: t("快照", "Snapshots"), icon: GitCompareArrows },
+    { id: "risk", label: t("风控规则", "Risk Rules"), icon: ShieldCheck },
   ]},
-  { label: "Ops & Security", items: [
-    { id: "monitoring", label: "Monitoring", icon: Activity },
-    { id: "alerts", label: "Alerts", icon: AlertTriangle },
-    { id: "conflicts", label: "Conflicts", icon: GitCompareArrows },
-    { id: "falseLedger", label: "False Intel", icon: ShieldCheck },
-    { id: "audit", label: "Audit", icon: FileClock },
+  { label: t("运维与安全", "Ops & Security"), items: [
+    { id: "monitoring", label: t("监控", "Monitoring"), icon: Activity },
+    { id: "alerts", label: t("告警", "Alerts"), icon: AlertTriangle },
+    { id: "conflicts", label: t("冲突", "Conflicts"), icon: GitCompareArrows },
+    { id: "falseLedger", label: t("虚假情报", "False Intel"), icon: ShieldCheck },
+    { id: "audit", label: t("审计", "Audit"), icon: FileClock },
   ]},
-  { label: "Commercial", items: [] },
-  { label: "Compliance", items: [] },
-];
-const sectionLookup = new Map<string, string>();
-for (const group of navGroups) {
-  for (const item of group.items) {
-    sectionLookup.set(item.id, item.label);
+  { label: t("商业化", "Commercial"), items: [] },
+  { label: t("合规", "Compliance"), items: [] },
+  ];
+}
+
+function sectionLabel(locale: AdminLocale, section: AdminSection) {
+  for (const group of navGroupsFor(locale)) {
+    const item = group.items.find((candidate) => candidate.id === section);
+    if (item) return item.label;
   }
+  return "Admin";
 }
 
 export default function AdminPage() {
+  const [locale, setLocale] = useState<AppLocale>("zh-CN");
   const [profile, setProfile] = useState<LoginProfile | null>(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [activeSection, setActiveSection] = useState<AdminSection>("dashboard");
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState("Sign in with an operator or administrator account.");
+  const [notice, setNotice] = useState("请使用运营或管理员账号登录。");
   const [dashboard, setDashboard] = useState<AdminDashboard | null>(null);
   const [alerts, setAlerts] = useState<AdminAlert[]>([]);
   const [auditLogs, setAuditLogs] = useState<AdminAuditLog[]>([]);
@@ -198,7 +207,8 @@ export default function AdminPage() {
   const [auditQuery, setAuditQuery] = useState("");
   const [navCounts, setNavCounts] = useState<{ reviews: number; alerts: number; tickets: number; human: number }>({ reviews: 0, alerts: 0, tickets: 0, human: 0 });
   const [railCollapsed, setRailCollapsed] = useState(() => {
-    try { return localStorage.getItem("bizsage.admin.railCollapsed") === "1"; }
+    if (typeof window === "undefined") return false;
+    try { return window.localStorage.getItem("bizsage.admin.railCollapsed") === "1"; }
     catch (e) { console.error("Failed to read railCollapsed from localStorage:", e); return false; }
   });
   const [searchQuery, setSearchQuery] = useState("");
@@ -225,13 +235,19 @@ export default function AdminPage() {
   });
 
   const isAdmin = profile?.role === "SUPER_ADMIN" || profile?.role === "OPERATOR";
+  const t = useCallback((zh: string, en: string) => adminText(locale, zh, en), [locale]);
+  const navGroups = useMemo(() => navGroupsFor(locale), [locale]);
 
   // V2: Restore profile from httpOnly cookie via /api/users/me
   useEffect(() => {
     let cancelled = false;
     fetchMe()
       .then((restoredProfile) => {
-        if (!cancelled) setProfile(restoredProfile);
+        if (!cancelled) {
+          const restoredLocale = normalizeLocale(restoredProfile.preferredLocale);
+          setLocale(restoredLocale);
+          setProfile({ ...restoredProfile, preferredLocale: restoredLocale });
+        }
       })
       .catch(() => {
         // Not logged in — user will see the login form
@@ -264,18 +280,38 @@ export default function AdminPage() {
   }, [knowledgeDetail, selectedVersionId]);
 
   const activeTitle = useMemo(
-    () => sectionLookup.get(activeSection) ?? "Admin",
-    [activeSection]
+    () => sectionLabel(locale, activeSection),
+    [activeSection, locale]
   );
+
+  async function toggleLocale() {
+    const previousLocale = locale;
+    const nextLocale: AppLocale = locale === "zh-CN" ? "en" : "zh-CN";
+    setLocale(nextLocale);
+    setNotice(adminText(nextLocale, "语言偏好已保存。", "Language preference saved."));
+    if (!profile) return;
+
+    setProfile({ ...profile, preferredLocale: nextLocale });
+    try {
+      const updatedProfile = await updatePreferredLocale(nextLocale);
+      setProfile({ ...updatedProfile, preferredLocale: normalizeLocale(updatedProfile.preferredLocale) });
+    } catch (error) {
+      setLocale(previousLocale);
+      setProfile({ ...profile, preferredLocale: previousLocale });
+      setNotice(error instanceof Error ? error.message : adminText(previousLocale, "语言偏好保存失败。", "Failed to save language preference."));
+    }
+  }
 
   async function handleLogin() {
     setBusy(true);
     try {
       const nextProfile = await login(username, password);
-      setProfile(nextProfile);
-      setNotice(nextProfile.role === "USER" ? "This account cannot access admin operations." : "Admin API connected.");
+      const nextLocale = normalizeLocale(nextProfile.preferredLocale);
+      setLocale(nextLocale);
+      setProfile({ ...nextProfile, preferredLocale: nextLocale });
+      setNotice(nextProfile.role === "USER" ? adminText(nextLocale, "此账号不能访问管理操作。", "This account cannot access admin operations.") : adminText(nextLocale, "管理 API 已连接。", "Admin API connected."));
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Sign in failed.");
+      setNotice(error instanceof Error ? error.message : t("登录失败。", "Sign in failed."));
     } finally {
       setBusy(false);
     }
@@ -297,7 +333,7 @@ export default function AdminPage() {
     setSelectedNodeId(null);
     setSelectedVersionId(null);
     setCompareVersionId(null);
-    setNotice("Signed out.");
+    setNotice(t("已退出登录。", "Signed out."));
   }
 
   function toggleRail() {
@@ -444,7 +480,7 @@ export default function AdminPage() {
     setCollectionSourceDraft(emptyCollectionSourceDraft());
     setCollectionKeywordDraft(emptyCollectionKeywordDraft());
     setActiveSection("collection");
-    setNotice("Creating a new collection source.");
+    setNotice(t("正在创建新采集源。", "Creating a new collection source."));
   }
 
   function startNewKnowledgeNode() {
@@ -455,7 +491,7 @@ export default function AdminPage() {
     setKnowledgeDetail(null);
     setKnowledgeDraft(emptyKnowledgeDraft());
     setActiveSection("knowledge");
-    setNotice("Creating a new knowledge node draft.");
+    setNotice(t("正在创建新知识节点草稿。", "Creating a new knowledge node draft."));
   }
 
   async function loadKnowledgeDiff() {
@@ -464,7 +500,7 @@ export default function AdminPage() {
     try {
       const diff = await fetchAdminKnowledgeDiff(compareVersionId, selectedVersionId);
       setKnowledgeDiff(diff);
-      setNotice(`Loaded diff between versions ${compareVersionId} and ${selectedVersionId}.`);
+      setNotice(t(`已加载版本 ${compareVersionId} 与 ${selectedVersionId} 的差异。`, `Loaded diff between versions ${compareVersionId} and ${selectedVersionId}.`));
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Load diff failed.");
     } finally {
@@ -475,24 +511,27 @@ export default function AdminPage() {
   if (!profile) {
     return (
       <main className="loginScreen">
+        <button className="languageButton loginLanguage" onClick={() => void toggleLocale()} type="button">
+          {locale === "zh-CN" ? "English" : "中文"}
+        </button>
         <section className="loginCard">
           <div className="brand loginBrand">
             <span className="mark">BS</span>
             <div>
               <strong>BizSage Admin</strong>
-              <small>V3 operations console</small>
+              <small>{t("V3 运营控制台", "V3 operations console")}</small>
             </div>
           </div>
           <div className="loginCopy">
-            <h1>Admin sign in</h1>
-            <p>Use an operator or super administrator account to maintain knowledge, alerts, tickets, audit logs, and human intelligence.</p>
+            <h1>{t("管理端登录", "Admin sign in")}</h1>
+            <p>{t("使用运营或超级管理员账号维护知识、告警、工单、审计日志和人工情报。", "Use an operator or super administrator account to maintain knowledge, alerts, tickets, audit logs, and human intelligence.")}</p>
           </div>
           <div className="loginForm">
-            <label>Username<input value={username} onChange={(event) => setUsername(event.target.value)} /></label>
-            <label>Password<input value={password} onChange={(event) => setPassword(event.target.value)} type="password" /></label>
+            <label>{t("账号", "Username")}<input value={username} onChange={(event) => setUsername(event.target.value)} /></label>
+            <label>{t("密码", "Password")}<input value={password} onChange={(event) => setPassword(event.target.value)} type="password" /></label>
             <button className="primary" onClick={handleLogin} disabled={busy} type="button">
               <LogIn size={16} />
-              {busy ? "Signing in..." : "Sign in"}
+              {busy ? t("登录中...", "Signing in...") : t("登录", "Sign in")}
             </button>
             <small>{notice}</small>
           </div>
@@ -506,12 +545,12 @@ export default function AdminPage() {
       <main className="loginScreen">
         <section className="loginCard">
           <div className="loginCopy">
-            <h1>Permission required</h1>
-            <p>{profile.username} is signed in as {profile.role}. Admin V3 requires OPERATOR or SUPER_ADMIN.</p>
+            <h1>{t("需要权限", "Permission required")}</h1>
+            <p>{t(`${profile.username} 当前身份为 ${profile.role}。Admin V3 需要 OPERATOR 或 SUPER_ADMIN。`, `${profile.username} is signed in as ${profile.role}. Admin V3 requires OPERATOR or SUPER_ADMIN.`)}</p>
           </div>
           <button className="ghost" onClick={handleLogout} type="button">
             <LogOut size={16} />
-            Sign out
+            {t("退出登录", "Sign out")}
           </button>
         </section>
       </main>
@@ -526,11 +565,11 @@ export default function AdminPage() {
           {!railCollapsed && (
             <div>
               <strong>BizSage Admin</strong>
-              <small>V3 full loop</small>
+              <small>{t("V3 闭环", "V3 full loop")}</small>
             </div>
           )}
         </div>
-        <button className="railToggle" onClick={toggleRail} title={railCollapsed ? "Expand sidebar" : "Collapse sidebar"} type="button">
+        <button className="railToggle" onClick={toggleRail} title={railCollapsed ? t("展开侧栏", "Expand sidebar") : t("折叠侧栏", "Collapse sidebar")} type="button">
           {railCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
         <nav className="nav">
@@ -538,7 +577,7 @@ export default function AdminPage() {
             <div className="navGroup" key={group.label}>
               <span className="navGroupLabel">{group.label}</span>
               {group.items.length === 0 ? (
-                <span className="navGroupPlaceholder">Coming soon</span>
+                <span className="navGroupPlaceholder">{t("即将开放", "Coming soon")}</span>
               ) : (
                 group.items.map((section) => {
                   const Icon = section.icon;
@@ -585,7 +624,7 @@ export default function AdminPage() {
                 onKeyDown={(event) => { if (event.key === "Escape") { setShowSearch(false); setSearchQuery(""); } }}
                 onFocus={() => { if (searchResults.length > 0) setShowSearch(true); }}
                 onBlur={() => setTimeout(() => setShowSearch(false), 200)}
-                placeholder="Search across all data..."
+                placeholder={t("搜索全部数据...", "Search across all data...")}
               />
               {showSearch && searchResults.length > 0 && (
                 <div className="adminSearchDropdown">
@@ -594,7 +633,7 @@ export default function AdminPage() {
                     return (
                       <button key={`${result.section}-${result.id}-${index}`} className="adminSearchItem" onClick={() => navigateSearchResult(result.section)} type="button">
                         <strong><Icon size={12} style={{ marginRight: 6 }} />{result.label}</strong>
-                        <small>{sectionLookup.get(result.section)}</small>
+                        <small>{sectionLabel(locale, result.section)}</small>
                       </button>
                     );
                   })}
@@ -604,21 +643,25 @@ export default function AdminPage() {
           </div>
           <div className="topActions">
             <p className="adminNoticeText" style={{ maxWidth: 340, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{notice}</p>
+            <button className="languageButton" onClick={() => void toggleLocale()} type="button">
+              {locale === "zh-CN" ? "English" : "中文"}
+            </button>
             <button className="languageButton" onClick={() => void refreshAll()} disabled={busy} type="button">
               <RefreshCw size={16} />
-              Refresh
+              {t("刷新", "Refresh")}
             </button>
             <button className="ghost" onClick={handleLogout} type="button">
               <LogOut size={16} />
-              Sign out
+              {t("退出登录", "Sign out")}
             </button>
           </div>
         </header>
 
         <div className="workspaceScroll adminScroll">
-          {activeSection === "dashboard" && <DashboardView dashboard={dashboard} />}
+          {activeSection === "dashboard" && <DashboardView dashboard={dashboard} locale={locale} />}
           {activeSection === "monitoring" && (
             <MonitoringView
+              locale={locale}
               sources={collectionSources}
               jobs={collectionJobs}
               deadLetters={collectionDeadLetters}
@@ -632,6 +675,7 @@ export default function AdminPage() {
           {activeSection === "collection" && (
             <CollectionWorkspace
               busy={busy}
+              locale={locale}
               sources={collectionSources}
               selectedSourceId={selectedSourceConfigId}
               detail={collectionDetail}
@@ -682,9 +726,9 @@ export default function AdminPage() {
           {activeSection === "tickets" && <TicketsView rows={tickets} busy={busy} onTransition={(id, status) => runAction(() => transitionAdminTicket(id, status, `Move ticket to ${status}`), "Ticket transition complete.")} ticketFilter={ticketFilter} ticketTypeFilter={ticketTypeFilter} onFilterChange={(status) => runAction(async () => { setTicketFilter(status); const next = await fetchAdminTickets(status || undefined); setTickets(next.items); }, `Tickets filtered: ${status || "all"}`)} onTypeFilterChange={(type) => setTicketTypeFilter(type)} />}
           {activeSection === "human" && <HumanView rows={humanRows} busy={busy} draft={draftHuman} setDraft={setDraftHuman} onCreate={() => runAction(() => createAdminHumanIntelligence(draftHuman), "Human intelligence submitted.")} onReview={(id, verdict) => runAction(() => reviewAdminHumanIntelligence(id, verdict, `Admin selected ${verdict}`), "Human intelligence review complete.")} humanFilter={humanFilter} onFilterChange={(status) => runAction(async () => { setHumanFilter(status); const next = await fetchAdminHumanIntelligence(status || undefined); setHumanRows(next.items); }, `Human intel filtered: ${status || "all"}`)} />}
           {activeSection === "risk" && <RiskRulesView rows={riskRules} busy={busy} onToggle={(id) => runAction(async () => { const updated = await toggleAdminRiskRule(id); setRiskRules(prev => prev.map(r => r.id === updated.id ? updated : r)); }, "Risk rule toggled.")} onSave={(payload) => runAction(async () => { const updated = await upsertAdminRiskRule(payload); setRiskRules(prev => { const idx = prev.findIndex(r => r.id === updated.id); if (idx >= 0) { const next = [...prev]; next[idx] = updated; return next; } return [...prev, updated]; }); }, "Risk rule saved.")} onRefresh={() => runAction(async () => { const rules = await fetchAdminRiskRules(); setRiskRules(rules); }, "Risk rules loaded.")} />}
-          {activeSection === "conflicts" && <ConflictsView />}
-          {activeSection === "falseLedger" && <FalseLedgerView />}
-          {activeSection === "snapshots" && <SnapshotsView />}
+          {activeSection === "conflicts" && <ConflictsView locale={locale} />}
+          {activeSection === "falseLedger" && <FalseLedgerView locale={locale} />}
+          {activeSection === "snapshots" && <SnapshotsView locale={locale} />}
         </div>
       </section>
     </main>
@@ -1462,8 +1506,6 @@ function formatTime(value: string) {
   if (!value) return "-";
   return value.replace("T", " ").slice(0, 16);
 }
-
-
 
 
 

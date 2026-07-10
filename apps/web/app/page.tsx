@@ -25,7 +25,9 @@ import {
   login,
   logout,
   streamDiagnosisEvents,
+  updatePreferredLocale,
   WorkerError,
+  type AppLocale,
   type Conversation,
   type ConversationMessage,
   type Diagnosis,
@@ -35,9 +37,7 @@ import {
   type Source
 } from "../lib/api-client";
 
-type Locale = "zh-CN" | "en";
-
-const PROFILE_STORAGE_KEY = "bizsage.web.profile";
+type Locale = AppLocale;
 
 const sidebarMessages: Record<
   Locale,
@@ -75,6 +75,7 @@ const messages: Record<Locale, WorkspaceMessages> = {
     loginFailed: "登录失败，请检查账号和密码。",
     sessionExpired: "登录已失效，请重新登录。",
     languageToggle: "English",
+    languageSaved: "语言偏好已保存。",
     navDiagnosis: "诊断",
     navIntelligence: "情报",
     navUsers: "用户",
@@ -141,6 +142,7 @@ const messages: Record<Locale, WorkspaceMessages> = {
     loginFailed: "Sign-in failed. Check the username and password.",
     sessionExpired: "Your session expired. Please sign in again.",
     languageToggle: "中文",
+    languageSaved: "Language preference saved.",
     navDiagnosis: "Diagnosis",
     navIntelligence: "Intelligence",
     navUsers: "Users",
@@ -221,7 +223,11 @@ export default function Home() {
     let cancelled = false;
     fetchMe()
       .then((restoredProfile) => {
-        if (!cancelled) setProfile(restoredProfile);
+        if (!cancelled) {
+          const restoredLocale = normalizeLocale(restoredProfile.preferredLocale);
+          setLocale(restoredLocale);
+          setProfile({ ...restoredProfile, preferredLocale: restoredLocale });
+        }
       })
       .catch(() => {
         // Not logged in — that's fine, user will see the login form
@@ -308,17 +314,37 @@ export default function Home() {
     };
   }, [profile, resolvedSelectedConversationId, t.sessionExpired]);
 
-  function toggleLocale() {
-    setLocale(locale === "zh-CN" ? "en" : "zh-CN");
+  async function toggleLocale() {
+    const previousLocale = locale;
+    const nextLocale: Locale = locale === "zh-CN" ? "en" : "zh-CN";
+    setLocale(nextLocale);
+    setNotice(profile ? messages[nextLocale].languageSaved : messages[nextLocale].loginNotice);
+    if (!profile) return;
+
+    setProfile({ ...profile, preferredLocale: nextLocale });
+    try {
+      const updatedProfile = await updatePreferredLocale(nextLocale);
+      setProfile({ ...updatedProfile, preferredLocale: normalizeLocale(updatedProfile.preferredLocale) });
+    } catch (error) {
+      setLocale(previousLocale);
+      setProfile({ ...profile, preferredLocale: previousLocale });
+      if (error instanceof AuthExpiredError) {
+        handleSessionExpired();
+        return;
+      }
+      setNotice(error instanceof Error ? error.message : messages[previousLocale].workerError);
+    }
   }
 
   async function handleLogin() {
     setBusy(true);
     try {
       const nextProfile = await login(username, password);
-      setProfile(nextProfile);
+      const nextLocale = normalizeLocale(nextProfile.preferredLocale);
+      setLocale(nextLocale);
+      setProfile({ ...nextProfile, preferredLocale: nextLocale });
       setActiveSection("diagnosis");
-      setNotice(t.loginSuccess);
+      setNotice(messages[nextLocale].loginSuccess);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : t.loginFailed);
     } finally {
@@ -715,6 +741,10 @@ export default function Home() {
       )}
     </>
   );
+}
+
+function normalizeLocale(value: string | undefined): Locale {
+  return value === "en" ? "en" : "zh-CN";
 }
 
 function SimpleEmptyCard({ detail, title }: { detail: string; title: string }) {

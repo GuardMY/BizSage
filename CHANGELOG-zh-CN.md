@@ -2,6 +2,24 @@
 
 ## 2026-07-10
 
+### 用户绑定的 web/admin 语言偏好
+
+- 变更类型：功能变更。
+- 影响模块：`apps/web`、`services/api`、`infra/mysql/init/001_v1_baseline.sql`、API/数据库文档和两份变更日志。
+- 主要变更：
+  - 在 `users` 表结构、MySQL 基线、H2 测试基线和 MySQL Flyway V4 迁移中新增 `preferred_locale`。
+  - 登录资料和当前用户资料返回 `preferredLocale`，并新增 `PUT /api/users/me/locale`，用于为当前认证用户持久化 `zh-CN` 或 `en`。
+  - web 主页面改为从用户资料恢复、切换并保存共用语言偏好，不再只保存在本地组件状态中。
+  - admin 登录页/顶部栏新增语言切换，并将 admin 仪表盘、采集、监控、治理视图接入同一个用户语言状态。
+- 验证结果：
+  - 修改前已使用 CodeGraph 追踪认证、用户资料、admin 页面和前端 API 路径。
+  - 已在 `apps/web` 执行 `npm run build`；Next.js 生产构建通过。
+  - 已在 `services/api` 执行 `mvn test`；全部 38 个测试通过。
+  - 已通过 `mvn test -Dtest=V2GrayReleaseApiTest` 定向验证用户资料语言偏好行为。
+- 未完成事项：
+  - 如果现有数据库以 Flyway 停用模式运行，部署前必须手动应用 `V4__user_preferred_locale.sql`，或以其他方式补齐 `users.preferred_locale` 字段。
+  - admin 部分表格行数据以及后端返回的枚举/状态值仍按存储值展示，尚未全部映射为翻译标签。
+
 ### Compose 服务端点默认值修复
 
 - 变更类型：部署配置修复。

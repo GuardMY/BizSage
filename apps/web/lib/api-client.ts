@@ -60,7 +60,10 @@ export type LoginProfile = {
   industryId: string;
   membershipLevel: "INTERNAL" | "FREE" | "SEED_PAID";
   consultationPreferences: string;
+  preferredLocale: AppLocale;
 };
+
+export type AppLocale = "zh-CN" | "en";
 
 export type PaidIntelligence = {
   id: number;
@@ -296,6 +299,17 @@ export async function fetchMe() {
     credentials: "include",
   });
   const envelope = await readProtectedEnvelope<LoginProfile>(response, "Fetch profile failed");
+  return envelope.data;
+}
+
+export async function updatePreferredLocale(preferredLocale: AppLocale) {
+  const response = await fetch(`${API_BASE}/users/me/locale`, {
+    method: "PUT",
+    headers: authHeaders(),
+    credentials: "include",
+    body: JSON.stringify({ preferredLocale })
+  });
+  const envelope = await readProtectedEnvelope<LoginProfile>(response, "Update language failed");
   return envelope.data;
 }
 
@@ -1419,7 +1433,6 @@ function decodeEscapedCharacter(char: string) {
       return char;
   }
 }
-
 
 
 

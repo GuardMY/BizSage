@@ -12,10 +12,12 @@ import type {
   AdminTicket
 } from "../../lib/api-client";
 import { fetchAdminCollectionTelemetry, fetchOpsSla, type CollectionTelemetry, type SlaStats } from "../../lib/api-client";
+import { adminText, type AdminLocale } from "./admin-i18n";
 
 export function MonitoringView({
-  sources, jobs, deadLetters, knowledgeNodes, alerts, tickets, reviews, humanRows
+  locale, sources, jobs, deadLetters, knowledgeNodes, alerts, tickets, reviews, humanRows
 }: {
+  locale: AdminLocale;
   sources: AdminCollectionSource[];
   jobs: AdminCollectionJobRun[];
   deadLetters: AdminCollectionDeadLetter[];
@@ -27,11 +29,13 @@ export function MonitoringView({
 }) {
   const [sla, setSla] = useState<SlaStats | null>(null);
   const [telemetry, setTelemetry] = useState<CollectionTelemetry | null>(null);
+  const t = (zh: string, en: string) => adminText(locale, zh, en);
 
   useEffect(() => {
     fetchOpsSla("24h").then(setSla).catch(() => {});
     fetchAdminCollectionTelemetry().then(setTelemetry).catch(() => {});
   }, []);
+
   const enabledSources = sources.filter(s => s.status === "ENABLED").length;
   const openCircuits = sources.filter(s => s.circuitState === "OPEN").length;
   const recentRuns = jobs.slice(0, 20);
@@ -47,43 +51,44 @@ export function MonitoringView({
   return (
     <div className="adminStack">
       <div className="adminMonitoringGrid">
-        <MonitoringCard title="Service Health" detail="Real-time status from alert aggregation and collection pipeline.">
-          <MetricRow label="API Gateway" badge={openAlerts > 0 ? "DEGRADED" : "HEALTHY"} badgeClass={openAlerts > 0 ? "open" : "healthy"} detail={`${openAlerts} open alerts`} />
-          <MetricRow label="Crawler Pipeline" badge={openCircuits > 0 ? "DEGRADED" : "HEALTHY"} badgeClass={openCircuits > 0 ? "open" : "healthy"} detail={`${openCircuits} open circuits`} />
-          <MetricRow label="AI Inference" badge={sources.length > 0 || jobs.length > 0 ? "OPERATIONAL" : "NO DATA"} badgeClass={sources.length > 0 || jobs.length > 0 ? "healthy" : "pending"} detail="Self-check via collection pipeline activity" />
-          <MetricRow label="Database" badge="MONITORED" badgeClass="healthy" detail="Via API /admin/dashboard endpoint" />
-          <MetricRow label="Cache Layer" badge="MONITORED" badgeClass="healthy" detail="Via Redis circuit breaker state" />
+        <MonitoringCard title={t("服务健康", "Service Health")} detail={t("来自告警聚合与采集链路的实时状态。", "Real-time status from alert aggregation and collection pipeline.")}>
+          <MetricRow label="API Gateway" badge={openAlerts > 0 ? "DEGRADED" : "HEALTHY"} badgeClass={openAlerts > 0 ? "open" : "healthy"} detail={`${openAlerts} ${t("个未处理告警", "open alerts")}`} />
+          <MetricRow label={t("爬虫链路", "Crawler Pipeline")} badge={openCircuits > 0 ? "DEGRADED" : "HEALTHY"} badgeClass={openCircuits > 0 ? "open" : "healthy"} detail={`${openCircuits} ${t("个开启熔断", "open circuits")}`} />
+          <MetricRow label={t("AI 推理", "AI Inference")} badge={sources.length > 0 || jobs.length > 0 ? "OPERATIONAL" : "NO DATA"} badgeClass={sources.length > 0 || jobs.length > 0 ? "healthy" : "pending"} detail={t("通过采集链路活动自检", "Self-check via collection pipeline activity")} />
+          <MetricRow label={t("数据库", "Database")} badge="MONITORED" badgeClass="healthy" detail={t("来自 /admin/dashboard 接口", "Via API /admin/dashboard endpoint")} />
+          <MetricRow label={t("缓存层", "Cache Layer")} badge="MONITORED" badgeClass="healthy" detail={t("来自 Redis 熔断状态", "Via Redis circuit breaker state")} />
         </MonitoringCard>
 
-        <MonitoringCard title="Collection Pipeline" detail="Scheduler, sources, jobs, and dead-letter queue.">
-          <MetricRow label="Active sources" badge={`${telemetry?.enabledSources ?? enabledSources}`} badgeClass="healthy" detail={`${telemetry?.totalSources ?? sources.length} total`} />
-          <MetricRow label="24h success rate" badge={telemetry?.successRate24h ?? `${runSuccessRate != null ? runSuccessRate + "%" : "—"}`} badgeClass={parseFloat(telemetry?.successRate24h ?? "0") >= 80 ? "healthy" : "open"} detail={`${telemetry?.totalRuns24h ?? 0} runs`} />
-          <MetricRow label="Records (24h)" badge={`${telemetry?.recordsCollected24h ?? "—"}`} badgeClass="healthy" detail="Collected last 24 hours" />
-          <MetricRow label="Dead letters" badge={`${telemetry?.deadLetterCount ?? deadLetters.length}`} badgeClass={(telemetry?.deadLetterCount ?? deadLetters.length) > 0 ? "p1" : "healthy"} detail="Failed deliveries" />
+        <MonitoringCard title={t("采集链路", "Collection Pipeline")} detail={t("调度器、采集源、任务和死信队列。", "Scheduler, sources, jobs, and dead-letter queue.")}>
+          <MetricRow label={t("启用采集源", "Active sources")} badge={`${telemetry?.enabledSources ?? enabledSources}`} badgeClass="healthy" detail={`${telemetry?.totalSources ?? sources.length} ${t("总计", "total")}`} />
+          <MetricRow label={t("24 小时成功率", "24h success rate")} badge={telemetry?.successRate24h ?? `${runSuccessRate != null ? runSuccessRate + "%" : "-"}`} badgeClass={parseFloat(telemetry?.successRate24h ?? "0") >= 80 ? "healthy" : "open"} detail={`${telemetry?.totalRuns24h ?? 0} ${t("次运行", "runs")}`} />
+          <MetricRow label={t("24 小时记录", "Records (24h)")} badge={`${telemetry?.recordsCollected24h ?? "-"}`} badgeClass="healthy" detail={t("过去 24 小时采集量", "Collected last 24 hours")} />
+          <MetricRow label={t("死信", "Dead letters")} badge={`${telemetry?.deadLetterCount ?? deadLetters.length}`} badgeClass={(telemetry?.deadLetterCount ?? deadLetters.length) > 0 ? "p1" : "healthy"} detail={t("失败投递", "Failed deliveries")} />
         </MonitoringCard>
 
-        <MonitoringCard title="Data Summary" detail="Knowledge, intelligence, and audit record counts.">
-          <MetricRow label="Knowledge nodes" badge={`${knowledgeNodes.length}`} badgeClass="healthy" detail="Total maintained" />
-          <MetricRow label="Intelligence reviews" badge={`${reviews.length}`} badgeClass="healthy" detail={`${pendingReviews} pending`} />
-          <MetricRow label="Human intelligence" badge={`${humanRows.length}`} badgeClass="healthy" detail={`${pendingHuman} pending`} />
-          <MetricRow label="Audit logs" badge="Active" badgeClass="healthy" detail="Write-ahead logging" />
+        <MonitoringCard title={t("数据摘要", "Data Summary")} detail={t("知识、情报和审计记录计数。", "Knowledge, intelligence, and audit record counts.")}>
+          <MetricRow label={t("知识节点", "Knowledge nodes")} badge={`${knowledgeNodes.length}`} badgeClass="healthy" detail={t("维护总量", "Total maintained")} />
+          <MetricRow label={t("情报复核", "Intelligence reviews")} badge={`${reviews.length}`} badgeClass="healthy" detail={`${pendingReviews} ${t("待处理", "pending")}`} />
+          <MetricRow label={t("人工情报", "Human intelligence")} badge={`${humanRows.length}`} badgeClass="healthy" detail={`${pendingHuman} ${t("待处理", "pending")}`} />
+          <MetricRow label={t("审计日志", "Audit logs")} badge="Active" badgeClass="healthy" detail={t("预写审计记录", "Write-ahead logging")} />
         </MonitoringCard>
 
-        <MonitoringCard title="Alert Summary" detail="Alert distribution by severity and status.">
-          <MetricRow label="P0 (Critical)" badge={`${p0Alerts}`} badgeClass={p0Alerts > 0 ? "p0" : "healthy"} detail="Highest severity" />
-          <MetricRow label="P1 (High)" badge={`${p1Alerts}`} badgeClass={p1Alerts > 0 ? "p1" : "healthy"} detail="High severity" />
-          <MetricRow label="Open alerts" badge={`${openAlerts}`} badgeClass="pending" detail="All levels" />
-          <MetricRow label="Open tickets" badge={`${openTickets}`} badgeClass="pending" detail="Operational items" />
+        <MonitoringCard title={t("告警摘要", "Alert Summary")} detail={t("按严重级别和状态统计告警。", "Alert distribution by severity and status.")}>
+          <MetricRow label="P0 (Critical)" badge={`${p0Alerts}`} badgeClass={p0Alerts > 0 ? "p0" : "healthy"} detail={t("最高严重级别", "Highest severity")} />
+          <MetricRow label="P1 (High)" badge={`${p1Alerts}`} badgeClass={p1Alerts > 0 ? "p1" : "healthy"} detail={t("高严重级别", "High severity")} />
+          <MetricRow label={t("未处理告警", "Open alerts")} badge={`${openAlerts}`} badgeClass="pending" detail={t("全部级别", "All levels")} />
+          <MetricRow label={t("未结工单", "Open tickets")} badge={`${openTickets}`} badgeClass="pending" detail={t("运营事项", "Operational items")} />
         </MonitoringCard>
-        <MonitoringCard title="SLA Summary" detail="24-hour rolling window uptime, error rate, and latency.">
-          <MetricRow label="Uptime" badge={sla?.uptimePercent ?? "—"} badgeClass={sla?.slaMet ? "healthy" : "p0"} detail={sla?.slaMet ? "SLA met (99.9% target)" : sla ? "Below 99.9% target" : "Loading..."} />
-          <MetricRow label="Error Rate" badge={sla?.errorRatePercent ?? "—"} badgeClass="pending" detail={`${sla?.dataPoints ?? 0} data points`} />
-          <MetricRow label="P50 Latency" badge={sla?.latencyP50Ms ? `${sla.latencyP50Ms}ms` : "—"} badgeClass="healthy" detail="Median response time" />
-          <MetricRow label="P95 Latency" badge={sla?.latencyP95Ms ? `${sla.latencyP95Ms}ms` : "—"} badgeClass="healthy" detail="95th percentile" />
+
+        <MonitoringCard title={t("SLA 摘要", "SLA Summary")} detail={t("24 小时滚动窗口的可用性、错误率和延迟。", "24-hour rolling window uptime, error rate, and latency.")}>
+          <MetricRow label={t("可用性", "Uptime")} badge={sla?.uptimePercent ?? "-"} badgeClass={sla?.slaMet ? "healthy" : "p0"} detail={sla?.slaMet ? t("SLA 达标 (目标 99.9%)", "SLA met (99.9% target)") : sla ? t("低于 99.9% 目标", "Below 99.9% target") : t("加载中...", "Loading...")} />
+          <MetricRow label={t("错误率", "Error Rate")} badge={sla?.errorRatePercent ?? "-"} badgeClass="pending" detail={`${sla?.dataPoints ?? 0} ${t("个数据点", "data points")}`} />
+          <MetricRow label="P50 Latency" badge={sla?.latencyP50Ms ? `${sla.latencyP50Ms}ms` : "-"} badgeClass="healthy" detail={t("中位响应时间", "Median response time")} />
+          <MetricRow label="P95 Latency" badge={sla?.latencyP95Ms ? `${sla.latencyP95Ms}ms` : "-"} badgeClass="healthy" detail={t("95 分位", "95th percentile")} />
         </MonitoringCard>
       </div>
       <div className="monitoringSummary">
-        <small>Last refreshed: data aggregated from active API connections. SLA data is computed hourly from audit log metrics. Prometheus/CloudWatch integration targeted for V3-6.</small>
+        <small>{t("最后刷新：数据汇总自当前 API 连接。SLA 数据按小时从审计日志指标计算。Prometheus/CloudWatch 集成计划在 V3-6 接入。", "Last refreshed: data aggregated from active API connections. SLA data is computed hourly from audit log metrics. Prometheus/CloudWatch integration targeted for V3-6.")}</small>
       </div>
     </div>
   );

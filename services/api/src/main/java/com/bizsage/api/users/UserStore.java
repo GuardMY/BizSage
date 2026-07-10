@@ -1,6 +1,7 @@
 package com.bizsage.api.users;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.bizsage.api.auth.Role;
 import com.bizsage.api.privacy.PrivacyService;
 import java.util.List;
@@ -28,6 +29,18 @@ public class UserStore {
         .orderByAsc(UserAccount::getId)).stream().map(this::toView).toList();
   }
 
+  public UserView updatePreferredLocale(String username, String preferredLocale) {
+    int updated = userMapper.update(null, new LambdaUpdateWrapper<UserAccount>()
+        .eq(UserAccount::getUsername, username)
+        .set(UserAccount::getPreferredLocale, preferredLocale));
+    if (updated == 0) {
+      throw new IllegalArgumentException("user not found");
+    }
+    return findByUsername(username)
+        .map(this::toView)
+        .orElseThrow(() -> new IllegalArgumentException("user not found"));
+  }
+
   public UserView toView(UserAccount account) {
     return new UserView(
         account.id(),
@@ -38,6 +51,7 @@ public class UserStore {
         account.regionId(),
         account.industryId(),
         account.membershipLevel(),
-        account.consultationPreferences());
+        account.consultationPreferences(),
+        account.preferredLocale());
   }
 }

@@ -20,6 +20,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -67,6 +68,7 @@ class V2GrayReleaseApiTest {
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.membershipLevel").value("SEED_PAID"))
       .andExpect(jsonPath("$.data.consultationPreferences").value("cashflow,inventory"))
+      .andExpect(jsonPath("$.data.preferredLocale").value("zh-CN"))
       .andReturn()
       .getResponse()
       .getContentAsString();
@@ -74,6 +76,29 @@ class V2GrayReleaseApiTest {
     JsonNode data = objectMapper.readTree(response).at("/data");
     assertThat(data.at("/regionId").asText()).isEqualTo("cn-default");
     assertThat(data.at("/industryId").asText()).isEqualTo("general");
+  }
+
+  @Test
+  void userCanPersistPreferredLocale() throws Exception {
+    String token = login("seed_paid");
+
+    mvc.perform(put("/api/users/me/locale")
+        .header("Authorization", "Bearer " + token)
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"preferredLocale\":\"en\"}"))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.preferredLocale").value("en"));
+
+    mvc.perform(get("/api/users/me").header("Authorization", "Bearer " + token))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.preferredLocale").value("en"));
+
+    mvc.perform(put("/api/users/me/locale")
+        .header("Authorization", "Bearer " + token)
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"preferredLocale\":\"zh-CN\"}"))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.data.preferredLocale").value("zh-CN"));
   }
 
   @Test

@@ -23,6 +23,7 @@ export type WorkspaceMessages = {
   loginFailed: string;
   sessionExpired: string;
   languageToggle: string;
+  languageSaved: string;
   navDiagnosis: string;
   navIntelligence: string;
   navUsers: string;

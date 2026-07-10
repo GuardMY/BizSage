@@ -53,7 +53,8 @@ public class AuthController {
             user.regionId(),
             user.industryId(),
             user.membershipLevel(),
-            user.consultationPreferences()),
+            user.consultationPreferences(),
+            user.preferredLocale()),
         requestId(httpRequest));
   }
 
@@ -92,6 +93,7 @@ public class AuthController {
       String regionId,
       String industryId,
       String membershipLevel,
-      String consultationPreferences) {
+      String consultationPreferences,
+      String preferredLocale) {
   }
 }

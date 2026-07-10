@@ -17,13 +17,18 @@
 
 - `POST /auth/login`
   - 请求体：`username`、`password`
-  - 返回：token、username、role、regionId、industryId、membershipLevel、consultationPreferences。
+  - 返回：token、username、role、regionId、industryId、membershipLevel、consultationPreferences、preferredLocale。
 
 ## 用户
 
 - `GET /users`
   - 角色：`SUPER_ADMIN`、`OPERATOR`
   - 返回脱敏后的手机号和身份字段，以及 V2 用户画像字段。
+- `GET /users/me`
+  - 返回当前已认证用户资料，包括 `preferredLocale`。
+- `PUT /users/me/locale`
+  - 请求体：`preferredLocale`（`zh-CN` 或 `en`）
+  - 持久化当前用户在 web 主页面和 admin 页面共用的语言偏好，并返回更新后的用户资料。
 
 ## 会话
 
@@ -49,7 +54,7 @@
 - `POST /paid-intelligence`
   - 角色：`SUPER_ADMIN`、`OPERATOR`
   - 请求体：title、content、url、industryId、regionId、linkId、sourceId
-  - 付费情报与免费/公开情报分开存储。
+  - 付费专属情报与免费/公开情报分开存储。
 - `POST /paid-intelligence/{id}/approve`
   - 角色：`SUPER_ADMIN`、`OPERATOR`
 - `GET /paid-intelligence`
@@ -77,21 +82,4 @@
 - `GET /ops/review-work-orders`
 - `GET /ops/audit-logs`
   - 角色：`SUPER_ADMIN`、`OPERATOR`
-  - 返回 V2 灰度指标、告警状态、存疑/冲突复核工单和审计日志。
-
-## Worker API
-
-Collector：
-
-- `POST /collect/form`
-- `POST /collect/public-page`
-- `POST /collect/mock-api`
-- `POST /govern`
-- V2 collector 辅助能力覆盖增量指纹、重试、熔断状态、死信分类和近期快照兜底。
-
-AI worker：
-
-- `POST /rag/search`
-  - 支持 V2 过滤：地域、行业和会员等级。
-- `POST /agent/diagnose`
-  - 返回 selfCheckStatus，并在存疑冲突或依据不足时返回受控输出。
+  - 返回 V2 灰度指标、告警状态、可疑/冲突复核工单和审计日志。

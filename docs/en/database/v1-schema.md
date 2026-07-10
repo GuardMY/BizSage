@@ -7,7 +7,7 @@ and upgrade the schema on startup.
 
 ## Core Tables
 
-- `users`: development users, role, encrypted phone and identity columns. V2 adds membership level and consultation preferences for gray-release permission checks.
+- `users`: development users, role, encrypted phone and identity columns. V2 adds membership level, consultation preferences, and `preferred_locale` for gray-release permission checks and shared web/admin language preference.
 - `conversations`: user-owned diagnosis sessions.
 - `messages`: user and Agent message history with source JSON.
 - `intelligence`: free/public manually entered or collected intelligence pending approval.

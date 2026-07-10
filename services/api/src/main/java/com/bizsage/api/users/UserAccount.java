@@ -22,6 +22,8 @@ public class UserAccount {
   private String industryId;
   private String membershipLevel;
   private String consultationPreferences;
+  @TableField("preferred_locale")
+  private String preferredLocale;
 
   public UserAccount() {
   }
@@ -39,6 +41,7 @@ public class UserAccount {
     this.industryId = industryId;
     this.membershipLevel = membershipLevel;
     this.consultationPreferences = consultationPreferences;
+    this.preferredLocale = "zh-CN";
   }
 
   public Long getId() {
@@ -121,6 +124,14 @@ public class UserAccount {
     this.consultationPreferences = consultationPreferences;
   }
 
+  public String getPreferredLocale() {
+    return preferredLocale;
+  }
+
+  public void setPreferredLocale(String preferredLocale) {
+    this.preferredLocale = preferredLocale;
+  }
+
   public long id() {
     return id == null ? 0L : id;
   }
@@ -159,5 +170,9 @@ public class UserAccount {
 
   public String consultationPreferences() {
     return consultationPreferences;
+  }
+
+  public String preferredLocale() {
+    return preferredLocale == null || preferredLocale.isBlank() ? "zh-CN" : preferredLocale;
   }
 }

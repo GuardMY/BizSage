@@ -2,6 +2,24 @@
 
 ## 2026-07-10
 
+### User-Bound Web/Admin Language Preference
+
+- Change type: functional change.
+- Affected modules: `apps/web`, `services/api`, `infra/mysql/init/001_v1_baseline.sql`, API/database documentation, and both change logs.
+- Main changes:
+  - Added `preferred_locale` to the `users` schema, MySQL baseline, H2 test baseline, and MySQL Flyway V4 migration.
+  - Included `preferredLocale` in login and current-user profiles, and added `PUT /api/users/me/locale` to persist `zh-CN` or `en` for the authenticated user.
+  - Updated the web main page to restore, switch, and persist the shared user language preference instead of keeping language only in local component state.
+  - Added admin login/topbar language switching and wired admin dashboard, collection, monitoring, and governance views to the shared user language state.
+- Verification results:
+  - Used CodeGraph before manual file inspection to trace auth, user profile, admin page, and frontend API paths.
+  - Verified `apps/web` with `npm run build`; the Next.js production build passed.
+  - Verified `services/api` with `mvn test`; all 38 tests passed.
+  - Verified the focused user profile behavior with `mvn test -Dtest=V2GrayReleaseApiTest`.
+- Unfinished items:
+  - Existing databases that run with Flyway disabled must apply `V4__user_preferred_locale.sql` manually or otherwise add `users.preferred_locale` before deploying this change.
+  - Some admin table row data and server-provided enum/status values still display as stored backend values rather than translated labels.
+
 ### Compose Service Endpoint Defaults
 
 - Change type: deployment configuration repair.
