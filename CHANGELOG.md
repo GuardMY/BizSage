@@ -2,6 +2,25 @@
 
 ## 2026-07-10
 
+### Flyway-Owned MySQL Baseline And Idempotent Migrations
+
+- Change type: database migration and deployment configuration change.
+- Affected modules: `services/api`, `infra`, `.env.example`, AGENTS instructions, database/deployment documentation, and both change logs.
+- Main changes:
+  - Moved the MySQL V1 baseline into `services/api/src/main/resources/db/migration/mysql/V1__baseline.sql`, making Flyway the single source for MySQL schema creation and upgrades.
+  - Removed the parallel Docker MySQL init schema and stopped mounting `infra/mysql/init` into the all-in-one MySQL container.
+  - Enabled Flyway by default through application configuration, `.env.example`, and both compose API environments so fresh databases run `V1` through the latest migration at API startup.
+  - Made `V4__user_preferred_locale.sql` conditionally add `users.preferred_locale` only when the column is missing.
+  - Hardened the V1 seed section with `WHERE NOT EXISTS` guards so seed data remains idempotent when SQL is inspected or rerun manually.
+  - Added the development-standard rule that Flyway SQL migrations must remain idempotent and must not be duplicated by parallel Docker/MySQL init schema scripts.
+- Verification results:
+  - Used CodeGraph before manual file inspection to locate Flyway, database configuration, and deployment paths.
+  - Verified `services/api` with `mvn -DskipTests clean compile`; compilation succeeded.
+  - Ran `mvn test`; the suite did not pass because existing `MessageStreamApiTest` assertions around rolling summaries and memory refresh failed, including two `ConcurrentModification` errors. The failing tests use the H2 test profile and do not execute the MySQL Flyway migration path changed here.
+- Unfinished items:
+  - Docker CLI and a live MySQL client are not available in the current environment, so `docker compose -f infra/docker-compose-all.yml up -d` and real MySQL Flyway execution still need verification in a Docker-enabled environment.
+  - Databases that already recorded a failed or old successful checksum for `V4__user_preferred_locale.sql` must reset the failed row or run Flyway repair before starting with the updated migration.
+
 ### User-Bound Web/Admin Language Preference
 
 - Change type: functional change.

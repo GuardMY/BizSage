@@ -1,9 +1,8 @@
 # BizSage Database Design
 
-The manual baseline initialization script lives at `infra/mysql/init/001_v1_baseline.sql`.
-After the baseline script is executed, the API service uses Flyway incremental
-migrations from `services/api/src/main/resources/db/migration/mysql/` to validate
-and upgrade the schema on startup.
+The V1 baseline schema lives at `services/api/src/main/resources/db/migration/mysql/V1__baseline.sql`.
+The API service uses Flyway migrations from `services/api/src/main/resources/db/migration/mysql/`
+as the single source for MySQL schema creation, validation, and upgrades on startup.
 
 ## Core Tables
 
@@ -35,7 +34,8 @@ Business tables include:
 
 ## Migration Notes
 
-- A new MySQL database must run `001_v1_baseline.sql` manually before the API starts.
-- Flyway then records the baseline and applies newer schema/data upgrades automatically on service startup.
+- A new MySQL database is initialized by Flyway from `V1__baseline.sql` when the API starts.
+- Existing non-empty MySQL databases without Flyway history use `baseline-on-migrate=true` at version 1, then receive newer idempotent schema/data upgrades automatically on service startup.
+- Flyway SQL migrations must be idempotent: guard schema changes and seed data so reruns or already-upgraded databases do not fail.
 - Sensitive values are encrypted by the API `PrivacyService` before persistence.
 - Full cold storage, full lineage, dynamic weights, orders, invoices, and member center are deferred beyond V2.

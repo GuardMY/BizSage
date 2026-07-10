@@ -1,6 +1,6 @@
 # BizSage 数据库设计
 
-手工基线初始化脚本位于 `infra/mysql/init/001_v1_baseline.sql`。执行完基线脚本后，API 服务会在启动时通过 `services/api/src/main/resources/db/migration/mysql/` 下的 Flyway 增量脚本校验并升级数据库结构。
+V1 基线 schema 位于 `services/api/src/main/resources/db/migration/mysql/V1__baseline.sql`。API 服务启动时会通过 `services/api/src/main/resources/db/migration/mysql/` 下的 Flyway 迁移脚本创建、校验并升级 MySQL schema；Flyway 是 MySQL schema 的唯一来源。
 
 ## 核心表
 
@@ -32,7 +32,8 @@
 
 ## 迁移说明
 
-- 新 MySQL 库必须先手工执行 `001_v1_baseline.sql`，再启动 API。
-- API 启动后由 Flyway 记录基线版本，并自动执行后续增量升级脚本。
+- 新 MySQL 库在 API 启动时由 Flyway 从 `V1__baseline.sql` 自动初始化。
+- 没有 Flyway 历史的非空旧 MySQL 库会通过 `baseline-on-migrate=true` 按版本 1 记录基线，然后在服务启动时继续执行后续幂等的 schema/数据升级脚本。
+- Flyway SQL 迁移必须保持幂等：schema 变更和种子数据都要加保护条件，避免重复执行或已升级数据库启动失败。
 - 敏感字段在持久化前由 API `PrivacyService` 加密。
 - 完整冷热分层、全量数据血缘、动态权重、订单、发票和会员中心能力仍推迟到 V2 之后。

@@ -37,13 +37,7 @@ infra\scripts\health-check.ps1
 
 ### API 服务
 
-首次启动 API 前，需要先初始化 MySQL 基线结构：
-
-```powershell
-mysql -h 127.0.0.1 -P 13306 -u bizsage -pbizsage bizsage < infra/mysql/init/001_v1_baseline.sql
-```
-
-基线准备完成后，API 启动时会由 Flyway 自动校验并执行后续增量迁移。
+API 启动时会由 Flyway 从 `V1__baseline.sql` 自动初始化全新 MySQL 库，并继续执行后续幂等迁移。不要在 API 启动前再手工导入一份并行的 MySQL 初始化 schema。
 
 ```powershell
 cd services\api

@@ -19,7 +19,6 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./mysql/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost",
              "-u${MYSQL_USER:-bizsage}", "-p${MYSQL_PASSWORD}"]
@@ -95,7 +94,7 @@ services:
       DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-bizsage}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
       DB_USERNAME: ${MYSQL_USER:-bizsage}
       DB_PASSWORD: ${MYSQL_PASSWORD}
-      BIZSAGE_FLYWAY_ENABLED: ${BIZSAGE_FLYWAY_ENABLED:-false}
+      BIZSAGE_FLYWAY_ENABLED: ${BIZSAGE_FLYWAY_ENABLED:-true}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       JWT_SECRET: ${JWT_SECRET}

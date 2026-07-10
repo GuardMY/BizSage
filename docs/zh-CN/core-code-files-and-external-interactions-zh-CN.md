@@ -161,8 +161,7 @@ Collector
 
 | 文件 | 主要职责 | 内部调用 | 外部交互 |
 |------|----------|----------|----------|
-| `services/api/src/main/resources/db/migration/mysql/V2__admin_schema_and_seed.sql` 与 `V3__user_memory_profile_uniqueness.sql` | Flyway 迁移，负责管理后台 schema、种子数据与记忆唯一性约束。 | 在 API 启动时加载。 | 修改 MySQL schema。 |
-| `infra/mysql/init/001_v1_baseline.sql` | 本地 Docker MySQL 启动时使用的基线初始化 schema。 | 被基础设施启动流程使用。 | 初始化本地/开发 MySQL 表结构。 |
+| `services/api/src/main/resources/db/migration/mysql/V1__baseline.sql`、`V2__admin_schema_and_seed.sql`、`V3__user_memory_profile_uniqueness.sql` 与 `V4__user_preferred_locale.sql` | 幂等 Flyway 迁移，负责 MySQL 基线、管理后台 schema 与种子数据、记忆唯一性约束和用户语言偏好。 | 在 API 启动时加载。 | 作为唯一 schema 来源创建并升级 MySQL schema。 |
 
 ### 3.4 `services/ai-worker`
 
@@ -211,8 +210,8 @@ Collector
 
 | 文件 | 主要职责 | 内部调用 | 外部交互 |
 |------|----------|----------|----------|
-| `infra/docker-compose.yml` | 本地/类生产服务拓扑，编排 MySQL、Redis、Qdrant、API、AI worker、collector、Web 与 Nginx。 | 启动全部运行时容器。 | 定义容器间网络与依赖关系。 |
-| `infra/docker-compose-all.yml` | 更完整的本地编排变体。 | 提供另一种启动拓扑。 | 与基础 compose 文件承担相同外部角色。 |
+| `infra/docker-compose.yml` | 类生产拓扑，只编排 BizSage 自有服务和 Nginx，中间件由外部提供。 | 启动 API、AI worker、collector、Web 与 Nginx 容器。 | 定义应用服务容器网络与外部中间件端点。 |
+| `infra/docker-compose-all.yml` | 完整本地编排变体，包含 MySQL、Redis、Qdrant、API、AI worker、collector、Web 与 Nginx。 | 启动本地基础设施和应用容器。 | 定义本地容器网络、依赖关系和中间件持久化卷。 |
 | `infra/nginx/nginx.conf` | 反向代理入口。将 `/api/` 路由到 Spring Boot，将 `/` 路由到 Next.js，并为 SSE 关闭缓冲。 | 位于 Web 与 API 前方。 | 提供浏览器统一入口。 |
 | `infra/scripts/start-local.ps1` 与 `start-all.ps1` | 本地基础设施或整栈启动脚本。 | 封装 Docker Compose 命令。 | 通过 PowerShell 启动本地依赖。 |
 | `infra/scripts/health-check.ps1` | 本地环境健康检查脚本。 | 在启动后探测服务。 | 检查运行时接口与依赖健康状态。 |

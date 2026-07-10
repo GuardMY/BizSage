@@ -161,8 +161,7 @@ Notes:
 
 | File | Main responsibility | Internal calls | External interactions |
 |------|---------------------|----------------|-----------------------|
-| `services/api/src/main/resources/db/migration/mysql/V2__admin_schema_and_seed.sql` and `V3__user_memory_profile_uniqueness.sql` | Flyway migrations for admin schema, seed data, and memory uniqueness. | Loaded at API startup. | Alters MySQL schema. |
-| `infra/mysql/init/001_v1_baseline.sql` | Local bootstrap schema shared by Docker MySQL startup. | Used by infra startup. | Initializes MySQL tables for local/dev runtime. |
+| `services/api/src/main/resources/db/migration/mysql/V1__baseline.sql`, `V2__admin_schema_and_seed.sql`, `V3__user_memory_profile_uniqueness.sql`, and `V4__user_preferred_locale.sql` | Idempotent Flyway migrations for the MySQL baseline, admin schema and seed data, memory uniqueness, and user locale preference. | Loaded at API startup. | Creates and upgrades MySQL schema as the single schema source. |
 
 ### 3.4 `services/ai-worker`
 
@@ -211,8 +210,8 @@ Notes:
 
 | File | Main responsibility | Internal calls | External interactions |
 |------|---------------------|----------------|-----------------------|
-| `infra/docker-compose.yml` | Local/production-like service topology for MySQL, Redis, Qdrant, API, AI worker, collector, Web, and Nginx. | Starts all runtime containers. | Defines container-to-container networking and dependency wiring. |
-| `infra/docker-compose-all.yml` | Expanded compose variant for larger local stacks. | Alternative startup topology. | Same external role as the base compose file. |
+| `infra/docker-compose.yml` | Production-style topology for BizSage-owned services and Nginx, with middleware supplied externally. | Starts API, AI worker, collector, Web, and Nginx containers. | Defines container networking for application services and external middleware endpoints. |
+| `infra/docker-compose-all.yml` | Full local compose variant with MySQL, Redis, Qdrant, API, AI worker, collector, Web, and Nginx. | Starts local infrastructure and application containers. | Defines local container networking, dependency wiring, and persistent middleware volumes. |
 | `infra/nginx/nginx.conf` | Reverse proxy entrypoint. Routes `/api/` to Spring Boot and `/` to Next.js; disables buffering for SSE. | Sits in front of Web and API. | Serves the browser-facing HTTP entrypoint. |
 | `infra/scripts/start-local.ps1` and `start-all.ps1` | Startup helpers for infrastructure or the full local stack. | Wrap Docker Compose commands. | Start local dependencies from PowerShell. |
 | `infra/scripts/health-check.ps1` | Local environment health probe script. | Queries services after startup. | Checks runtime endpoints and dependency health. |

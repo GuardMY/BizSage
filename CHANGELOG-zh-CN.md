@@ -2,6 +2,25 @@
 
 ## 2026-07-10
 
+### Flyway 托管的 MySQL 基线与幂等迁移
+
+- 变更类型：数据库迁移与部署配置调整。
+- 影响模块：`services/api`、`infra`、`.env.example`、AGENTS 规范、数据库/部署文档和两份变更日志。
+- 主要变更：
+  - 将 MySQL V1 基线迁入 `services/api/src/main/resources/db/migration/mysql/V1__baseline.sql`，由 Flyway 统一负责 MySQL schema 创建与升级。
+  - 删除并行的 Docker MySQL 初始化 schema，并取消全量 compose 中对 `infra/mysql/init` 的 MySQL 初始化挂载。
+  - 在应用配置、`.env.example` 和两份 compose 的 API 环境变量中默认启用 Flyway，使全新数据库在 API 启动时自动执行 `V1` 到最新迁移。
+  - 将 `V4__user_preferred_locale.sql` 改为仅在 `users.preferred_locale` 缺失时才补充字段。
+  - 为 V1 种子数据补充 `WHERE NOT EXISTS` 保护条件，使 SQL 被检查或手工重跑时保持幂等。
+  - 在开发规范中新增要求：Flyway SQL 迁移必须保持幂等，且不得再用并行 Docker/MySQL 初始化脚本重复 Flyway 管理的 schema。
+- 验证结果：
+  - 修改前已使用 CodeGraph 定位 Flyway、数据库配置和部署路径。
+  - 已在 `services/api` 执行 `mvn -DskipTests clean compile`；编译通过。
+  - 已执行 `mvn test`；测试套件未通过，失败集中在既有 `MessageStreamApiTest` 的滚动摘要、记忆刷新断言，以及两处 `ConcurrentModification` 错误。失败测试使用 H2 test profile，不会执行本次修改的 MySQL Flyway 迁移路径。
+- 未完成事项：
+  - 当前环境未安装 Docker CLI 和可用 MySQL 客户端，因此仍需在具备 Docker 的环境中执行 `docker compose -f infra/docker-compose-all.yml up -d` 并验证真实 MySQL Flyway 执行。
+  - 已经记录 `V4__user_preferred_locale.sql` 失败历史或旧成功 checksum 的数据库，需要先重置失败记录或执行 Flyway repair 后再用更新后的迁移启动。
+
 ### 用户绑定的 web/admin 语言偏好
 
 - 变更类型：功能变更。

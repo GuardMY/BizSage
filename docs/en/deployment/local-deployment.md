@@ -40,14 +40,9 @@ started.
 
 ### API Service
 
-Initialize the MySQL schema before the first API start:
-
-```powershell
-mysql -h 127.0.0.1 -P 13306 -u bizsage -pbizsage bizsage < infra/mysql/init/001_v1_baseline.sql
-```
-
-After the baseline is present, Flyway validates and applies later incremental
-migrations automatically when the API boots.
+Flyway initializes a new MySQL database from `V1__baseline.sql` and applies later
+idempotent migrations automatically when the API boots. Do not manually import a
+parallel MySQL init schema before starting the API.
 
 ```powershell
 cd services\api
