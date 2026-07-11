@@ -1,4 +1,4 @@
-import { Archive, Eye, FileText, LockKeyhole, Search, Send } from "lucide-react";
+import { Archive, Eye, FileText, LockKeyhole, RefreshCcw, Search, Send } from "lucide-react";
 import { useEffect, useRef } from "react";
 import Markdown from "../../lib/markdown";
 import type {
@@ -7,6 +7,7 @@ import type {
   Diagnosis,
   DiagnosisReport,
   PaidIntelligence,
+  RecommendationItem,
   Source,
   WorkspaceMessages
 } from "./workspace-types";
@@ -20,8 +21,11 @@ type DiagnosisWorkspaceProps = {
   onGenerateReport: () => void;
   onMessageChange: (value: string) => void;
   onOpenSource: (source: Source) => void;
+  onRefreshRecommendations: () => void;
+  onUseRecommendation: (item: RecommendationItem) => void;
   onSubmitDiagnosis: () => void;
   paidRows: PaidIntelligence[];
+  recommendationRows: RecommendationItem[];
   report: DiagnosisReport | null;
   reportBusy: boolean;
   selectedConversation: Conversation | null;
@@ -38,8 +42,11 @@ export function DiagnosisWorkspace({
   onGenerateReport,
   onMessageChange,
   onOpenSource,
+  onRefreshRecommendations,
+  onUseRecommendation,
   onSubmitDiagnosis,
   paidRows,
+  recommendationRows,
   report,
   reportBusy,
   selectedConversation,
@@ -49,6 +56,9 @@ export function DiagnosisWorkspace({
   const hasAssistantReply = messageHistory.some((messageItem) => messageItem.sender === "ASSISTANT");
   const displayedDiagnosis = streamingDiagnosis ?? (!hasAssistantReply ? diagnosis : null);
   const messagesRef = useRef<HTMLDivElement | null>(null);
+  const recommendationItems = recommendationRows.length > 0
+    ? recommendationRows
+    : displayedDiagnosis?.recommendedQuestions ?? displayedDiagnosis?.recommendationCandidates ?? [];
 
   useEffect(() => {
     if (!messagesRef.current) return;
@@ -176,17 +186,25 @@ export function DiagnosisWorkspace({
 
         <section className="workspaceCard">
           <div className="sectionHead compact">
-            <h2><LockKeyhole size={16} /> {t.paidTitle}</h2>
+            <h2><LockKeyhole size={16} /> {t.recommendationTitle}</h2>
+            <button className="ghost" onClick={onRefreshRecommendations} type="button">
+              <RefreshCcw size={14} />
+              {t.recommendationRefresh}
+            </button>
           </div>
           <div className="table">
-            {paidRows.length === 0 && (
-              <EmptyCard title={t.paidEmptyTitle} detail={t.paidEmptyDetail} />
+            {recommendationItems.length === 0 && (
+              <EmptyCard title={t.recommendationEmpty} detail={t.recommendationMissing} />
             )}
-            {paidRows.map((row) => (
+            {recommendationItems.map((row) => (
               <div className="row" key={row.id}>
-                <strong>{row.title}</strong>
-                <span>{row.status}</span>
-                <small>{row.entitlement} / {row.regionId} / {row.industryId}</small>
+                <strong>{row.questionText}</strong>
+                <span>{row.category}</span>
+                <small>{row.sourceType} / {row.score.toFixed(2)} / {row.usageCount}</small>
+                <button className="ghost" onClick={() => onUseRecommendation(row)} type="button">
+                  <Search size={14} />
+                  {t.recommendationContinue}
+                </button>
               </div>
             ))}
           </div>

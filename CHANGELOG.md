@@ -1097,3 +1097,20 @@
 - Unfinished items:
   - A broader backend regression sweep is still recommended if the team wants full-suite confidence beyond the targeted migration-related tests.
 
+## 2026-07-11
+
+### Learning And Diagnosis Agent Guided Workflow Design
+
+- Change type: documentation design.
+- Affected modules: `apps/web`, `services/api`, `services/ai-worker`, paired design docs, and both change logs.
+- Main changes:
+  - Added a guided workflow design for the Learning and Diagnosis Agents to cover self-introduction, right-side quick questions, dynamic refresh, question-pool persistence and ranking, and diagnosis completion control.
+  - Defined how the Learning Agent should surface the next likely industry node, block, direction, or detail from the current conversation, and how an industry-level top-question pool should be ranked using LLM judgment, top-level score, usage count, and ratings.
+  - Defined how the Diagnosis Agent should introduce itself and its interaction model, present an early diagnosis plan, actively ask for missing operating-profile details, surface likely business problems, and let the user continue adding information before report generation.
+  - Designed backend conversation-state, recommendation-rail, question-pool, and diagnosis-state API extensions, plus the corresponding AI Worker output-shape and prompt constraints.
+- Verification results:
+  - Completed a static review against the existing original design docs and the current implementation chain.
+  - Confirmed that this change only adds design documentation and does not change runtime code.
+- Unfinished items:
+  - API, AI Worker, frontend, and persistence logic have not yet been implemented.
+

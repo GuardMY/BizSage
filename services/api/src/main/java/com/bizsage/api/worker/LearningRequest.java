@@ -3,10 +3,6 @@ package com.bizsage.api.worker;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Request body sent to AI worker's POST /agent/learn.
- * Mirrors the Python LearnRequest model.
- */
 public record LearningRequest(
     String question,
     List<Map<String, Object>> knowledge,
@@ -17,7 +13,11 @@ public record LearningRequest(
     List<Map<String, Object>> longTermMemories,
     String regionId,
     String industryId,
-    String membershipLevel) {
+    String membershipLevel,
+    String agentMode,
+    String workflowStage,
+    List<String> profileMissingFields,
+    List<String> recommendationBlacklist) {
 
   public static Builder builder() {
     return new Builder();
@@ -34,6 +34,10 @@ public record LearningRequest(
     private String regionId;
     private String industryId;
     private String membershipLevel = "FREE";
+    private String agentMode = "LEARNING";
+    private String workflowStage = "INTRO";
+    private List<String> profileMissingFields = List.of();
+    private List<String> recommendationBlacklist = List.of();
 
     public Builder question(String question) { this.question = question; return this; }
     public Builder knowledge(List<Map<String, Object>> knowledge) { this.knowledge = knowledge; return this; }
@@ -45,10 +49,15 @@ public record LearningRequest(
     public Builder regionId(String regionId) { this.regionId = regionId; return this; }
     public Builder industryId(String industryId) { this.industryId = industryId; return this; }
     public Builder membershipLevel(String membershipLevel) { this.membershipLevel = membershipLevel; return this; }
+    public Builder agentMode(String agentMode) { this.agentMode = agentMode; return this; }
+    public Builder workflowStage(String workflowStage) { this.workflowStage = workflowStage; return this; }
+    public Builder profileMissingFields(List<String> profileMissingFields) { this.profileMissingFields = profileMissingFields; return this; }
+    public Builder recommendationBlacklist(List<String> recommendationBlacklist) { this.recommendationBlacklist = recommendationBlacklist; return this; }
 
     public LearningRequest build() {
       return new LearningRequest(question, knowledge, chainNodeId, learningMode,
-          recentMessages, conversationSummary, longTermMemories, regionId, industryId, membershipLevel);
+          recentMessages, conversationSummary, longTermMemories, regionId, industryId, membershipLevel,
+          agentMode, workflowStage, profileMissingFields, recommendationBlacklist);
     }
   }
 }

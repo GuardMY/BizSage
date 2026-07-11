@@ -8,6 +8,7 @@ import com.bizsage.api.knowledge.KnowledgeItem;
 import com.bizsage.api.knowledge.KnowledgeStore;
 import com.bizsage.api.memory.UserMemoryProfile;
 import com.bizsage.api.memory.UserMemoryStore;
+import com.bizsage.api.recommendations.RecommendationService;
 import com.bizsage.api.users.UserAccount;
 import com.bizsage.api.worker.AiWorkerClient;
 import com.bizsage.api.worker.AiWorkerException;
@@ -37,6 +38,7 @@ public class DiagnosisService {
   private final UserMemoryStore userMemoryStore;
   private final KnowledgeStore knowledgeStore;
   private final IntelligenceStore intelligenceStore;
+  private final RecommendationService recommendationService;
 
   public DiagnosisService(
       AiWorkerClient aiWorkerClient,
@@ -45,7 +47,8 @@ public class DiagnosisService {
       ConversationSummaryStore summaryStore,
       UserMemoryStore userMemoryStore,
       KnowledgeStore knowledgeStore,
-      IntelligenceStore intelligenceStore) {
+      IntelligenceStore intelligenceStore,
+      RecommendationService recommendationService) {
     this.aiWorkerClient = aiWorkerClient;
     this.objectMapper = objectMapper;
     this.messageStore = messageStore;
@@ -53,6 +56,7 @@ public class DiagnosisService {
     this.userMemoryStore = userMemoryStore;
     this.knowledgeStore = knowledgeStore;
     this.intelligenceStore = intelligenceStore;
+    this.recommendationService = recommendationService;
   }
 
 /**
@@ -111,6 +115,11 @@ public class DiagnosisService {
         .regionId(conversation.regionId())
         .industryId(conversation.industryId())
         .membershipLevel(user.membershipLevel())
+        .agentMode("DIAGNOSIS")
+        .workflowStage("INTRO")
+        .profileMissingFields(List.of())
+        .recommendedQuestionIds(List.of())
+        .diagnosisClosable(false)
         .build();
 
     // 5. 调用 AI Worker；严格失败，不做本地答案兜底。
@@ -139,6 +148,15 @@ public class DiagnosisService {
     payload.put("timeliness", response.timeliness());
     payload.put("selfCheckStatus", response.selfCheckStatus());
     payload.put("disclaimer", response.disclaimer());
+    payload.put("workflowStage", response.workflowStage());
+    payload.put("profileMissingFields", response.profileMissingFields() != null ? response.profileMissingFields() : List.of());
+    payload.put("completionSignal", response.completionSignal());
+    payload.put("recommendedQuestions", response.recommendedQuestions() != null ? response.recommendedQuestions() : List.of());
+    payload.put("recommendedQuestionIds", response.recommendedQuestions() != null
+        ? response.recommendedQuestions().stream()
+            .map(item -> item.get("id"))
+            .toList()
+        : List.of());
 
     String payloadJson = serialize(payload);
 
@@ -161,6 +179,8 @@ public class DiagnosisService {
         persistCandidate(user, conversation, userMessageId, assistantMessageId, candidate);
       }
     }
+
+    recommendationService.recordUsage(extractQuestionIds(response.recommendedQuestions()));
 
     // 9. 标记记忆使用并维护会话摘要，防止活跃消息无限增长。
     userMemoryStore.markUsed(memories.stream().map(UserMemoryProfile::id).toList());
@@ -256,6 +276,20 @@ public class DiagnosisService {
     map.put("region_id", item.regionId() != null ? item.regionId() : "cn-default");
     map.put("entitlement", "FREE");
     return map;
+  }
+
+  private List<Long> extractQuestionIds(List<Map<String, Object>> candidates) {
+    if (candidates == null) {
+      return List.of();
+    }
+    List<Long> ids = new ArrayList<>();
+    for (Map<String, Object> candidate : candidates) {
+      Object id = candidate.get("id");
+      if (id instanceof Number number) {
+        ids.add(number.longValue());
+      }
+    }
+    return ids;
   }
 
   // 响应映射。

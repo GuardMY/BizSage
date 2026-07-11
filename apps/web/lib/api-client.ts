@@ -29,6 +29,13 @@ export type Diagnosis = {
   timeliness: string;
   selfCheckStatus?: SelfCheckStatus;
   disclaimer: string;
+  workflowStage?: string;
+  profileMissingFields?: string[];
+  completionSignal?: string;
+  recommendedQuestions?: RecommendationItem[];
+  recommendationCandidates?: RecommendationItem[];
+  currentTopic?: string | null;
+  nextBestTopics?: string[];
 };
 
 export type DiagnosisError = {
@@ -59,6 +66,13 @@ export type Conversation = {
   status: string;
   regionId: string;
   industryId: string;
+  agentMode?: string;
+  workflowStage?: string;
+  profileCompleteness?: number;
+  primaryIssueTags?: string | null;
+  recommendedQuestionIds?: string | null;
+  closedBy?: string | null;
+  closedReason?: string | null;
 };
 
 export type LoginProfile = {
@@ -372,6 +386,22 @@ export async function fetchMessages(conversationId: number) {
     headers: authHeaders()
   });
   const envelope = await readProtectedEnvelope<ConversationMessage[]>(response, "Fetch messages failed");
+  return envelope.data;
+}
+
+export type RecommendationResponse = {
+  agentMode: string;
+  workflowStage: string;
+  refreshAvailable: boolean;
+  items: RecommendationItem[];
+};
+
+export async function fetchConversationRecommendations(conversationId: number) {
+  const response = await fetch(`${API_BASE}/conversations/${conversationId}/recommendations`, {
+    headers: authHeaders(),
+    credentials: "include"
+  });
+  const envelope = await readProtectedEnvelope<RecommendationResponse>(response, "Fetch recommendations failed");
   return envelope.data;
 }
 
@@ -1196,6 +1226,27 @@ export type AgentOutput = {
   chainNodeId?: string;
   suggestedActions?: string[];
   memoryCandidates?: Record<string, unknown>[];
+  recommendationCandidates?: RecommendationItem[];
+  currentTopic?: string | null;
+  nextBestTopics?: string[];
+  workflowStage?: string;
+  profileMissingFields?: string[];
+  completionSignal?: string;
+  recommendedQuestions?: RecommendationItem[];
+};
+
+export type RecommendationItem = {
+  id: number;
+  questionKey: string;
+  category: string;
+  questionText: string;
+  score: number;
+  topLevelScore: number;
+  usageCount: number;
+  ratingAvg: number;
+  ratingCount: number;
+  sourceType: string;
+  sourceRef: string;
 };
 
 /**

@@ -5,9 +5,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Structured response from AI worker's POST /agent/diagnose.
- */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record DiagnoseResponse(
     String answer,
@@ -17,15 +14,18 @@ public record DiagnoseResponse(
     @JsonProperty("selfCheckStatus") String selfCheckStatus,
     String disclaimer,
     @JsonProperty("memoryCandidates") List<Map<String, Object>> memoryCandidates,
-    // ── Learning Agent fields (null for diagnosis-only responses) ──
     String mode,
     @JsonProperty("chainNodeId") String chainNodeId,
     @JsonProperty("suggestedActions") List<String> suggestedActions,
-    @JsonProperty("sections") Map<String, String> sections) {
+    @JsonProperty("sections") Map<String, String> sections,
+    @JsonProperty("recommendationCandidates") List<Map<String, Object>> recommendationCandidates,
+    @JsonProperty("currentTopic") String currentTopic,
+    @JsonProperty("nextBestTopics") List<String> nextBestTopics,
+    @JsonProperty("workflowStage") String workflowStage,
+    @JsonProperty("profileMissingFields") List<String> profileMissingFields,
+    @JsonProperty("completionSignal") String completionSignal,
+    @JsonProperty("recommendedQuestions") List<Map<String, Object>> recommendedQuestions) {
 
-  /**
-   * Worker source entry — maps to the sources array in the worker response.
-   */
   @JsonIgnoreProperties(ignoreUnknown = true)
   public record DiagnoseSource(
       String id,
@@ -37,10 +37,6 @@ public record DiagnoseResponse(
       String entitlement) {
   }
 
-  /**
-   * Returns true when this response represents a successful diagnosis
-   * (not an error state from the worker).
-   */
   public boolean isSuccessful() {
     return answer != null && !answer.isBlank()
         && !"LLM_NOT_CONFIGURED".equals(selfCheckStatus)

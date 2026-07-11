@@ -16,6 +16,13 @@ public class Conversation {
   private String sourceId;
   private Double weight;
   private Long userId;
+  private String agentMode;
+  private String workflowStage;
+  private Double profileCompleteness;
+  private String primaryIssueTags;
+  private String recommendedQuestionIds;
+  private String closedBy;
+  private String closedReason;
 
   public Conversation() {
   }
@@ -96,6 +103,62 @@ public class Conversation {
     this.weight = weight;
   }
 
+  public String getAgentMode() {
+    return agentMode;
+  }
+
+  public void setAgentMode(String agentMode) {
+    this.agentMode = agentMode;
+  }
+
+  public String getWorkflowStage() {
+    return workflowStage;
+  }
+
+  public void setWorkflowStage(String workflowStage) {
+    this.workflowStage = workflowStage;
+  }
+
+  public Double getProfileCompleteness() {
+    return profileCompleteness;
+  }
+
+  public void setProfileCompleteness(Double profileCompleteness) {
+    this.profileCompleteness = profileCompleteness;
+  }
+
+  public String getPrimaryIssueTags() {
+    return primaryIssueTags;
+  }
+
+  public void setPrimaryIssueTags(String primaryIssueTags) {
+    this.primaryIssueTags = primaryIssueTags;
+  }
+
+  public String getRecommendedQuestionIds() {
+    return recommendedQuestionIds;
+  }
+
+  public void setRecommendedQuestionIds(String recommendedQuestionIds) {
+    this.recommendedQuestionIds = recommendedQuestionIds;
+  }
+
+  public String getClosedBy() {
+    return closedBy;
+  }
+
+  public void setClosedBy(String closedBy) {
+    this.closedBy = closedBy;
+  }
+
+  public String getClosedReason() {
+    return closedReason;
+  }
+
+  public void setClosedReason(String closedReason) {
+    this.closedReason = closedReason;
+  }
+
   public Long getUserId() {
     return userId;
   }
@@ -134,6 +197,34 @@ public class Conversation {
 
   public double weight() {
     return weight == null ? 0D : weight;
+  }
+
+  public String agentMode() {
+    return agentMode;
+  }
+
+  public String workflowStage() {
+    return workflowStage;
+  }
+
+  public double profileCompleteness() {
+    return profileCompleteness == null ? 0D : profileCompleteness;
+  }
+
+  public String primaryIssueTags() {
+    return primaryIssueTags;
+  }
+
+  public String recommendedQuestionIds() {
+    return recommendedQuestionIds;
+  }
+
+  public String closedBy() {
+    return closedBy;
+  }
+
+  public String closedReason() {
+    return closedReason;
   }
 
   Conversation archive() {

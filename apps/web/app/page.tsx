@@ -20,6 +20,7 @@ import {
   downloadDiagnosisPdf,
   fetchDiagnosisReport,
   fetchMe,
+  fetchConversationRecommendations,
   fetchMessages,
   fetchPaidIntelligence,
   login,
@@ -34,6 +35,7 @@ import {
   type DiagnosisReport,
   type LoginProfile,
   type PaidIntelligence,
+  type RecommendationItem,
   type Source
 } from "../lib/api-client";
 
@@ -103,6 +105,11 @@ const messages: Record<Locale, WorkspaceMessages> = {
     paidTitle: "付费情报",
     paidEmptyTitle: "无可见付费情报",
     paidEmptyDetail: "免费用户或当前账号无匹配权益时不会显示付费数据。",
+    recommendationTitle: "鎺ㄨ崘闂",
+    recommendationEmpty: "鏆傛棤鎺ㄨ崘",
+    recommendationRefresh: "鍒锋柊",
+    recommendationMissing: "璇烽噸鏂扮敤褰撳墠浼氳瘽涓婁笅鏂囪繘琛屾帹鑽愩€?",
+    recommendationContinue: "鐢ㄨ繖涓棶棰樼户缁?",
     reportTitle: "诊断报告",
     reportMetadata: "报告元数据",
     reportEmptyTitle: "暂无报告",
@@ -170,6 +177,11 @@ const messages: Record<Locale, WorkspaceMessages> = {
     paidTitle: "Paid Intelligence",
     paidEmptyTitle: "No visible paid intelligence",
     paidEmptyDetail: "Free users or accounts without matching entitlement do not see paid data.",
+    recommendationTitle: "Recommended questions",
+    recommendationEmpty: "No recommendations yet",
+    recommendationRefresh: "Refresh",
+    recommendationMissing: "Refresh suggestions using the current conversation context.",
+    recommendationContinue: "Use this question",
     reportTitle: "Diagnosis Report",
     reportMetadata: "Report metadata",
     reportEmptyTitle: "No report yet",
@@ -212,6 +224,7 @@ export default function Home() {
   const [report, setReport] = useState<DiagnosisReport | null>(null);
   const [reportBusy, setReportBusy] = useState(false);
   const [paidRows, setPaidRows] = useState<PaidIntelligence[]>([]);
+  const [recommendationRows, setRecommendationRows] = useState<RecommendationItem[]>([]);
   const [selectedSource, setSelectedSource] = useState<Source | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(messages["zh-CN"].loginNotice);
@@ -241,6 +254,7 @@ export default function Home() {
       setConversations([]);
       setMessageHistory([]);
       setSelectedConversationId(null);
+      setRecommendationRows([]);
       return;
     }
 
@@ -364,6 +378,7 @@ export default function Home() {
     setReport(null);
     setSelectedConversationId(null);
     setPaidRows([]);
+    setRecommendationRows([]);
     setSelectedSource(null);
     setReportBusy(false);
     setNotice(t.loginNotice);
@@ -379,6 +394,7 @@ export default function Home() {
     setReport(null);
     setSelectedConversationId(null);
     setPaidRows([]);
+    setRecommendationRows([]);
     setSelectedSource(null);
     setReportBusy(false);
     setNotice(t.sessionExpired);
@@ -389,6 +405,7 @@ export default function Home() {
     setStreamingDiagnosis(null);
     setReport(null);
     setSelectedSource(null);
+    setRecommendationRows([]);
   }
 
   function handleSelectConversation(id: number) {
@@ -524,11 +541,14 @@ export default function Home() {
       });
       setStreamingDiagnosis(nextDiagnosis);
       setDiagnosis(nextDiagnosis);
+      setRecommendationRows(nextDiagnosis.recommendedQuestions ?? nextDiagnosis.recommendationCandidates ?? []);
 
       try {
         const updatedMessages = await fetchMessages(conversationId);
         setMessageHistory(updatedMessages);
         setStreamingDiagnosis(null);
+        const nextRecommendations = await fetchConversationRecommendations(conversationId);
+        setRecommendationRows(nextRecommendations.items);
       } catch (error) {
         if (error instanceof AuthExpiredError) {
           handleSessionExpired();
@@ -567,6 +587,24 @@ export default function Home() {
       setStreamingDiagnosis(null);
       setBusy(false);
     }
+  }
+
+  async function handleRefreshRecommendations() {
+    if (!selectedConversation) return;
+    try {
+      const nextRecommendations = await fetchConversationRecommendations(selectedConversation.id);
+      setRecommendationRows(nextRecommendations.items);
+    } catch (error) {
+      if (error instanceof AuthExpiredError) {
+        handleSessionExpired();
+        return;
+      }
+      setNotice(error instanceof Error ? error.message : t.workerError);
+    }
+  }
+
+  function handleUseRecommendation(item: RecommendationItem) {
+    setMessage(item.questionText);
   }
 
   async function generateReport() {
@@ -669,8 +707,11 @@ export default function Home() {
             onGenerateReport={generateReport}
             onMessageChange={setMessage}
             onOpenSource={setSelectedSource}
+            onRefreshRecommendations={handleRefreshRecommendations}
+            onUseRecommendation={handleUseRecommendation}
             onSubmitDiagnosis={submitDiagnosis}
             paidRows={paidRows}
+            recommendationRows={recommendationRows}
             report={report}
             reportBusy={reportBusy}
             selectedConversation={selectedConversation}

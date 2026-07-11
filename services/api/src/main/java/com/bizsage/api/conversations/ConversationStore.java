@@ -30,6 +30,9 @@ public class ConversationStore {
     conversation.setIndustryId(industryId);
     conversation.setSourceId("user");
     conversation.setWeight(1.0D);
+    conversation.setAgentMode("DIAGNOSIS");
+    conversation.setWorkflowStage("INTRO");
+    conversation.setProfileCompleteness(0.0D);
     conversationMapper.insert(conversation);
     return findForOwner(ownerUsername, conversation.id());
   }
@@ -62,6 +65,25 @@ public class ConversationStore {
         .eq(Conversation::getOwnerUsername, ownerUsername)
         .eq(Conversation::getStatus, "ARCHIVED")
         .set(Conversation::getStatus, "DELETED"));
+    if (updated == 0) {
+      throw new IllegalArgumentException("conversation not found");
+    }
+    return findForOwner(ownerUsername, id);
+  }
+
+  public Conversation updateWorkflow(long id, String ownerUsername, String agentMode,
+      String workflowStage, Double profileCompleteness, String primaryIssueTags,
+      String recommendedQuestionIds, String closedBy, String closedReason) {
+    int updated = conversationMapper.update(null, new LambdaUpdateWrapper<Conversation>()
+        .eq(Conversation::getId, id)
+        .eq(Conversation::getOwnerUsername, ownerUsername)
+        .set(agentMode != null, Conversation::getAgentMode, agentMode)
+        .set(workflowStage != null, Conversation::getWorkflowStage, workflowStage)
+        .set(profileCompleteness != null, Conversation::getProfileCompleteness, profileCompleteness)
+        .set(primaryIssueTags != null, Conversation::getPrimaryIssueTags, primaryIssueTags)
+        .set(recommendedQuestionIds != null, Conversation::getRecommendedQuestionIds, recommendedQuestionIds)
+        .set(closedBy != null, Conversation::getClosedBy, closedBy)
+        .set(closedReason != null, Conversation::getClosedReason, closedReason));
     if (updated == 0) {
       throw new IllegalArgumentException("conversation not found");
     }

@@ -5,6 +5,7 @@ import type {
   DiagnosisReport,
   LoginProfile,
   PaidIntelligence,
+  RecommendationItem,
   Source
 } from "../../lib/api-client";
 
@@ -51,6 +52,11 @@ export type WorkspaceMessages = {
   paidTitle: string;
   paidEmptyTitle: string;
   paidEmptyDetail: string;
+  recommendationTitle: string;
+  recommendationEmpty: string;
+  recommendationRefresh: string;
+  recommendationMissing: string;
+  recommendationContinue: string;
   reportTitle: string;
   reportMetadata: string;
   reportEmptyTitle: string;
@@ -81,4 +87,4 @@ export type WorkspaceMessages = {
   noConversationContext: string;
 };
 
-export type { Conversation, ConversationMessage, Diagnosis, DiagnosisReport, LoginProfile, PaidIntelligence, Source };
+export type { Conversation, ConversationMessage, Diagnosis, DiagnosisReport, LoginProfile, PaidIntelligence, RecommendationItem, Source };

@@ -8,6 +8,7 @@ import com.bizsage.api.knowledge.KnowledgeItem;
 import com.bizsage.api.knowledge.KnowledgeStore;
 import com.bizsage.api.memory.UserMemoryProfile;
 import com.bizsage.api.memory.UserMemoryStore;
+import com.bizsage.api.recommendations.RecommendationService;
 import com.bizsage.api.users.UserAccount;
 import com.bizsage.api.worker.AiWorkerClient;
 import com.bizsage.api.worker.AiWorkerException;
@@ -44,6 +45,7 @@ public class LearningService {
   private final UserMemoryStore userMemoryStore;
   private final KnowledgeStore knowledgeStore;
   private final IntelligenceStore intelligenceStore;
+  private final RecommendationService recommendationService;
 
   public LearningService(
       AiWorkerClient aiWorkerClient,
@@ -52,7 +54,8 @@ public class LearningService {
       ConversationSummaryStore summaryStore,
       UserMemoryStore userMemoryStore,
       KnowledgeStore knowledgeStore,
-      IntelligenceStore intelligenceStore) {
+      IntelligenceStore intelligenceStore,
+      RecommendationService recommendationService) {
     this.aiWorkerClient = aiWorkerClient;
     this.objectMapper = objectMapper;
     this.messageStore = messageStore;
@@ -60,6 +63,7 @@ public class LearningService {
     this.userMemoryStore = userMemoryStore;
     this.knowledgeStore = knowledgeStore;
     this.intelligenceStore = intelligenceStore;
+    this.recommendationService = recommendationService;
   }
 
   /**
@@ -112,6 +116,10 @@ public class LearningService {
         .regionId(conversation.regionId())
         .industryId(conversation.industryId())
         .membershipLevel(user.membershipLevel())
+        .agentMode("LEARNING")
+        .workflowStage("INTRO")
+        .profileMissingFields(List.of())
+        .recommendationBlacklist(List.of())
         .build();
 
     // 5. 调用 AI Worker；学习失败同样严格抛出，不使用本地答案兜底。
@@ -144,6 +152,12 @@ public class LearningService {
     if (response.sections() != null) {
       payload.put("sections", response.sections());
     }
+    payload.put("recommendationCandidates", response.recommendationCandidates() != null ? response.recommendationCandidates() : List.of());
+    payload.put("currentTopic", response.currentTopic());
+    payload.put("nextBestTopics", response.nextBestTopics() != null ? response.nextBestTopics() : List.of());
+    payload.put("workflowStage", response.workflowStage());
+    payload.put("profileMissingFields", response.profileMissingFields() != null ? response.profileMissingFields() : List.of());
+    payload.put("completionSignal", response.completionSignal());
 
     String payloadJson = serialize(payload);
 
@@ -161,6 +175,8 @@ public class LearningService {
         persistCandidate(user, conversation, userMessageId, assistantMessageId, candidate);
       }
     }
+
+    recommendationService.recordUsage(extractQuestionIds(response.recommendationCandidates()));
 
     // 9. 标记记忆使用并滚动维护摘要。
     userMemoryStore.markUsed(memories.stream().map(UserMemoryProfile::id).toList());
@@ -343,6 +359,20 @@ public class LearningService {
     map.put("region_id", item.regionId() != null ? item.regionId() : "cn-default");
     map.put("entitlement", "FREE");
     return map;
+  }
+
+  private List<Long> extractQuestionIds(List<Map<String, Object>> candidates) {
+    if (candidates == null) {
+      return List.of();
+    }
+    List<Long> ids = new ArrayList<>();
+    for (Map<String, Object> candidate : candidates) {
+      Object id = candidate.get("id");
+      if (id instanceof Number number) {
+        ids.add(number.longValue());
+      }
+    }
+    return ids;
   }
 
   private Map<String, Object> intelligenceToMap(IntelligenceItem item) {

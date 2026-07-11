@@ -15,7 +15,12 @@ public record DiagnoseRequest(
     String regionId,
     String industryId,
     String membershipLevel,
-    List<String> conflictLabels) {
+    List<String> conflictLabels,
+    String agentMode,
+    String workflowStage,
+    List<String> profileMissingFields,
+    List<String> recommendedQuestionIds,
+    Boolean diagnosisClosable) {
 
   public static Builder builder() {
     return new Builder();
@@ -31,6 +36,11 @@ public record DiagnoseRequest(
     private String industryId;
     private String membershipLevel = "FREE";
     private List<String> conflictLabels = List.of();
+    private String agentMode = "DIAGNOSIS";
+    private String workflowStage = "INTRO";
+    private List<String> profileMissingFields = List.of();
+    private List<String> recommendedQuestionIds = List.of();
+    private Boolean diagnosisClosable = Boolean.FALSE;
 
     public Builder question(String question) {
       this.question = question;
@@ -77,10 +87,36 @@ public record DiagnoseRequest(
       return this;
     }
 
+    public Builder agentMode(String agentMode) {
+      this.agentMode = agentMode;
+      return this;
+    }
+
+    public Builder workflowStage(String workflowStage) {
+      this.workflowStage = workflowStage;
+      return this;
+    }
+
+    public Builder profileMissingFields(List<String> profileMissingFields) {
+      this.profileMissingFields = profileMissingFields;
+      return this;
+    }
+
+    public Builder recommendedQuestionIds(List<String> recommendedQuestionIds) {
+      this.recommendedQuestionIds = recommendedQuestionIds;
+      return this;
+    }
+
+    public Builder diagnosisClosable(Boolean diagnosisClosable) {
+      this.diagnosisClosable = diagnosisClosable;
+      return this;
+    }
+
     public DiagnoseRequest build() {
       return new DiagnoseRequest(
           question, knowledge, recentMessages, conversationSummary,
-          longTermMemories, regionId, industryId, membershipLevel, conflictLabels);
+          longTermMemories, regionId, industryId, membershipLevel, conflictLabels,
+          agentMode, workflowStage, profileMissingFields, recommendedQuestionIds, diagnosisClosable);
     }
   }
 }
