@@ -38,7 +38,6 @@ public class OpsController {
     return ApiResponse.ok(Map.of(
         "grayCohort", grayCohort,
         "cacheHitRateTarget", 0.7,
-        "crawlerRtoMinutesTarget", 10,
         "databaseRecoveryDataLossHoursTarget", 6,
         "environment", "prod-gray"), requestId(request));
   }

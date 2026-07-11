@@ -13,25 +13,20 @@ public class AlertRuleEngine {
 
   private final OpsQueryMapper opsQueryMapper;
   private final double apiErrorRateThreshold;
-  private final double collectorFailureRateThreshold;
   private final int knowledgeStalenessDays;
 
   public AlertRuleEngine(
       OpsQueryMapper opsQueryMapper,
       @Value("${bizsage.alerts.api-error-rate-threshold:0.05}") double apiErrorRateThreshold,
-      @Value("${bizsage.alerts.collector-failure-rate-threshold:0.20}") double collectorFailureRateThreshold,
       @Value("${bizsage.alerts.knowledge-staleness-days:30}") int knowledgeStalenessDays) {
     this.opsQueryMapper = opsQueryMapper;
     this.apiErrorRateThreshold = apiErrorRateThreshold;
-    this.collectorFailureRateThreshold = collectorFailureRateThreshold;
     this.knowledgeStalenessDays = knowledgeStalenessDays;
   }
 
   public void evaluateAll() {
     log.debug("Starting alert rule evaluation cycle");
     evaluateApiErrorRate();
-    evaluateCollectorFailureRate();
-    evaluateCircuitBreakerState();
     evaluateDbConnectionPool();
     evaluateKnowledgeStaleness();
     log.debug("Alert rule evaluation cycle complete");
@@ -48,28 +43,6 @@ public class AlertRuleEngine {
       createAlert("P1", "api-gateway",
           String.format("API error rate %.1f%% exceeds threshold %.1f%% (last 5 min: %d errors / %d requests)",
               errorRate * 100, apiErrorRateThreshold * 100, recentErrors, recentTotal));
-    }
-  }
-
-  void evaluateCollectorFailureRate() {
-    Integer totalRuns = opsQueryMapper.countRecentCollectionRuns();
-    Integer failedRuns = opsQueryMapper.countRecentFailedCollectionRuns();
-    if (totalRuns == null || failedRuns == null || totalRuns == 0) {
-      return;
-    }
-    double failureRate = (double) failedRuns / totalRuns;
-    if (failureRate > collectorFailureRateThreshold) {
-      createAlert("P1", "collector-pipeline",
-          String.format("Collector failure rate %.1f%% exceeds threshold %.1f%% (last 15 min: %d failed / %d runs)",
-              failureRate * 100, collectorFailureRateThreshold * 100, failedRuns, totalRuns));
-    }
-  }
-
-  void evaluateCircuitBreakerState() {
-    List<Map<String, Object>> openCircuits = opsQueryMapper.listOpenCircuits();
-    for (Map<String, Object> row : openCircuits) {
-      createAlert("P0", "circuit-breaker",
-          String.format("Circuit breaker OPEN for collection source #%s (%s)", row.get("id"), row.get("name")));
     }
   }
 

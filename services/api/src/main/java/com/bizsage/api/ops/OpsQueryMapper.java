@@ -54,25 +54,6 @@ public interface OpsQueryMapper {
   Integer countRecentApiCalls();
 
   @Select("""
-      select count(*) from admin_collection_job_runs
-       where start_time >= timestampadd(minute, -15, current_timestamp)
-      """)
-  Integer countRecentCollectionRuns();
-
-  @Select("""
-      select count(*) from admin_collection_job_runs
-       where status = 'FAILED'
-         and start_time >= timestampadd(minute, -15, current_timestamp)
-      """)
-  Integer countRecentFailedCollectionRuns();
-
-  @Select("""
-      select id, name from admin_collection_sources
-       where circuit_state = 'OPEN'
-      """)
-  List<Map<String, Object>> listOpenCircuits();
-
-  @Select("""
       select count(*) from information_schema.processlist where db = database()
       """)
   Integer countActiveDbConnections();
