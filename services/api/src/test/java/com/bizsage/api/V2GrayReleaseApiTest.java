@@ -109,17 +109,9 @@ class V2GrayReleaseApiTest {
   }
 
   @Test
-  void paidIntelligenceIsStoredSeparatelyAndHiddenFromFreeUsers() throws Exception {
-    String operatorToken = login("operator");
+  void paidIntelligenceIsHiddenFromFreeUsersAndVisibleToSeedPaidUsers() throws Exception {
     String paidToken = login("seed_paid");
     String freeToken = login("user");
-
-    long paidId = createPaidIntelligence(operatorToken, "Seed paid rent benchmark", "rent");
-
-    mvc.perform(post("/api/paid-intelligence/" + paidId + "/approve")
-        .header("Authorization", "Bearer " + operatorToken))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.status").value("APPROVED"));
 
     mvc.perform(get("/api/paid-intelligence").header("Authorization", "Bearer " + freeToken))
       .andExpect(status().isOk())
@@ -132,14 +124,8 @@ class V2GrayReleaseApiTest {
 
   @Test
   void diagnosisReportExcludesPaidEvidenceForFreeUsersAndIncludesItForPaidUsers() throws Exception {
-    String operatorToken = login("operator");
     String paidToken = login("seed_paid");
     String freeToken = login("user");
-
-    long paidId = createPaidIntelligence(operatorToken, "Paid margin warning", "margin");
-    mvc.perform(post("/api/paid-intelligence/" + paidId + "/approve")
-        .header("Authorization", "Bearer " + operatorToken))
-      .andExpect(status().isOk());
 
     mvc.perform(get("/api/reports/diagnosis")
         .header("Authorization", "Bearer " + freeToken)
@@ -155,76 +141,6 @@ class V2GrayReleaseApiTest {
         .param("question", "cashflow"))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.sources[?(@.entitlement == 'PAID')]").isNotEmpty());
-  }
-
-  private long createPaidIntelligence(String operatorToken, String title, String linkId) throws Exception {
-    String response = mvc.perform(post("/api/paid-intelligence")
-        .header("Authorization", "Bearer " + operatorToken)
-        .contentType(MediaType.APPLICATION_JSON)
-        .content(String.format("""
-          {
-            "title":"%s",
-            "content":"Paid cohort intelligence must stay isolated.",
-            "url":"https://example.com/paid/%s",
-            "industryId":"general",
-            "regionId":"cn-default",
-            "linkId":"%s",
-            "sourceId":"paid-seed"
-          }
-          """, title, linkId, linkId)))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.status").value("PENDING"))
-      .andReturn()
-      .getResponse()
-      .getContentAsString();
-    return objectMapper.readTree(response).at("/data/id").asLong();
-  }
-
-  @Test
-  void operatorCanReadV2OperationsSurfaces() throws Exception {
-    String operatorToken = login("operator");
-    String userToken = login("user");
-
-    mvc.perform(get("/api/ops/metrics").header("Authorization", "Bearer " + userToken))
-      .andExpect(status().isForbidden());
-
-    mvc.perform(get("/api/ops/metrics").header("Authorization", "Bearer " + operatorToken))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.cacheHitRateTarget").value(0.7))
-      .andExpect(jsonPath("$.data.grayCohort").value("internal-operators-and-seed-paid-users"));
-
-    mvc.perform(get("/api/ops/review-work-orders").header("Authorization", "Bearer " + operatorToken))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data[0].reason").value("SUSPICIOUS_CONFLICT"));
-
-    mvc.perform(get("/api/ops/audit-logs").header("Authorization", "Bearer " + operatorToken))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data[?(@.action == 'V2_M0_SCOPE_LOCK')]").isNotEmpty());
-  }
-
-  @Test
-  void operatorCanListKnowledgeInGrayReleaseContext() throws Exception {
-    String operatorToken = login("operator");
-
-    mvc.perform(post("/api/knowledge/import")
-        .header("Authorization", "Bearer " + operatorToken)
-        .contentType(MediaType.APPLICATION_JSON)
-        .content("""
-          {
-            "title":"Gray release knowledge baseline",
-            "content":"Knowledge listing stays available during V2 rollout.",
-            "industryId":"general",
-            "regionId":"cn-default",
-            "linkId":"gray-release",
-            "sourceId":"seed-runtime"
-          }
-          """))
-      .andExpect(status().isOk());
-
-    mvc.perform(get("/api/knowledge").header("Authorization", "Bearer " + operatorToken))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.code").value("OK"))
-      .andExpect(jsonPath("$.data.items[?(@.title == 'Gray release knowledge baseline')]").isNotEmpty());
   }
 
   private String login(String username) throws Exception {

@@ -33,11 +33,7 @@ public class KnowledgeStore {
         .orderByAsc(KnowledgeItem::getId));
   }
 
-  /**
-   * Returns knowledge items scoped to the given region and industry.
-   * When regionId or industryId is null (admin scope), no filter is applied
-   * for that dimension.
-   */
+  /** Returns knowledge items scoped to the given region and industry. */
   public List<KnowledgeItem> listScoped(String regionId, String industryId) {
     LambdaQueryWrapper<KnowledgeItem> wrapper = new LambdaQueryWrapper<>();
     if (regionId != null) {

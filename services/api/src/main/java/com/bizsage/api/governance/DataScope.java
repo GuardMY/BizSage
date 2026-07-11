@@ -4,20 +4,20 @@ package com.bizsage.api.governance;
  * Resolved data-permission scope for a user request.
  *
  * <ul>
- *   <li>admin (SUPER_ADMIN/OPERATOR): regionId and industryId are null (unrestricted).</li>
  *   <li>paid user (SEED_PAID): scoped to their own region + industry, can see PAID content.</li>
+ *   <li>internal user (INTERNAL): scoped to their own region + industry, can see PAID content.</li>
  *   <li>free user (FREE): scoped to their own region + industry, FREE content only.</li>
  * </ul>
  */
 public record DataScope(
-    String regionId,           // null = all regions (admin)
-    String industryId,         // null = all industries (admin)
-    String membershipLevel,    // FREE, SEED_PAID, INTERNAL
-    boolean requireAuditLog    // true when admin accesses outside their default scope
+    String regionId,
+    String industryId,
+    String membershipLevel,
+    boolean requireAuditLog
 ) {
 
   public boolean isAdmin() {
-    return regionId == null && industryId == null;
+    return false;
   }
 
   /** Returns true when the scope allows access to paid/entitlement-gated content. */
@@ -38,7 +38,7 @@ public record DataScope(
   }
 
   public static DataScope unrestricted() {
-    return new DataScope(null, null, "INTERNAL", false);
+    return new DataScope("cn-default", "general", "INTERNAL", false);
   }
 
   /** V2: Returns a scope that blocks all data access (LEGAL_FREEZE). */

@@ -14,8 +14,5 @@ bizsage:
     secret: test-jwt-secret-0123456789abcdef
   privacy:
     key: 12345678901234567890123456789012
-  admin:
-    collection:
-      scheduler-enabled: false
 
 COLLECTOR_URL: embedded://collector

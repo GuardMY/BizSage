@@ -27,7 +27,7 @@ class AuthAndRbacTest {
   @Test
   void loginReturnsUnifiedEnvelopeWithToken() throws Exception {
     String body = """
-      {"username":"admin","password":"password"}
+      {"username":"user","password":"password"}
       """;
 
     String response = mvc.perform(post("/api/auth/login")
@@ -42,27 +42,24 @@ class AuthAndRbacTest {
       .getContentAsString();
 
     JsonNode json = objectMapper.readTree(response);
-    assertThat(json.at("/data/role").asText()).isEqualTo("SUPER_ADMIN");
+    assertThat(json.at("/data/role").asText()).isEqualTo("USER");
+    assertThat(json.at("/data/username").asText()).isEqualTo("user");
   }
 
   @Test
-  void ordinaryUserCannotListUsersButAdminCan() throws Exception {
-    String userToken = login("user");
-    String adminToken = login("admin");
+  void authenticatedUserCanReadOwnProfile() throws Exception {
+    String token = login("user");
 
-    mvc.perform(get("/api/users").header("Authorization", "Bearer " + userToken))
-      .andExpect(status().isForbidden())
-      .andExpect(jsonPath("$.code").value("FORBIDDEN"));
-
-    mvc.perform(get("/api/users").header("Authorization", "Bearer " + adminToken))
+    mvc.perform(get("/api/users/me").header("Authorization", "Bearer " + token))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.code").value("OK"))
-      .andExpect(jsonPath("$.data.items[0].username").value("admin"));
+      .andExpect(jsonPath("$.data.username").value("user"))
+      .andExpect(jsonPath("$.data.membershipLevel").value("FREE"));
   }
 
   @Test
   void invalidTokenReturnsUnauthorizedEnvelope() throws Exception {
-    mvc.perform(get("/api/users").header("Authorization", "Bearer invalid.token"))
+    mvc.perform(get("/api/users/me").header("Authorization", "Bearer invalid.token"))
       .andExpect(status().isUnauthorized())
       .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
       .andExpect(jsonPath("$.message").value("authentication required"))

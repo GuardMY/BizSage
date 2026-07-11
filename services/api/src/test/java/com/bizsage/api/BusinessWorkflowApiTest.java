@@ -26,11 +26,11 @@ class BusinessWorkflowApiTest {
   void userCanCreateAndArchiveConversation() throws Exception {
     String token = login("user");
 
-    long conversationId = createConversation(token, "门店现金流诊断");
+    long conversationId = createConversation(token, "Cashflow diagnosis");
 
     mvc.perform(get("/api/conversations").header("Authorization", "Bearer " + token))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.items[?(@.title == '门店现金流诊断')]").isNotEmpty());
+      .andExpect(jsonPath("$.data.items[?(@.title == 'Cashflow diagnosis')]").isNotEmpty());
 
     mvc.perform(post("/api/conversations/" + conversationId + "/archive").header("Authorization", "Bearer " + token))
       .andExpect(status().isOk())
@@ -40,7 +40,7 @@ class BusinessWorkflowApiTest {
   @Test
   void archivedConversationCanBeSoftDeletedAndDisappearsFromList() throws Exception {
     String token = login("user");
-    long conversationId = createConversation(token, "待删除归档会话");
+    long conversationId = createConversation(token, "Archive and delete");
 
     mvc.perform(post("/api/conversations/" + conversationId + "/archive").header("Authorization", "Bearer " + token))
       .andExpect(status().isOk())
@@ -53,88 +53,6 @@ class BusinessWorkflowApiTest {
     mvc.perform(get("/api/conversations").header("Authorization", "Bearer " + token))
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.data.items[?(@.id == " + conversationId + ")]").isEmpty());
-  }
-
-  @Test
-  void operatorCanCreateAndApproveIntelligence() throws Exception {
-    String token = login("operator");
-
-    String response = mvc.perform(post("/api/intelligence")
-        .header("Authorization", "Bearer " + token)
-        .contentType(MediaType.APPLICATION_JSON)
-        .content("""
-          {
-            "title":"本地餐饮平台佣金调整",
-            "content":"本地餐饮平台佣金出现调整，需要结合商圈与客单结构评估。",
-            "url":"https://example.com/news/1",
-            "industryId":"general",
-            "regionId":"cn-default",
-            "linkId":"channel",
-            "sourceId":"manual-local"
-          }
-          """))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.status").value("PENDING"))
-      .andReturn()
-      .getResponse()
-      .getContentAsString();
-
-    long id = objectMapper.readTree(response).at("/data/id").asLong();
-
-    mvc.perform(post("/api/intelligence/" + id + "/approve").header("Authorization", "Bearer " + token))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.status").value("APPROVED"));
-
-    mvc.perform(get("/api/intelligence").header("Authorization", "Bearer " + token))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.items[?(@.title == '本地餐饮平台佣金调整')]").isNotEmpty());
-  }
-
-  @Test
-  void operatorCanImportKnowledgeMetadata() throws Exception {
-    String token = login("operator");
-
-    mvc.perform(post("/api/knowledge/import")
-        .header("Authorization", "Bearer " + token)
-        .contentType(MediaType.APPLICATION_JSON)
-        .content("""
-          {
-            "title":"库存周转诊断",
-            "content":"库存周转天数过高会压占现金流。",
-            "industryId":"general",
-            "regionId":"cn-default",
-            "linkId":"warehouse",
-            "sourceId":"manual-baseline"
-          }
-          """))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.title").value("库存周转诊断"));
-  }
-
-  @Test
-  void operatorsCanListImportedKnowledgeItems() throws Exception {
-    String token = login("operator");
-
-    mvc.perform(post("/api/knowledge/import")
-        .header("Authorization", "Bearer " + token)
-        .contentType(MediaType.APPLICATION_JSON)
-        .content("""
-          {
-            "title":"Redis fingerprint baseline",
-            "content":"Collector dedupe records must be queryable for vector sync.",
-            "industryId":"general",
-            "regionId":"cn-default",
-            "linkId":"collector-runtime",
-            "sourceId":"seed-runtime"
-          }
-          """))
-      .andExpect(status().isOk());
-
-    mvc.perform(get("/api/knowledge")
-        .header("Authorization", "Bearer " + token))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.code").value("OK"))
-      .andExpect(jsonPath("$.data.items[?(@.title == 'Redis fingerprint baseline')]").isNotEmpty());
   }
 
   private String login(String username) throws Exception {

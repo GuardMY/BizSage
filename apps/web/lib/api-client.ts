@@ -123,14 +123,6 @@ export type ConversationMessage = {
   createTime: string;
 };
 
-export type OpsMetrics = {
-  grayCohort: string;
-  cacheHitRateTarget: number;
-  databaseRecoveryDataLossHoursTarget: number;
-  environment: string;
-};
-
-
 /** V2: Paginated response from list endpoints. */
 export type PagedResponse<T> = {
   items: T[];
@@ -478,54 +470,6 @@ export async function downloadDiagnosisPdf(question: string) {
   document.body.removeChild(anchor);
   window.URL.revokeObjectURL(url);
 }
-
-export async function fetchOpsMetrics() {
-  const response = await fetch(`${API_BASE}/ops/metrics`, {
-    headers: authHeaders()
-  });
-  const envelope = await readProtectedEnvelope<OpsMetrics>(response, "Fetch ops metrics failed");
-  return envelope.data;
-}
-
-export type CacheStats = {
-  caches: Record<string, { hits: number; misses: number; total: number; hitRate: string }>;
-  aggregateHitRate: string;
-  targetHitRate: number;
-  meetsTarget: boolean;
-};
-
-export async function fetchOpsCacheStats() {
-  const response = await fetch(`${API_BASE}/ops/cache-stats`, {
-    headers: authHeaders()
-  });
-  const envelope = await readProtectedEnvelope<CacheStats>(response, "Fetch cache stats failed");
-  return envelope.data;
-}
-
-export type SlaStats = {
-  window: string;
-  from: string;
-  to: string;
-  dataPoints: number;
-  uptime: string;
-  uptimePercent: string;
-  errorRate: string;
-  errorRatePercent: string;
-  latencyP50Ms: string;
-  latencyP95Ms: string;
-  latencyP99Ms: string;
-  targetUptime: string;
-  slaMet: boolean;
-};
-
-export async function fetchOpsSla(window: string = "24h") {
-  const response = await fetch(`${API_BASE}/ops/sla?window=${encodeURIComponent(window)}`, {
-    headers: authHeaders()
-  });
-  const envelope = await readProtectedEnvelope<SlaStats>(response, "Fetch SLA stats failed");
-  return envelope.data;
-}
-
 
 /* --- Dual-Agent: Learning & Transition --- */
 

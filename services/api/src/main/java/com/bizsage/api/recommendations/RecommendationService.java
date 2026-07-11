@@ -44,24 +44,8 @@ public class RecommendationService {
         result.stream().limit(8).collect(Collectors.toList()));
   }
 
-  public List<QuestionPoolItem> list(String industryId, String regionId, String agentMode) {
-    return questionPoolStore.list(industryId, regionId, agentMode);
-  }
-
-  public QuestionPoolItem upsert(QuestionPoolItem item) {
-    return questionPoolStore.upsert(item);
-  }
-
-  public void rate(long id, double rating) {
-    questionPoolStore.rate(id, rating);
-  }
-
   public void recordUsage(List<Long> ids) {
     questionPoolStore.recordUsage(ids);
-  }
-
-  public List<QuestionPoolItem> refresh(String industryId, String regionId, String agentMode) {
-    return questionPoolStore.refreshScope(industryId, regionId, agentMode);
   }
 
   private double hybridScore(QuestionPoolItem item) {
