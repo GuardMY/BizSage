@@ -2,6 +2,20 @@
 
 ## 2026-07-11
 
+### Learning and Diagnosis Guided Workflow UI
+
+- Change type: functional frontend workflow update.
+- Affected modules: `apps/web` and both change logs.
+- Main changes:
+  - Added a dedicated Learning workspace entry with first-entry self-introduction and a three-part right rail for next node, current block, and extension direction.
+  - Updated the Diagnosis workspace to show a fixed first-entry self-introduction, an opening draft plan, and a three-part right rail for business issues, missing profile fields, and high-impact details.
+  - Kept the existing diagnosis stream and recommendation flow intact while routing the new Learning flow through the same conversation shell.
+- Verification results:
+  - Ran `npm test` in `apps/web`; all 41 web tests passed.
+  - Confirmed the shared workspace shell, bilingual labels, and new learning/diagnosis components compile cleanly in the current UI test suite.
+- Unfinished items:
+  - The new rail grouping still relies on client-side heuristics over existing recommendation items; a richer backend grouping signal would make it more precise.
+
 ### MySQL V2 Conversations Migration Compatibility Repair
 
 - Change type: functional database migration fix.
@@ -1140,6 +1154,22 @@
   - A broader backend regression sweep is still recommended if the team wants full-suite confidence beyond the targeted migration-related tests.
 
 ## 2026-07-11
+
+### Learning And Diagnosis Guided Workflow Implementation Review
+
+- Change type: documentation review.
+- Affected modules: `docs/superpowers/specs`, `apps/web`, `services/api`, `services/ai-worker`, and both change logs.
+- Main changes:
+  - Added an implementation-review section to the paired Learning and Diagnosis guided-workflow design documents.
+  - Recorded the current completion status of the schema, backend APIs, AI Worker behavior, and frontend experience against the original workflow design.
+  - Summarized which parts are already implemented, which are only scaffolded, and which workflow behaviors are still missing, including the diagnosis state machine, dynamic recommendation refresh, conversation workflow persistence, and the Learning-side UI flow.
+  - Highlighted the five highest-priority gaps so the document can be used directly for follow-up implementation planning.
+- Verification results:
+  - Re-read the paired design documents and confirmed the English and Chinese files stay aligned in scope and conclusions.
+  - Cross-checked the review against the current implementation chain in `apps/web`, `services/api`, `services/ai-worker`, the conversation workflow store, and the question-pool schema.
+  - Confirmed this update changes documentation only and does not modify runtime behavior.
+- Unfinished items:
+  - The reviewed workflow gaps remain to be implemented in the frontend, API, AI Worker, and persistence paths.
 
 ### Learning And Diagnosis Agent Guided Workflow Design
 

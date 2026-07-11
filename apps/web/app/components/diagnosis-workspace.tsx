@@ -1,4 +1,5 @@
-import { Archive, Eye, FileText, LockKeyhole, RefreshCcw, Search, Send } from "lucide-react";
+import type { ReactNode } from "react";
+import { Archive, Eye, FileText, Flag, Focus, LayoutList, LockKeyhole, RefreshCcw, Search, Send } from "lucide-react";
 import { useEffect, useRef } from "react";
 import Markdown from "../../lib/markdown";
 import type {
@@ -59,6 +60,7 @@ export function DiagnosisWorkspace({
   const recommendationItems = recommendationRows.length > 0
     ? recommendationRows
     : displayedDiagnosis?.recommendedQuestions ?? displayedDiagnosis?.recommendationCandidates ?? [];
+  const railGroups = buildDiagnosisRail(recommendationItems);
 
   useEffect(() => {
     if (!messagesRef.current) return;
@@ -87,6 +89,21 @@ export function DiagnosisWorkspace({
               <Search size={20} />
               <strong>{t.selectConversation}</strong>
               <p>{t.evidenceLine}</p>
+            </div>
+          )}
+
+          {selectedConversation && !hasAssistantReply && !displayedDiagnosis && (
+            <div className="bubble agent introBubble">
+              <div className="introBadge"><Focus size={16} /> Diagnosis Agent</div>
+              <Markdown content={renderDiagnosisIntro(t)} />
+              <div className="draftPlan">
+                {buildDraftPlan().map((item) => (
+                  <div className="draftPlanItem" key={item}>
+                    <LayoutList size={14} />
+                    <span>{item}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -157,7 +174,7 @@ export function DiagnosisWorkspace({
       </section>
 
       <aside className="workspaceAside">
-        <section className="workspaceCard">
+        <section className="workspaceCard railGroup">
           <div className="sectionHead compact">
             <h2><FileText size={16} /> {t.reportTitle}</h2>
           </div>
@@ -184,7 +201,7 @@ export function DiagnosisWorkspace({
           </div>
         </section>
 
-        <section className="workspaceCard">
+        <section className="workspaceCard railGroup">
           <div className="sectionHead compact">
             <h2><LockKeyhole size={16} /> {t.recommendationTitle}</h2>
             <button className="ghost" onClick={onRefreshRecommendations} type="button">
@@ -193,25 +210,82 @@ export function DiagnosisWorkspace({
             </button>
           </div>
           <div className="table">
-            {recommendationItems.length === 0 && (
-              <EmptyCard title={t.recommendationEmpty} detail={t.recommendationMissing} />
-            )}
-            {recommendationItems.map((row) => (
-              <div className="row" key={row.id}>
-                <strong>{row.questionText}</strong>
-                <span>{row.category}</span>
-                <small>{row.sourceType} / {row.score.toFixed(2)} / {row.usageCount}</small>
-                <button className="ghost" onClick={() => onUseRecommendation(row)} type="button">
-                  <Search size={14} />
-                  {t.recommendationContinue}
-                </button>
-              </div>
-            ))}
+            <RailSection title={t.diagnosisBusinessIssue} icon={<Flag size={16} />} items={railGroups.businessIssue} onUseRecommendation={onUseRecommendation} t={t} />
+            <RailSection title={t.diagnosisMissingProfile} icon={<Focus size={16} />} items={railGroups.missingProfile} onUseRecommendation={onUseRecommendation} t={t} />
+            <RailSection title={t.diagnosisHighImpactDetail} icon={<LayoutList size={16} />} items={railGroups.highImpactDetail} onUseRecommendation={onUseRecommendation} t={t} />
           </div>
         </section>
       </aside>
     </div>
   );
+}
+
+function RailSection({
+  title,
+  icon,
+  items,
+  onUseRecommendation,
+  t
+}: {
+  title: string;
+  icon: ReactNode;
+  items: RecommendationItem[];
+  onUseRecommendation: (item: RecommendationItem) => void;
+  t: WorkspaceMessages;
+}) {
+  return (
+    <section className="railSection">
+      <div className="sectionHead compact">
+        <h3>{icon} {title}</h3>
+      </div>
+      <div className="table">
+        {items.length === 0 ? (
+          <EmptyCard title={t.recommendationEmpty} detail={t.recommendationMissing} />
+        ) : items.map((row) => (
+          <div className="row" key={row.id}>
+            <strong>{row.questionText}</strong>
+            <span>{row.category}</span>
+            <small>{row.sourceType} / {row.score.toFixed(2)} / {row.usageCount}</small>
+            <button className="ghost" onClick={() => onUseRecommendation(row)} type="button">
+              <Search size={14} />
+              {t.recommendationContinue}
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function buildDiagnosisRail(items: RecommendationItem[]) {
+  const businessIssue = items.filter((item) => matchesAny(item, ["issue", "问题", "risk", "冲突", "痛点"])).slice(0, 3);
+  const missingProfile = items.filter((item) => matchesAny(item, ["profile", "画像", "缺失", "字段", "attribute"])).slice(0, 3);
+  const highImpactDetail = items.filter((item) => !businessIssue.includes(item) && !missingProfile.includes(item)).slice(0, 3);
+  return { businessIssue, missingProfile, highImpactDetail };
+}
+
+function matchesAny(item: RecommendationItem, needles: string[]) {
+  const haystack = `${item.questionText} ${item.category} ${item.sourceType}`.toLowerCase();
+  return needles.some((needle) => haystack.includes(needle.toLowerCase()));
+}
+
+function renderDiagnosisIntro(t: WorkspaceMessages) {
+  return [
+    "我是 BizSage 的 Diagnosis Agent。",
+    "我会先建立经营画像，再推进分层诊断。",
+    "我会通过结构化提问补齐关键经营信息。",
+    "右侧 rail 会展示可能的经营问题、缺失画像字段和高影响细节。"
+  ].join("\n\n");
+}
+
+function buildDraftPlan() {
+  return [
+    "所在行业",
+    "业务是否线上/线下/实体经营",
+    "大致投资规模",
+    "门店 / 仓库 / 团队规模",
+    "基础营收、成本、利润、流量和渠道情况"
+  ];
 }
 
 function MessageBubble({

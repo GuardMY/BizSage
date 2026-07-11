@@ -271,3 +271,57 @@ Backend And AI Worker:
 - streaming endpoints can carry recommendation and stage data
 - diagnosis and learning outputs can be extended without breaking the current main path
 
+## Implementation Review On 2026-07-11
+
+### Overall Status
+
+The current implementation has completed much of the schema and API scaffolding, but the guided workflow is not yet closed loop end to end.
+
+Estimated completion by area:
+- database and persistence scaffolding: about 75%
+- backend endpoint and payload scaffolding: about 70%
+- AI guided-workflow behavior actually taking effect: about 30%
+- frontend guided-workflow experience: about 35%
+- end-to-end closure for this design: about 30%
+
+### Progress Matrix
+
+| Spec item | Status | Current implementation | Main gaps |
+|---|---|---|---|
+| Learning Agent fixed intro on first entry | Partially implemented | Learning responses already support guided fields such as `recommendationCandidates`, `currentTopic`, and `nextBestTopics`. | There is no dedicated Learning workspace in the current Web UI, so first-entry intro behavior is not surfaced or verified end to end. |
+| Learning right rail with next node / block / extension direction | Partially implemented | Backend and worker payloads already reserve learning recommendation fields. | The frontend does not render a Learning-side rail, and recommendation generation is not yet mixed with live conversation state. |
+| Diagnosis Agent fixed intro on first entry | Partially implemented | The diagnosis prompt explicitly tells the model to introduce itself and explain that it will build the operating baseline first. | This is still prompt-driven rather than a stable first-entry template, and it is not separated from later turns. |
+| Diagnosis draft plan at the beginning | Not implemented | Workflow fields exist in payloads and conversation metadata. | No actual draft plan is generated or shown for industry, business type, investment, scale, revenue, cost, traffic, and channels. |
+| Diagnosis right rail with business problems / missing profile fields / high-impact details | Partially implemented | A diagnosis recommendation rail exists in the Web UI. | It currently shows a flat question list rather than the three intended grouped recommendation types. |
+| AI Worker emits recommendation candidates after each turn | Partially implemented | Diagnosis returns `recommendedQuestions`; learning returns `recommendationCandidates`. | Diagnosis recommendations are currently derived from top RAG matches rather than a true synthesis of user question, conversation context, memory, and agent state. |
+| Persistent high-frequency question pool | Implemented | `question_pools` schema, entity, store, controller, and seed data are in place. | No major structural gap at the persistence layer. |
+| Question-pool fields: score / usage / rating / last-used / status | Implemented | The data model already includes `topLevelScore`, `usageCount`, `ratingAvg`, `ratingCount`, `lastUsedAt`, and `status`. | No major structural gap at the schema layer. |
+| Hybrid ranking with LLM score, top-level score, usage, rating, and freshness | Partially implemented | The recommendation service combines top-level score, usage, and rating. | There is no live LLM relevance score, no freshness bonus or penalty, and no anti-collapse logic for always-hot items. |
+| Refresh preserving context, industry, state, and recent blacklist | Partially implemented | Refresh endpoints and frontend refresh actions already exist. | Refresh currently re-reads the pool rather than recomputing from conversation context, and blacklist/dedupe behavior is not truly enforced. |
+| Diagnosis workflow states `INTRO` to `CLOSED` | Not implemented | `workflowStage` exists in Java, TypeScript, and the database schema. | The current service path still sends `INTRO` and does not advance through profile gathering, hypothesis, probing, ready-to-close, and closed states. |
+| Completion rules and close readiness | Not implemented | `completionSignal` and `diagnosisClosable` are already reserved in payload contracts. | The Java service currently sends `diagnosisClosable=false`, and there is no rule-based completeness or convergence check. |
+| User can continue adding information before close | Not implemented | `completionSignal` is already returned. | There is no UI or persistence flow for “continue adding info” versus “ready to close”. |
+| Persistent conversation workflow metadata | Partially implemented | Conversation schema and store methods already support `agentMode`, `workflowStage`, `profileCompleteness`, `primaryIssueTags`, `recommendedQuestionIds`, `closedBy`, and `closedReason`. | The current diagnosis and learning service flows do not write these fields back through `ConversationStore.updateWorkflow(...)`. |
+| Recommendation API | Implemented | `/api/conversations/{conversationId}/recommendations` exists and returns recommendation rows. | The payload is still closer to a static pool read than the dynamic guided recommendation contract in this design. |
+| Question-pool management API | Implemented | Query, upsert, rating, usage, and refresh endpoints are already available. | The API is present, but higher-level operational reranking and cache-refresh orchestration are still missing. |
+| Diagnosis state API | Not implemented | No separate workflow-state endpoint exists yet. | The system cannot independently query current stage, closability, or continue intent. |
+| Learning output expansion | Partially implemented | The Java response payload already includes `recommendationCandidates`, `currentTopic`, `nextBestTopics`, `workflowStage`, `profileMissingFields`, and `completionSignal`. | The worker request models do not accept the corresponding workflow control fields, and the frontend does not expose the learning workflow. |
+| Diagnosis output expansion | Partially implemented | Diagnosis responses already include `recommendedQuestions`, `workflowStage`, `profileMissingFields`, and `completionSignal`. | Most values remain static or shallow, and they are not persisted or rendered as a real workflow experience. |
+| Prompt expansion for introduction, recommendation, and closure judgment | Partially implemented | The diagnosis prompt already includes a baseline-first introduction instruction. | The full two-group guided-workflow prompt structure from this design is not yet consistently implemented for both agents. |
+| Active profile gathering and missing-field priority | Not implemented | Only partial prompt intent exists. | There is no structured missing-field identification or priority-driven follow-up questioning. |
+| Recommendation usage writes on shortcut use | Partially implemented | The backend can record usage counts and service flows already call `recordUsage(...)`. | The frontend click on a recommendation only fills the input box and does not explicitly confirm usage as a user action before send. |
+| Rating writes | Implemented in backend only | Rating APIs already exist. | The current frontend does not expose a rating interaction. |
+| LLM re-judgment of `topLevelScore` | Not implemented | Manual upsert can set the field. | There is no automated re-scoring loop. |
+| Scheduled reranking and cache write-back | Not implemented | No scheduler-based reranking flow is present. | Periodic rerank and cached-score refresh are still missing. |
+| Persistence by industry with optional region and membership layering | Partially implemented | Current persistence already layers by `industryId`, `regionId`, and `agentMode`. | Membership-tier layering is still missing. |
+| Backward compatibility of existing diagnosis and learning paths | Implemented | Existing endpoints and payload structure remain compatible with additive fields. | No major gap found in the compatibility layer. |
+| Soft completion signal rather than hard interruption | Implemented | `completionSignal` is currently a soft payload field. | No major gap at the contract level. |
+| Manual input still available when rail is empty | Implemented | The diagnosis input box remains available regardless of recommendation state. | No major gap found. |
+
+### Highest-Priority Missing Pieces
+
+1. The Java API passes workflow-control fields, but the AI Worker request models do not accept most of them yet, so those values are effectively ignored.
+2. Conversation workflow metadata exists in schema and store code, but the diagnosis and learning paths do not persist real stage, completeness, issue-tag, recommendation-id, or closure updates.
+3. The diagnosis workflow state machine is not actually running; `workflowStage` effectively remains `INTRO`.
+4. Recommendation refresh is not truly dynamic yet; it mostly re-reads the static question pool instead of recomputing from the active conversation.
+5. The frontend does not yet expose the intended guided workflow for learning, diagnosis planning, missing-profile prompts, closure control, and continue-adding-info actions.

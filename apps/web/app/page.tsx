@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArchiveWorkspace } from "./components/archive-workspace";
 import { ConversationSidebar } from "./components/conversation-sidebar";
 import { DiagnosisWorkspace } from "./components/diagnosis-workspace";
+import { LearningWorkspace } from "./components/learning-workspace";
 import { WorkspaceShell } from "./components/workspace-shell";
 import type { WorkspaceMessages, WorkspaceSection } from "./components/workspace-types";
 import {
@@ -25,6 +26,7 @@ import {
   fetchPaidIntelligence,
   login,
   logout,
+  streamLearningEvents,
   streamDiagnosisEvents,
   updatePreferredLocale,
   WorkerError,
@@ -62,9 +64,60 @@ const sidebarMessages: Record<
   }
 };
 
+const workflowMessagesEn: Pick<
+  WorkspaceMessages,
+  | "navLearning"
+  | "learningConversation"
+  | "busyLearning"
+  | "sendLearning"
+  | "learningNextNode"
+  | "learningCurrentBlock"
+  | "learningExtensionDirection"
+  | "diagnosisBusinessIssue"
+  | "diagnosisMissingProfile"
+  | "diagnosisHighImpactDetail"
+> = {
+  navLearning: "Learning",
+  learningConversation: "Learning chat",
+  busyLearning: "Connecting to the API and generating learning...",
+  sendLearning: "Send learning",
+  learningNextNode: "Next node",
+  learningCurrentBlock: "Current block",
+  learningExtensionDirection: "Extension direction",
+  diagnosisBusinessIssue: "Business issue",
+  diagnosisMissingProfile: "Missing profile field",
+  diagnosisHighImpactDetail: "High-impact detail"
+};
+
+const workflowMessagesZh: Pick<
+  WorkspaceMessages,
+  | "navLearning"
+  | "learningConversation"
+  | "busyLearning"
+  | "sendLearning"
+  | "learningNextNode"
+  | "learningCurrentBlock"
+  | "learningExtensionDirection"
+  | "diagnosisBusinessIssue"
+  | "diagnosisMissingProfile"
+  | "diagnosisHighImpactDetail"
+> = {
+  navLearning: "学习",
+  learningConversation: "学习会话",
+  busyLearning: "正在连接 API 并生成学习内容...",
+  sendLearning: "发送学习",
+  learningNextNode: "下一节点",
+  learningCurrentBlock: "当前细分块",
+  learningExtensionDirection: "延展方向",
+  diagnosisBusinessIssue: "业务问题",
+  diagnosisMissingProfile: "缺失画像字段",
+  diagnosisHighImpactDetail: "高影响细节"
+};
+
 const messages: Record<Locale, WorkspaceMessages> = {
   "zh-CN": {
     ...sidebarMessages["zh-CN"],
+    ...workflowMessagesZh,
     brandSubtitle: "对话工作台",
     loginTitle: "登录 BizSage",
     loginIntro: "未登录用户只能访问独立登录界面。登录后进入经营诊断工作台和对话管理界面。",
@@ -137,6 +190,7 @@ const messages: Record<Locale, WorkspaceMessages> = {
   },
   en: {
     ...sidebarMessages.en,
+    ...workflowMessagesEn,
     brandSubtitle: "Conversation workspace",
     loginTitle: "Sign in to BizSage",
     loginIntro: "Signed-out users only see this login screen. After sign-in, the operating diagnosis workspace and conversation manager open.",
@@ -151,6 +205,7 @@ const messages: Record<Locale, WorkspaceMessages> = {
     languageToggle: "中文",
     languageSaved: "Language preference saved.",
     navDiagnosis: "Diagnosis",
+    navLearning: "Learning",
     navIntelligence: "Intelligence",
     navUsers: "Users",
     navArchive: "Archive",
@@ -161,8 +216,11 @@ const messages: Record<Locale, WorkspaceMessages> = {
     evidenceLine: "Evidence first, answer second.",
     newConversation: "New conversation",
     diagnosisConversation: "Diagnosis chat",
+    learningConversation: "Learning chat",
     busyDiagnosis: "Connecting to the API and generating diagnosis...",
+    busyLearning: "Connecting to the API and generating learning...",
     sendDiagnosis: "Send diagnosis",
+    sendLearning: "Send learning",
     diagnosisCreated: "Diagnosis generated.",
     diagnosisFailed: "Diagnosis failed.",
     diagnosisRetrying: "Validating and refining the answer...",
@@ -182,6 +240,12 @@ const messages: Record<Locale, WorkspaceMessages> = {
     recommendationRefresh: "Refresh",
     recommendationMissing: "Refresh suggestions using the current conversation context.",
     recommendationContinue: "Use this question",
+    learningNextNode: "Next node",
+    learningCurrentBlock: "Current block",
+    learningExtensionDirection: "Extension direction",
+    diagnosisBusinessIssue: "Business issue",
+    diagnosisMissingProfile: "Missing profile field",
+    diagnosisHighImpactDetail: "High-impact detail",
     reportTitle: "Diagnosis Report",
     reportMetadata: "Report metadata",
     reportEmptyTitle: "No report yet",
@@ -220,7 +284,9 @@ export default function Home() {
   const [messageHistory, setMessageHistory] = useState<ConversationMessage[]>([]);
   const [message, setMessage] = useState("");
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
+  const [learningDiagnosis, setLearningDiagnosis] = useState<Diagnosis | null>(null);
   const [streamingDiagnosis, setStreamingDiagnosis] = useState<Diagnosis | null>(null);
+  const [streamingLearning, setStreamingLearning] = useState<Diagnosis | null>(null);
   const [report, setReport] = useState<DiagnosisReport | null>(null);
   const [reportBusy, setReportBusy] = useState(false);
   const [paidRows, setPaidRows] = useState<PaidIntelligence[]>([]);
@@ -255,6 +321,8 @@ export default function Home() {
       setMessageHistory([]);
       setSelectedConversationId(null);
       setRecommendationRows([]);
+      setLearningDiagnosis(null);
+      setStreamingLearning(null);
       return;
     }
 
@@ -374,7 +442,9 @@ export default function Home() {
     setConversations([]);
     setMessageHistory([]);
     setDiagnosis(null);
+    setLearningDiagnosis(null);
     setStreamingDiagnosis(null);
+    setStreamingLearning(null);
     setReport(null);
     setSelectedConversationId(null);
     setPaidRows([]);
@@ -390,7 +460,9 @@ export default function Home() {
     setConversations([]);
     setMessageHistory([]);
     setDiagnosis(null);
+    setLearningDiagnosis(null);
     setStreamingDiagnosis(null);
+    setStreamingLearning(null);
     setReport(null);
     setSelectedConversationId(null);
     setPaidRows([]);
@@ -402,7 +474,9 @@ export default function Home() {
 
   function resetConversationOutputs() {
     setDiagnosis(null);
+    setLearningDiagnosis(null);
     setStreamingDiagnosis(null);
+    setStreamingLearning(null);
     setReport(null);
     setSelectedSource(null);
     setRecommendationRows([]);
@@ -419,7 +493,7 @@ export default function Home() {
       const created = await createConversation(t.newConversationTitle);
       setConversations((previous) => [created, ...previous]);
       setSelectedConversationId(created.id);
-      setActiveSection("diagnosis");
+      setActiveSection("learning");
       resetConversationOutputs();
     } catch (error) {
       if (error instanceof AuthExpiredError) {
@@ -511,7 +585,9 @@ export default function Home() {
 
     setBusy(true);
     setDiagnosis(null);
+    setLearningDiagnosis(null);
     setStreamingDiagnosis(null);
+    setStreamingLearning(null);
     setReport(null);
 
     try {
@@ -585,6 +661,60 @@ export default function Home() {
       }
     } finally {
       setStreamingDiagnosis(null);
+      setBusy(false);
+    }
+  }
+
+  async function submitLearning() {
+    if (!profile) {
+      setNotice(t.loginRequired);
+      return;
+    }
+
+    setBusy(true);
+    setLearningDiagnosis(null);
+    setStreamingLearning(null);
+    setReport(null);
+
+    try {
+      const created = selectedConversationId ? null : await createConversation(t.newConversationTitle);
+      const conversationId = selectedConversationId ?? created!.id;
+      if (created) {
+        setSelectedConversationId(conversationId);
+        setConversations((previous) => [created, ...previous]);
+      }
+
+      const nextLearning = await streamLearningEvents(conversationId, { question: message }, {
+        onPartialAnswer(answer) {
+          setStreamingLearning((previous) => ({
+            answer,
+            confidence: previous?.confidence ?? "LOW",
+            disclaimer: previous?.disclaimer ?? "",
+            selfCheckStatus: previous?.selfCheckStatus,
+            sources: previous?.sources ?? [],
+            timeliness: previous?.timeliness ?? "Streaming"
+          }));
+        }
+      });
+      setStreamingLearning(nextLearning);
+      setLearningDiagnosis(nextLearning);
+      setRecommendationRows(nextLearning.recommendationCandidates ?? []);
+      setNotice(t.diagnosisCreated);
+      setActiveSection("learning");
+    } catch (error) {
+      setStreamingLearning(null);
+      if (error instanceof AuthExpiredError) {
+        handleSessionExpired();
+        return;
+      }
+
+      if (error instanceof WorkerError) {
+        setNotice(error.message || t.workerError);
+      } else {
+        setNotice(error instanceof Error ? error.message : t.diagnosisFailed);
+      }
+    } finally {
+      setStreamingLearning(null);
       setBusy(false);
     }
   }
@@ -716,6 +846,23 @@ export default function Home() {
             reportBusy={reportBusy}
             selectedConversation={selectedConversation}
             streamingDiagnosis={streamingDiagnosis}
+            t={t}
+          />
+        )}
+
+        {activeSection === "learning" && (
+          <LearningWorkspace
+            busy={busy}
+            conversation={selectedConversation}
+            diagnosis={learningDiagnosis}
+            message={message}
+            messageHistory={messageHistory}
+            onMessageChange={setMessage}
+            onRefreshRecommendations={handleRefreshRecommendations}
+            onSubmitLearning={submitLearning}
+            onUseRecommendation={handleUseRecommendation}
+            recommendationRows={recommendationRows}
+            streamingDiagnosis={streamingLearning}
             t={t}
           />
         )}

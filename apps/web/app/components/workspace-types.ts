@@ -9,7 +9,7 @@ import type {
   Source
 } from "../../lib/api-client";
 
-export type WorkspaceSection = "diagnosis" | "intelligence" | "users" | "archive";
+export type WorkspaceSection = "diagnosis" | "learning" | "intelligence" | "users" | "archive";
 
 export type WorkspaceMessages = {
   brandSubtitle: string;
@@ -26,6 +26,7 @@ export type WorkspaceMessages = {
   languageToggle: string;
   languageSaved: string;
   navDiagnosis: string;
+  navLearning: string;
   navIntelligence: string;
   navUsers: string;
   navArchive: string;
@@ -36,8 +37,11 @@ export type WorkspaceMessages = {
   evidenceLine: string;
   newConversation: string;
   diagnosisConversation: string;
+  learningConversation: string;
   busyDiagnosis: string;
+  busyLearning: string;
   sendDiagnosis: string;
+  sendLearning: string;
   diagnosisCreated: string;
   diagnosisFailed: string;
   diagnosisRetrying: string;
@@ -57,6 +61,12 @@ export type WorkspaceMessages = {
   recommendationRefresh: string;
   recommendationMissing: string;
   recommendationContinue: string;
+  learningNextNode: string;
+  learningCurrentBlock: string;
+  learningExtensionDirection: string;
+  diagnosisBusinessIssue: string;
+  diagnosisMissingProfile: string;
+  diagnosisHighImpactDetail: string;
   reportTitle: string;
   reportMetadata: string;
   reportEmptyTitle: string;
