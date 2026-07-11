@@ -2,6 +2,36 @@
 
 ## 2026-07-11
 
+### Prompt Stage Archive
+
+- Change type: documentation archive.
+- Affected modules: `services/ai-worker`, paired prompt archive documentation, and both change logs.
+- Main changes:
+  - Added a new bilingual prompt archive document that groups the repository's effective business prompts by module instead of mixing runtime prompts with UI class names or test placeholders.
+  - Archived the prompt stages for layered system prompts, diagnosis generation prompts, learning generation prompts, cross-Agent transition prompts, post-answer memory extraction prompts, and deprecated legacy prompt wrappers.
+  - Documented the runtime role, composition inputs, and execution position of each prompt entry so the prompt lifecycle can be read from system constraint injection through generation and post-turn extraction.
+- Verification results:
+  - Checked the current `.codegraph/codegraph.db` before reading the relevant call paths and used the indexed structure to confirm the prompt-bearing runtime modules.
+  - Verified the archive against `services/ai-worker/app/prompt_library`, `agent.py`, `learning_agent.py`, `agent_transition.py`, `memory.py`, and `llm.py`, and excluded prompt-like non-runtime strings from Web and test files.
+  - Confirmed the English and Chinese documents describe the same prompt scope, module grouping, stage definitions, and exclusions.
+- Unfinished items:
+  - This is a documentation-only archive; no runtime test suite was executed.
+
+### Complete MySQL Table Catalog
+
+- Change type: database documentation archive.
+- Affected modules: paired database documentation and both change logs.
+- Main changes:
+  - Expanded the V1 database documentation from a partial core-table list into a domain-grouped catalog covering all 30 application tables in the consolidated MySQL Flyway baseline.
+  - Recorded each table's purpose, logical relationships, important uniqueness/index controls, and relevant lifecycle or retention behavior.
+  - Clarified that application ID references are not database-enforced foreign keys, shared fields are conventions rather than universal columns, and Flyway's own `flyway_schema_history` table is outside the 30-table application count.
+- Verification results:
+  - Used the current CodeGraph index before inspecting the Flyway and documentation paths; confirmed the index was up to date.
+  - Compared the catalog table names with every `CREATE TABLE IF NOT EXISTS` statement in `V1__baseline.sql`; all 30 application tables are represented in both language versions.
+  - Verified the English and Chinese catalogs describe the same scope, relationships, controls, migration behavior, and unfinished items.
+- Unfinished items:
+  - Live MySQL metadata was not queried; the catalog represents the repository's authoritative Flyway baseline rather than environment-specific drift.
+
 ### End-To-End Agent Streaming
 
 - Change type: functional development and streaming protocol update.
