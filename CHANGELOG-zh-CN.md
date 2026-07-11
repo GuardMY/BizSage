@@ -2,6 +2,20 @@
 
 ## 2026-07-11
 
+### MySQL V2 conversations 迁移兼容性修复
+
+- 变更类型：功能性数据库迁移修复。
+- 影响模块：`services/api` 和两份变更日志。
+- 主要变更：
+  - 将 MySQL V2 中 `ALTER TABLE conversations ADD COLUMN IF NOT EXISTS ...` 的批量写法改为基于 `information_schema.columns` 的逐列幂等判断。
+  - 保留学习与诊断会话字段以及种子数据不变，同时让迁移能够兼容当前 MySQL 解析器。
+- 验证结果：
+  - 已从 Flyway 启动堆栈中确认失败 SQL 片段，并定位到 `services/api/src/main/resources/db/migration/mysql/V2__learning_diagnosis_guided_workflow.sql`。
+  - 已检查 `V1__baseline.sql` 中的 MySQL 基线 schema，确认 `conversations` 表尚未定义这些工作流新字段。
+  - 已对更新后的迁移脚本做静态复核，确认列级幂等保护逻辑完整。
+- 未完成事项：
+  - 仍需在真实 MySQL 环境执行一次 Flyway，确认应用能端到端正常启动。
+
 ### API DiagnoseResponse 测试构造器修复
 
 - 变更类型：功能测试修复。

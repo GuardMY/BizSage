@@ -1,11 +1,107 @@
-ALTER TABLE conversations
-  ADD COLUMN IF NOT EXISTS agent_mode VARCHAR(32) NOT NULL DEFAULT 'DIAGNOSIS',
-  ADD COLUMN IF NOT EXISTS workflow_stage VARCHAR(32) NOT NULL DEFAULT 'INTRO',
-  ADD COLUMN IF NOT EXISTS profile_completeness DECIMAL(5,2) NOT NULL DEFAULT 0.00,
-  ADD COLUMN IF NOT EXISTS primary_issue_tags TEXT NULL,
-  ADD COLUMN IF NOT EXISTS recommended_question_ids TEXT NULL,
-  ADD COLUMN IF NOT EXISTS closed_by VARCHAR(64) NULL,
-  ADD COLUMN IF NOT EXISTS closed_reason VARCHAR(255) NULL;
+SET @sql := IF(
+  EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'conversations'
+      AND column_name = 'agent_mode'
+  ),
+  'SELECT 1',
+  'ALTER TABLE conversations ADD COLUMN agent_mode VARCHAR(32) NOT NULL DEFAULT ''DIAGNOSIS'''
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+  EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'conversations'
+      AND column_name = 'workflow_stage'
+  ),
+  'SELECT 1',
+  'ALTER TABLE conversations ADD COLUMN workflow_stage VARCHAR(32) NOT NULL DEFAULT ''INTRO'''
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+  EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'conversations'
+      AND column_name = 'profile_completeness'
+  ),
+  'SELECT 1',
+  'ALTER TABLE conversations ADD COLUMN profile_completeness DECIMAL(5,2) NOT NULL DEFAULT 0.00'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+  EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'conversations'
+      AND column_name = 'primary_issue_tags'
+  ),
+  'SELECT 1',
+  'ALTER TABLE conversations ADD COLUMN primary_issue_tags TEXT NULL'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+  EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'conversations'
+      AND column_name = 'recommended_question_ids'
+  ),
+  'SELECT 1',
+  'ALTER TABLE conversations ADD COLUMN recommended_question_ids TEXT NULL'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+  EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'conversations'
+      AND column_name = 'closed_by'
+  ),
+  'SELECT 1',
+  'ALTER TABLE conversations ADD COLUMN closed_by VARCHAR(64) NULL'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql := IF(
+  EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'conversations'
+      AND column_name = 'closed_reason'
+  ),
+  'SELECT 1',
+  'ALTER TABLE conversations ADD COLUMN closed_reason VARCHAR(255) NULL'
+);
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS question_pools (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -57,4 +153,3 @@ WHERE NOT EXISTS (
   WHERE industry_id = 'general' AND region_id = 'cn-default'
     AND agent_mode = 'DIAGNOSIS' AND question_key = 'baseline-scale'
 );
-

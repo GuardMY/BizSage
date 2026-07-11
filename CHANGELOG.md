@@ -2,6 +2,20 @@
 
 ## 2026-07-11
 
+### MySQL V2 Conversations Migration Compatibility Repair
+
+- Change type: functional database migration fix.
+- Affected modules: `services/api` and both change logs.
+- Main changes:
+  - Replaced the MySQL V2 `ALTER TABLE conversations ADD COLUMN IF NOT EXISTS ...` batch with per-column guarded dynamic SQL using `information_schema.columns`.
+  - Kept the learning and diagnosis conversation fields and seed data intact while making the migration compatible with the current MySQL parser.
+- Verification results:
+  - Confirmed the failing SQL fragment from the Flyway startup stack trace and located it in `services/api/src/main/resources/db/migration/mysql/V2__learning_diagnosis_guided_workflow.sql`.
+  - Checked the MySQL baseline schema in `V1__baseline.sql` and confirmed the `conversations` table does not already define the new workflow columns.
+  - Performed a static review of the updated migration for idempotent column guards.
+- Unfinished items:
+  - Still need a live Flyway run against MySQL to confirm the application starts cleanly end to end.
+
 ### API DiagnoseResponse Test Constructor Repair
 
 - Change type: functional test repair.
