@@ -54,16 +54,23 @@ class MessageStreamApiTest {
             null,
             "FREE")),
         "MEDIUM",
-        "Based on static baseline knowledge.",
+        "fresh",
         "PASSED",
         "Disclaimer: for business analysis only.",
         List.of(
             Map.of("category", "PREFERENCE", "key", "response_style", "value", "CONCLUSION_FIRST", "confidence", 0.95, "structured", true),
             Map.of("category", "BUSINESS_FACT", "key", "channel_mix", "value", "DELIVERY_PLATFORM_HEAVY", "confidence", 0.90, "structured", true)),
+        "stream-diagnosis",
+        "stream-chain",
+        List.<String>of(),
+        Map.<String, String>of(),
+        List.<Map<String, Object>>of(),
         null,
+        List.<String>of(),
         null,
-        List.of(),
-        Map.of());
+        List.<String>of(),
+        null,
+        List.<Map<String, Object>>of());
   }
 
   @BeforeEach
@@ -268,7 +275,7 @@ class MessageStreamApiTest {
             "Narrative memory stored in MySQL only.",
             List.of(),
             "MEDIUM",
-            "Based on static baseline knowledge.",
+            "fresh",
             "PASSED",
             "Disclaimer: for business analysis only.",
             List.of(
@@ -278,10 +285,17 @@ class MessageStreamApiTest {
                     "value", "The user repeatedly described supplier prepayment pressure.",
                     "confidence", 0.88,
                     "structured", false)),
+            "stream-diagnosis",
+            "stream-chain",
+            List.<String>of(),
+            Map.<String, String>of(),
+            List.<Map<String, Object>>of(),
             null,
+            List.<String>of(),
             null,
-            List.of(),
-            Map.of()));
+            List.<String>of(),
+            null,
+            List.<Map<String, Object>>of()));
 
     String token = login("user");
     long conversationId = createConversation(token);
@@ -313,7 +327,7 @@ class MessageStreamApiTest {
             "Updated preference memory.",
             List.of(),
             "MEDIUM",
-            "Based on static baseline knowledge.",
+            "fresh",
             "PASSED",
             "Disclaimer: for business analysis only.",
             List.of(
@@ -323,10 +337,17 @@ class MessageStreamApiTest {
                     "value", "CONCLUSION_FIRST",
                     "confidence", 0.81,
                     "structured", true)),
+            "stream-diagnosis",
+            "stream-chain",
+            List.<String>of(),
+            Map.<String, String>of(),
+            List.<Map<String, Object>>of(),
             null,
+            List.<String>of(),
             null,
-            List.of(),
-            Map.of()));
+            List.<String>of(),
+            null,
+            List.<Map<String, Object>>of()));
 
     String token = login("user");
     Long userId = jdbcTemplate.queryForObject(

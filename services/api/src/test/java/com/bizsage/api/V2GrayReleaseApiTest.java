@@ -50,14 +50,21 @@ class V2GrayReleaseApiTest {
                 null,
                 "FREE")),
             "MEDIUM",
-            "Generated from V2 gray-release knowledge and approved intelligence snapshots.",
+            "fresh",
             "PASSED",
             "Disclaimer: This report is for operational analysis only and is not legal, financial, or investment advice.",
             List.of(),
+            "gray-release",
+            "gray-release-chain",
+            List.<String>of(),
+            java.util.Map.<String, String>of(),
+            List.<java.util.Map<String, Object>>of(),
             null,
+            List.<String>of(),
             null,
-            List.of(),
-            java.util.Map.of()));
+            List.<String>of(),
+            null,
+            List.<java.util.Map<String, Object>>of()));
   }
 
   @Test

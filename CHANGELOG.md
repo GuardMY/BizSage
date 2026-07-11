@@ -2,6 +2,19 @@
 
 ## 2026-07-11
 
+### API DiagnoseResponse Test Constructor Repair
+
+- Change type: functional test repair.
+- Affected modules: `services/api`, and both change logs.
+- Main changes:
+  - Updated the API test fixtures to match the current `DiagnoseResponse` record signature after new fields were added to the worker response contract.
+  - Filled the new `mode`, `chainNodeId`, `sections`, `recommendationCandidates`, `currentTopic`, `nextBestTopics`, `workflowStage`, `profileMissingFields`, `completionSignal`, and `recommendedQuestions` slots in the mocked responses.
+- Verification results:
+  - Confirmed the failure came from `mvn package -DskipTests -B -Dmaven.artifact.threads=10` during `testCompile`, not from Docker layer setup.
+  - Full rebuild verification still needed after this fix.
+- Unfinished items:
+  - Full API test execution and Docker rebuild still need to be run to confirm the fix end to end.
+
 ### Prompt Stage Archive
 
 - Change type: documentation archive.

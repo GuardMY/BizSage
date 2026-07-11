@@ -2,6 +2,19 @@
 
 ## 2026-07-11
 
+### API DiagnoseResponse 测试构造器修复
+
+- 变更类型：功能测试修复。
+- 影响模块：`services/api`，以及两份变更日志。
+- 主要变更：
+  - 更新 API 测试夹具，使其与当前 `DiagnoseResponse` record 签名保持一致，适配 worker 响应契约新增字段后的变化。
+  - 在 mocked response 中补齐新的 `mode`、`chainNodeId`、`sections`、`recommendationCandidates`、`currentTopic`、`nextBestTopics`、`workflowStage`、`profileMissingFields`、`completionSignal` 和 `recommendedQuestions` 字段。
+- 验证结果：
+  - 已确认失败来自 `mvn package -DskipTests -B -Dmaven.artifact.threads=10` 的 `testCompile` 阶段，而不是 Docker 分层本身。
+  - 本次修改后仍需执行完整重建验证。
+- 未完成事项：
+  - 仍需运行完整 API 测试和 Docker 重建，确认修复端到端生效。
+
 ### Prompt 作用阶段归档
 
 - 变更类型：文档归档。
