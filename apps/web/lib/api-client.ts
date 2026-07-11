@@ -1219,9 +1219,9 @@ export type AgentOutput = {
   answer: string;
   sections: AgentOutputSections;
   sources: Source[];
-  confidence: string;
+  confidence: "LOW" | "MEDIUM" | "HIGH";
   timeliness: string;
-  selfCheckStatus: string;
+  selfCheckStatus: SelfCheckStatus;
   disclaimer: string;
   chainNodeId?: string;
   suggestedActions?: string[];
