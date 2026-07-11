@@ -864,7 +864,7 @@ CREATE TABLE IF NOT EXISTS question_pools (
 INSERT INTO question_pools
   (industry_id, region_id, agent_mode, question_key, category, question_text, top_level_score, source_type, source_ref)
 SELECT 'general', 'cn-default', 'LEARNING', 'raw-materials-next', 'node',
-       '鍏堜簡瑙ｅ師鏉愭枡鎴愭湰缁撴瀯鍜岄噰璐懆鏈?, 0.92, 'seed', 'raw-materials'
+       '先了解原材料成本结构和采购周期。', 0.92, 'seed', 'raw-materials'
 WHERE NOT EXISTS (
   SELECT 1 FROM question_pools
   WHERE industry_id = 'general' AND region_id = 'cn-default'
@@ -874,7 +874,7 @@ WHERE NOT EXISTS (
 INSERT INTO question_pools
   (industry_id, region_id, agent_mode, question_key, category, question_text, top_level_score, source_type, source_ref)
 SELECT 'general', 'cn-default', 'DIAGNOSIS', 'baseline-industry', 'profile',
-       '鍏堢‘璁や綘灞炰簬鍝釜琛屼笟锛屼互鍙婃槸绾夸笂杩樻槸绾夸笅涓氬姟', 0.95, 'seed', 'diagnosis-profile'
+       '先确认你属于哪个行业，以及是线上还是线下业务。', 0.95, 'seed', 'diagnosis-profile'
 WHERE NOT EXISTS (
   SELECT 1 FROM question_pools
   WHERE industry_id = 'general' AND region_id = 'cn-default'
@@ -884,7 +884,7 @@ WHERE NOT EXISTS (
 INSERT INTO question_pools
   (industry_id, region_id, agent_mode, question_key, category, question_text, top_level_score, source_type, source_ref)
 SELECT 'general', 'cn-default', 'DIAGNOSIS', 'baseline-scale', 'profile',
-       '澶ф鐨勯棬搴椼€佷粨搴撳拰鍥㈤槦瑙勬ā鏄灏?, 0.93, 'seed', 'diagnosis-profile'
+       '大概的门店、仓库和团队规模是多少？', 0.93, 'seed', 'diagnosis-profile'
 WHERE NOT EXISTS (
   SELECT 1 FROM question_pools
   WHERE industry_id = 'general' AND region_id = 'cn-default'

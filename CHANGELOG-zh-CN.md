@@ -2,6 +2,20 @@
 
 ## 2026-07-11
 
+### MySQL V1 问题池种子 SQL 修复
+
+- 变更类型：功能性数据库迁移修复。
+- 影响模块：`services/api` 和两份变更日志。
+- 主要变更：
+  - 修复 MySQL `V1__baseline.sql` 中三条 `question_pools` 种子记录，使每条 `question_text` 字面量重新成为合法 SQL。
+  - 将同样的修复同步到 H2 测试基线，保持启动 schema 与测试 schema 一致。
+  - 保留现有的 `WHERE NOT EXISTS` 幂等保护不变。
+- 验证结果：
+  - 在排查 Flyway 启动失败时，已定位到两份基线文件中损坏的 `question_text` 字面量。
+  - 已确认受影响的种子分别是 `raw-materials-next`、`baseline-industry` 和 `baseline-scale`。
+- 未完成事项：
+  - 仍需在真实 MySQL 环境启动一次应用，确认 Flyway 能继续通过基线迁移。
+
 ### Learning 与 Diagnosis 引导式工作流 UI
 
 - 变更类型：功能性前端工作流更新。

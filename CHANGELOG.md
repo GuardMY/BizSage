@@ -2,6 +2,20 @@
 
 ## 2026-07-11
 
+### MySQL V1 Question Pool Seed SQL Repair
+
+- Change type: functional database migration fix.
+- Affected modules: `services/api` and both change logs.
+- Main changes:
+  - Repaired the three `question_pools` seed rows in MySQL `V1__baseline.sql` so each `question_text` literal is valid SQL again.
+  - Mirrored the same fix into the H2 test baseline to keep startup and test schemas aligned.
+  - Kept the existing `WHERE NOT EXISTS` idempotency guards unchanged.
+- Verification results:
+  - Identified the broken `question_text` literals while tracing the Flyway startup failure.
+  - Confirmed the affected seeds are `raw-materials-next`, `baseline-industry`, and `baseline-scale`.
+- Unfinished items:
+  - Still need a live MySQL boot to confirm Flyway proceeds past the baseline migration.
+
 ### Learning and Diagnosis Guided Workflow UI
 
 - Change type: functional frontend workflow update.
