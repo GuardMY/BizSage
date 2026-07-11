@@ -25,6 +25,13 @@ CREATE TABLE IF NOT EXISTS conversations (
   region_id VARCHAR(64) NOT NULL,
   industry_id VARCHAR(64) NOT NULL,
   source_id VARCHAR(64) NOT NULL DEFAULT 'user',
+  agent_mode VARCHAR(32) NOT NULL DEFAULT 'DIAGNOSIS',
+  workflow_stage VARCHAR(32) NOT NULL DEFAULT 'INTRO',
+  profile_completeness DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+  primary_issue_tags TEXT NULL,
+  recommended_question_ids TEXT NULL,
+  closed_by VARCHAR(64) NULL,
+  closed_reason VARCHAR(255) NULL,
   weight DECIMAL(8,4) NOT NULL DEFAULT 1.0000,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -831,6 +838,57 @@ WHERE NOT EXISTS (
   FROM audit_logs
   WHERE action = 'ADMIN_V3_BOOTSTRAP'
     AND target_id = 'seed'
+);
+
+CREATE TABLE IF NOT EXISTS question_pools (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  industry_id VARCHAR(64) NOT NULL,
+  region_id VARCHAR(64) NOT NULL DEFAULT 'cn-default',
+  agent_mode VARCHAR(32) NOT NULL,
+  question_key VARCHAR(128) NOT NULL,
+  category VARCHAR(64) NOT NULL,
+  question_text VARCHAR(512) NOT NULL,
+  top_level_score DECIMAL(8,4) NOT NULL DEFAULT 0.5000,
+  usage_count BIGINT NOT NULL DEFAULT 0,
+  rating_avg DECIMAL(8,4) NOT NULL DEFAULT 0.0000,
+  rating_count BIGINT NOT NULL DEFAULT 0,
+  last_used_at TIMESTAMP NULL,
+  status VARCHAR(16) NOT NULL DEFAULT 'ENABLED',
+  source_type VARCHAR(32) NOT NULL DEFAULT 'seed',
+  source_ref VARCHAR(128) NOT NULL DEFAULT '',
+  create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_question_pools_scope (industry_id, region_id, agent_mode, question_key)
+);
+
+INSERT INTO question_pools
+  (industry_id, region_id, agent_mode, question_key, category, question_text, top_level_score, source_type, source_ref)
+SELECT 'general', 'cn-default', 'LEARNING', 'raw-materials-next', 'node',
+       '鍏堜簡瑙ｅ師鏉愭枡鎴愭湰缁撴瀯鍜岄噰璐懆鏈?, 0.92, 'seed', 'raw-materials'
+WHERE NOT EXISTS (
+  SELECT 1 FROM question_pools
+  WHERE industry_id = 'general' AND region_id = 'cn-default'
+    AND agent_mode = 'LEARNING' AND question_key = 'raw-materials-next'
+);
+
+INSERT INTO question_pools
+  (industry_id, region_id, agent_mode, question_key, category, question_text, top_level_score, source_type, source_ref)
+SELECT 'general', 'cn-default', 'DIAGNOSIS', 'baseline-industry', 'profile',
+       '鍏堢‘璁や綘灞炰簬鍝釜琛屼笟锛屼互鍙婃槸绾夸笂杩樻槸绾夸笅涓氬姟', 0.95, 'seed', 'diagnosis-profile'
+WHERE NOT EXISTS (
+  SELECT 1 FROM question_pools
+  WHERE industry_id = 'general' AND region_id = 'cn-default'
+    AND agent_mode = 'DIAGNOSIS' AND question_key = 'baseline-industry'
+);
+
+INSERT INTO question_pools
+  (industry_id, region_id, agent_mode, question_key, category, question_text, top_level_score, source_type, source_ref)
+SELECT 'general', 'cn-default', 'DIAGNOSIS', 'baseline-scale', 'profile',
+       '澶ф鐨勯棬搴椼€佷粨搴撳拰鍥㈤槦瑙勬ā鏄灏?, 0.93, 'seed', 'diagnosis-profile'
+WHERE NOT EXISTS (
+  SELECT 1 FROM question_pools
+  WHERE industry_id = 'general' AND region_id = 'cn-default'
+    AND agent_mode = 'DIAGNOSIS' AND question_key = 'baseline-scale'
 );
 
 INSERT INTO admin_risk_rules (rule_type, name, description, enabled, threshold_value, scope_json, risk_level, change_mode)

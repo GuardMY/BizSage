@@ -8,7 +8,6 @@ spring:
       mode: always
       schema-locations:
         - classpath:db/migration/h2/V1__baseline.sql
-        - classpath:db/migration/h2/V2__learning_diagnosis_guided_workflow.sql
 
 bizsage:
   jwt:

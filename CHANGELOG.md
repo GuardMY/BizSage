@@ -16,6 +16,21 @@
 - Unfinished items:
   - Still need a live Flyway run against MySQL to confirm the application starts cleanly end to end.
 
+### Consolidate Learning Diagnosis Workflow Into V1 Baseline
+
+- Change type: database migration consolidation.
+- Affected modules: `services/api`, H2 test schema, and both change logs.
+- Main changes:
+  - Merged the learning and diagnosis workflow `conversations` columns plus the `question_pools` table and seed rows into the MySQL `V1__baseline.sql`.
+  - Mirrored the same workflow schema and seed data into the H2 `V1__baseline.sql` test baseline.
+  - Removed the standalone `V2__learning_diagnosis_guided_workflow.sql` migration files and dropped the extra H2 schema-loading reference so new environments bootstrap from a single baseline.
+- Verification results:
+  - Confirmed the repository is now targeting fresh databases only for this workflow change path.
+  - Verified the MySQL and H2 baselines both define the workflow fields and `question_pools` before any runtime code uses them.
+  - Verified `application-test.yml` now loads only the H2 `V1__baseline.sql` baseline.
+- Unfinished items:
+  - Still need a clean MySQL startup and relevant API test run to confirm the consolidated baseline works end to end.
+
 ### API DiagnoseResponse Test Constructor Repair
 
 - Change type: functional test repair.

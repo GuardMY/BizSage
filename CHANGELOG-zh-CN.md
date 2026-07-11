@@ -16,6 +16,21 @@
 - 未完成事项：
   - 仍需在真实 MySQL 环境执行一次 Flyway，确认应用能端到端正常启动。
 
+### 将学习诊断工作流合并进 V1 基线
+
+- 变更类型：数据库迁移合并。
+- 影响模块：`services/api`、H2 测试 schema 和两份变更日志。
+- 主要变更：
+  - 将学习与诊断工作流需要的 `conversations` 字段，以及 `question_pools` 表和种子数据合并进 MySQL `V1__baseline.sql`。
+  - 将同一套工作流 schema 与种子数据同步合并进 H2 `V1__baseline.sql` 测试基线。
+  - 删除独立的 `V2__learning_diagnosis_guided_workflow.sql` 迁移文件，并移除额外的 H2 schema 加载引用，让新环境只通过单一基线完成初始化。
+- 验证结果：
+  - 已确认当前仓库在这条工作流变更上只面向全新数据库。
+  - 已核对 MySQL 与 H2 基线都在运行时代码使用前定义了工作流字段和 `question_pools`。
+  - 已确认 `application-test.yml` 现在只加载 H2 的 `V1__baseline.sql` 基线。
+- 未完成事项：
+  - 仍需执行一次全新 MySQL 启动和相关 API 测试，确认合并后的基线端到端可用。
+
 ### API DiagnoseResponse 测试构造器修复
 
 - 变更类型：功能测试修复。
