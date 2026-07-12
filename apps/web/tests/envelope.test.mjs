@@ -99,6 +99,7 @@ test("Web page composes the new workspace shell and conversation helpers", async
   assert.match(source, /WorkspaceShell/);
   assert.match(source, /resolveWorkspaceSelection/);
   assert.match(source, /nextSelectionAfterArchive/);
+  assert.match(source, /onNewConversation=\{\(\) => handleNewConversation\(\)\}/);
   assert.doesNotMatch(source, /fetchOpsMetrics/);
 });
 

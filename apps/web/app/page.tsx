@@ -909,7 +909,7 @@ export default function Home() {
             conversations={workspaceSelection.visibleConversations}
             onArchiveConversation={handleArchiveConversationFromList}
             onDeleteConversation={handleDeleteConversation}
-            onNewConversation={handleNewConversation}
+            onNewConversation={() => handleNewConversation()}
             onSelectConversation={handleSelectConversation}
             selectedConversationId={resolvedSelectedConversationId}
             t={t}
