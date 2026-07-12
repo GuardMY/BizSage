@@ -1,7 +1,7 @@
 "use client";
 
 import { LogIn } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArchiveWorkspace } from "./components/archive-workspace";
 import { ConversationSidebar } from "./components/conversation-sidebar";
 import { DiagnosisWorkspace } from "./components/diagnosis-workspace";
@@ -9,6 +9,7 @@ import { LearningWorkspace } from "./components/learning-workspace";
 import { WorkspaceShell } from "./components/workspace-shell";
 import type { WorkspaceMessages, WorkspaceSection } from "./components/workspace-types";
 import {
+  conversationModeForSection,
   nextSelectionAfterArchive,
   resolveWorkspaceSelection
 } from "../lib/conversation-workspace";
@@ -268,6 +269,10 @@ export default function Home() {
   const [profile, setProfile] = useState<LoginProfile | null>(null);
   const [activeSection, setActiveSection] = useState<WorkspaceSection>("diagnosis");
   const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
+  const lastConversationByMode = useRef<Record<"diagnosis" | "learning", number | null>>({
+    diagnosis: null,
+    learning: null
+  });
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messageHistory, setMessageHistory] = useState<ConversationMessage[]>([]);
   const [message, setMessage] = useState("");
@@ -349,6 +354,14 @@ export default function Home() {
   }, [selectedConversationId, workspaceSelection.selectedConversationId]);
 
   const resolvedSelectedConversationId = workspaceSelection.selectedConversationId;
+
+  useEffect(() => {
+    const mode = conversationModeForSection(activeSection);
+    if (mode && resolvedSelectedConversationId !== null) {
+      lastConversationByMode.current[mode] = resolvedSelectedConversationId;
+    }
+  }, [activeSection, resolvedSelectedConversationId]);
+
   const selectedConversation = useMemo(
     () => conversations.find((conversation) => conversation.id === resolvedSelectedConversationId) ?? null,
     [conversations, resolvedSelectedConversationId]
@@ -464,16 +477,48 @@ export default function Home() {
 
   function handleSelectConversation(id: number) {
     setSelectedConversationId(id);
+    const mode = conversationModeForSection(activeSection);
+    if (mode) lastConversationByMode.current[mode] = id;
     resetConversationOutputs();
+  }
+
+  function handleSectionChange(section: WorkspaceSection) {
+    const currentMode = conversationModeForSection(activeSection);
+    if (currentMode) {
+      lastConversationByMode.current[currentMode] = resolvedSelectedConversationId;
+    }
+
+    const nextMode = conversationModeForSection(section);
+    if (nextMode) {
+      const nextSelection = resolveWorkspaceSelection({
+        section,
+        selectedConversationId: lastConversationByMode.current[nextMode],
+        conversations
+      });
+      setSelectedConversationId(nextSelection.selectedConversationId);
+      lastConversationByMode.current[nextMode] = nextSelection.selectedConversationId;
+      resetConversationOutputs();
+    }
+
+    setActiveSection(section);
+  }
+
+  function markConversationMode(id: number, mode: "DIAGNOSIS" | "LEARNING") {
+    setConversations((previous) => previous.map((conversation) =>
+      conversation.id === id ? { ...conversation, agentMode: mode } : conversation
+    ));
+    lastConversationByMode.current[mode === "LEARNING" ? "learning" : "diagnosis"] = id;
   }
 
   async function handleNewConversation() {
     if (!profile) return;
     try {
       const created = await createConversation(t.newConversationTitle);
-      setConversations((previous) => [created, ...previous]);
+      const mode = conversationModeForSection(activeSection);
+      const modeCreated = mode ? { ...created, agentMode: mode === "learning" ? "LEARNING" : "DIAGNOSIS" } : created;
+      setConversations((previous) => [modeCreated, ...previous]);
+      if (mode) lastConversationByMode.current[mode] = created.id;
       setSelectedConversationId(created.id);
-      setActiveSection("learning");
       resetConversationOutputs();
     } catch (error) {
       if (error instanceof AuthExpiredError) {
@@ -577,6 +622,7 @@ export default function Home() {
         setSelectedConversationId(conversationId);
         setConversations((previous) => [created, ...previous]);
       }
+      markConversationMode(conversationId, "DIAGNOSIS");
 
       const nextDiagnosis = await streamDiagnosisEvents(conversationId, message, {
         onPartialAnswer(answer) {
@@ -663,6 +709,7 @@ export default function Home() {
         setSelectedConversationId(conversationId);
         setConversations((previous) => [created, ...previous]);
       }
+      markConversationMode(conversationId, "LEARNING");
 
       const nextLearning = await streamLearningEvents(conversationId, { question: message }, {
         onPartialAnswer(answer) {
@@ -791,7 +838,7 @@ export default function Home() {
         onLogout={handleLogout}
         onToggleLocale={toggleLocale}
         profile={profile}
-        setActiveSection={setActiveSection}
+        setActiveSection={handleSectionChange}
         sidebar={
           <ConversationSidebar
             activeSection={activeSection}

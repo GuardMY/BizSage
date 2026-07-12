@@ -18,6 +18,8 @@ export type WorkspaceSelectionResult = {
   selectedConversationId: number | null;
 };
 
+export type ConversationModeSection = "diagnosis" | "learning";
+
 export type ArchiveSelectionInput = {
   selectedConversationId: number | null;
   conversations: Conversation[];
@@ -53,7 +55,14 @@ export function describeConversationSidebar(section: WorkspaceSection): Conversa
 
 export function resolveWorkspaceSelection(input: WorkspaceSelectionInput): WorkspaceSelectionResult {
   const { active, archived } = partitionConversations(input.conversations);
-  const visibleConversations = input.section === "archive" ? archived : active;
+  const mode = conversationModeForSection(input.section);
+  const visibleConversations = input.section === "archive"
+    ? archived
+    : mode === null
+      ? active
+      : active.filter((conversation) => mode === "learning"
+        ? conversation.agentMode === "LEARNING"
+        : conversation.agentMode !== "LEARNING");
   const selectedConversationId = visibleConversations.some(
     (conversation) => conversation.id === input.selectedConversationId
   )
@@ -64,6 +73,12 @@ export function resolveWorkspaceSelection(input: WorkspaceSelectionInput): Works
     visibleConversations,
     selectedConversationId
   };
+}
+
+export function conversationModeForSection(section: WorkspaceSection): ConversationModeSection | null {
+  if (section === "diagnosis") return "diagnosis";
+  if (section === "learning") return "learning";
+  return null;
 }
 
 export function nextSelectionAfterArchive(input: ArchiveSelectionInput): number | null {

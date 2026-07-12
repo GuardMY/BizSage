@@ -113,6 +113,23 @@ test("returns null selection when the target section has no visible conversation
   assert.equal(result.selectedConversationId, null);
 });
 
+test("filters active conversations by diagnosis and learning mode", async () => {
+  const { resolveWorkspaceSelection } = await import(workspaceModule);
+  const conversations = [
+    { id: 9, title: "Learning", status: "ACTIVE", agentMode: "LEARNING", regionId: "cn", industryId: "retail" },
+    { id: 7, title: "Diagnosis", status: "ACTIVE", agentMode: "DIAGNOSIS", regionId: "cn", industryId: "retail" },
+    { id: 5, title: "Legacy diagnosis", status: "ACTIVE", regionId: "cn", industryId: "retail" }
+  ];
+
+  const diagnosis = resolveWorkspaceSelection({ section: "diagnosis", selectedConversationId: null, conversations });
+  const learning = resolveWorkspaceSelection({ section: "learning", selectedConversationId: null, conversations });
+
+  assert.deepEqual(diagnosis.visibleConversations.map((item) => item.id), [7, 5]);
+  assert.equal(diagnosis.selectedConversationId, 7);
+  assert.deepEqual(learning.visibleConversations.map((item) => item.id), [9]);
+  assert.equal(learning.selectedConversationId, 9);
+});
+
 test("returns diagnosis and archive sidebar labels and row actions by section", async () => {
   const { describeConversationSidebar } = await import(workspaceModule);
 
