@@ -9,6 +9,7 @@ type WorkspaceShellProps = {
   availableIndustries: UserIndustry[];
   children: ReactNode;
   currentIndustryId: string;
+  industryPickerOpen: boolean;
   onLogout: () => void;
   onIndustryChange: (industryId: string) => void;
   onToggleLocale: () => void;
@@ -24,6 +25,7 @@ export function WorkspaceShell({
   availableIndustries,
   children,
   currentIndustryId,
+  industryPickerOpen,
   onLogout,
   onIndustryChange,
   onToggleLocale,
@@ -93,7 +95,7 @@ export function WorkspaceShell({
                   <select
                     aria-label="当前行业"
                     className="industrySelect"
-                    value={availableIndustries.some((industry) => industry.industryId === currentIndustryId) ? currentIndustryId : ""}
+                    value={industryPickerOpen ? "__new__" : currentIndustryId}
                     onChange={(event) => onIndustryChange(event.target.value)}
                   >
                     <option value="" disabled>选择行业</option>
@@ -102,6 +104,7 @@ export function WorkspaceShell({
                         {industryLabel(industry.industryId, industry.industryName)}
                       </option>
                     ))}
+                    <option value="__new__">新增行业</option>
                   </select>
                 )}
                 <button className="languageButton" onClick={onToggleLocale} type="button">

@@ -204,6 +204,7 @@ test("Workspace shell renders compact two-line identity metadata", async () => {
   assert.match(shell, /<strong>\{profile\.username\}<\/strong>/);
   assert.match(shell, /roleLabel\(profile\.role\).*membershipLabel\(profile\.membershipLevel\).*regionLabel\(profile\.regionId\)/);
   assert.match(shell, /<select[\s\S]*className="industrySelect"[\s\S]*onIndustryChange/);
+  assert.match(shell, /<option value="__new__">新增行业<\/option>/);
   assert.doesNotMatch(shell, /<small>\{profile\.role\} \/ \{profile\.membershipLevel\}<\/small>\s*<small>\{profile\.regionId\} \/ \{profile\.industryId\}<\/small>/);
 });
 

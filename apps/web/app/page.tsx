@@ -294,6 +294,7 @@ export default function Home() {
   const [notice, setNotice] = useState(messages["zh-CN"].loginNotice);
   const [industries, setIndustries] = useState<UserIndustry[]>([]);
   const [selectedIndustryId, setSelectedIndustryId] = useState("");
+  const [industryPickerOpen, setIndustryPickerOpen] = useState(false);
   const [customIndustryName, setCustomIndustryName] = useState("");
 
   const t = messages[locale];
@@ -319,7 +320,6 @@ export default function Home() {
     if (!profile) {
       setConversations([]);
       setMessageHistory([]);
-      setSelectedConversationId(null);
       setRecommendationRows([]);
       setLearningDiagnosis(null);
       setStreamingLearning(null);
@@ -357,16 +357,15 @@ export default function Home() {
   }, [profile, t.sessionExpired]);
 
   const currentIndustryConversations = useMemo(
-    () => selectedIndustryId
+    () => industryPickerOpen
+      ? []
+      : selectedIndustryId
       ? conversations.filter((conversation) => conversation.industryId === selectedIndustryId)
       : conversations,
-    [conversations, selectedIndustryId]
+    [conversations, industryPickerOpen, selectedIndustryId]
   );
 
-  const availableIndustries = useMemo(() => {
-    const usedIndustryIds = new Set(conversations.map((conversation) => conversation.industryId));
-    return industries.filter((industry) => usedIndustryIds.has(industry.industryId));
-  }, [conversations, industries]);
+  const availableIndustries = industries;
 
   const workspaceSelection = useMemo(
     () =>
@@ -480,8 +479,9 @@ export default function Home() {
   }
 
   function handleSessionExpired() {
+    // Keep navigation, industry selection, conversation selection, and drafts so
+    // the next successful login can resume the interrupted workflow.
     setProfile(null);
-    setActiveSection("diagnosis");
     setConversations([]);
     setMessageHistory([]);
     setDiagnosis(null);
@@ -489,7 +489,6 @@ export default function Home() {
     setStreamingDiagnosis(null);
     setStreamingLearning(null);
     setReport(null);
-    setSelectedConversationId(null);
     setRecommendationRows([]);
     setSelectedSource(null);
     setReportBusy(false);
@@ -514,7 +513,15 @@ export default function Home() {
   }
 
   function handleIndustryChange(industryId: string) {
+    if (industryId === "__new__") {
+      setIndustryPickerOpen(true);
+      setSelectedIndustryId("");
+      setSelectedConversationId(null);
+      resetConversationOutputs();
+      return;
+    }
     if (industryId === selectedIndustryId) return;
+    setIndustryPickerOpen(false);
     setSelectedIndustryId(industryId);
     setSelectedConversationId(null);
     resetConversationOutputs();
@@ -554,6 +561,7 @@ export default function Home() {
       const created = await createConversation(t.newConversationTitle, industryId || profile.industryId);
       const mode = conversationModeForSection(activeSection);
       const modeCreated = mode ? { ...created, agentMode: mode === "learning" ? "LEARNING" : "DIAGNOSIS" } : created;
+      setIndustryPickerOpen(false);
       setSelectedIndustryId(created.industryId);
       setConversations((previous) => [modeCreated, ...previous]);
       if (mode) lastConversationByMode.current[mode] = created.id;
@@ -666,6 +674,7 @@ export default function Home() {
       const created = selectedConversationId ? null : await createConversation(t.newConversationTitle, selectedIndustryId || profile.industryId);
       const conversationId = selectedConversationId ?? created!.id;
       if (created) {
+        setIndustryPickerOpen(false);
         setSelectedIndustryId(created.industryId);
         setSelectedConversationId(conversationId);
         setConversations((previous) => [created, ...previous]);
@@ -754,6 +763,7 @@ export default function Home() {
       const created = selectedConversationId ? null : await createConversation(t.newConversationTitle, selectedIndustryId || profile.industryId);
       const conversationId = selectedConversationId ?? created!.id;
       if (created) {
+        setIndustryPickerOpen(false);
         setSelectedIndustryId(created.industryId);
         setSelectedConversationId(conversationId);
         setConversations((previous) => [created, ...previous]);
@@ -901,6 +911,7 @@ export default function Home() {
         onToggleLocale={toggleLocale}
         onIndustryChange={handleIndustryChange}
         currentIndustryId={selectedIndustryId}
+        industryPickerOpen={industryPickerOpen}
         profile={profile}
         setActiveSection={handleSectionChange}
         sidebar={
