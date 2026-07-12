@@ -163,7 +163,15 @@ export function DiagnosisWorkspace({
 
         <div className="composer">
           <Search size={18} />
-          <input value={message} onChange={(event) => onMessageChange(event.target.value)} />
+          <textarea
+            value={message}
+            onChange={(event) => onMessageChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" || event.shiftKey) return;
+              event.preventDefault();
+              onSubmitDiagnosis();
+            }}
+          />
           <button className="primary icon" onClick={onSubmitDiagnosis} disabled={busy} title={t.sendDiagnosis} type="button">
             <Send size={18} />
           </button>

@@ -93,7 +93,15 @@ export function LearningWorkspace({
 
         <div className="composer">
           <Search size={18} />
-          <input value={message} onChange={(event) => onMessageChange(event.target.value)} />
+          <textarea
+            value={message}
+            onChange={(event) => onMessageChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" || event.shiftKey) return;
+              event.preventDefault();
+              onSubmitLearning();
+            }}
+          />
           <button className="primary icon" onClick={onSubmitLearning} disabled={busy} title={t.sendLearning} type="button">
             <Sparkles size={18} />
           </button>
