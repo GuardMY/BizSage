@@ -365,7 +365,10 @@ export default function Home() {
     [conversations, industryPickerOpen, selectedIndustryId]
   );
 
-  const availableIndustries = industries;
+  const availableIndustries = useMemo(() => {
+    const usedIndustryIds = new Set(conversations.map((conversation) => conversation.industryId));
+    return industries.filter((industry) => usedIndustryIds.has(industry.industryId));
+  }, [conversations, industries]);
 
   const workspaceSelection = useMemo(
     () =>
