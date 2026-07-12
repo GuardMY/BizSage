@@ -81,15 +81,7 @@ export function DiagnosisWorkspace({
         </div>
 
         <div className="messages" ref={messagesRef}>
-          {selectedConversation == null && messageHistory.length === 0 && !busy && !displayedDiagnosis && (
-            <div className="guidePrompt">
-              <Search size={20} />
-              <strong>{t.selectConversation}</strong>
-              <p>{t.evidenceLine}</p>
-            </div>
-          )}
-
-          {selectedConversation && !hasAssistantReply && !displayedDiagnosis && (
+          {!hasAssistantReply && !displayedDiagnosis && (
             <div className="bubble agent introBubble">
               <div className="introBadge"><Focus size={16} /> Diagnosis Agent</div>
               <Markdown content={renderDiagnosisIntro(t)} />
