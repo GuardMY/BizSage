@@ -18,7 +18,6 @@ import org.springframework.data.redis.serializer.RedisSerializationContext.Seria
  *   <li><b>crawlerPages</b> — cached crawler page content (short TTL, high churn).</li>
  *   <li><b>apiResponses</b> — conversation list, user list (medium TTL).</li>
  *   <li><b>globalKnowledge</b> — static knowledge base (long TTL, low churn).</li>
- *   <li><b>dimensionIntel</b> — scoped intelligence by region/industry (medium TTL).</li>
  * </ul>
  */
 @Configuration
@@ -44,11 +43,6 @@ public class CacheConfig {
         .withCacheConfiguration("globalKnowledge",
             RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(Duration.ofHours(1))
-                .serializeValuesWith(SerializationPair.fromSerializer(
-                    new GenericJackson2JsonRedisSerializer())))
-        .withCacheConfiguration("dimensionIntel",
-            RedisCacheConfiguration.defaultCacheConfig()
-                .entryTtl(Duration.ofMinutes(30))
                 .serializeValuesWith(SerializationPair.fromSerializer(
                     new GenericJackson2JsonRedisSerializer())));
   }

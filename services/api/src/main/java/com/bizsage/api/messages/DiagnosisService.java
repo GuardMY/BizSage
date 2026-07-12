@@ -1,9 +1,6 @@
 package com.bizsage.api.messages;
 
 import com.bizsage.api.conversations.Conversation;
-import com.bizsage.api.governance.DataScope;
-import com.bizsage.api.intelligence.IntelligenceItem;
-import com.bizsage.api.intelligence.IntelligenceStore;
 import com.bizsage.api.knowledge.KnowledgeItem;
 import com.bizsage.api.knowledge.KnowledgeStore;
 import com.bizsage.api.memory.UserMemoryProfile;
@@ -37,7 +34,6 @@ public class DiagnosisService {
   private final ConversationSummaryStore summaryStore;
   private final UserMemoryStore userMemoryStore;
   private final KnowledgeStore knowledgeStore;
-  private final IntelligenceStore intelligenceStore;
   private final RecommendationService recommendationService;
 
   public DiagnosisService(
@@ -47,7 +43,6 @@ public class DiagnosisService {
       ConversationSummaryStore summaryStore,
       UserMemoryStore userMemoryStore,
       KnowledgeStore knowledgeStore,
-      IntelligenceStore intelligenceStore,
       RecommendationService recommendationService) {
     this.aiWorkerClient = aiWorkerClient;
     this.objectMapper = objectMapper;
@@ -55,7 +50,6 @@ public class DiagnosisService {
     this.summaryStore = summaryStore;
     this.userMemoryStore = userMemoryStore;
     this.knowledgeStore = knowledgeStore;
-    this.intelligenceStore = intelligenceStore;
     this.recommendationService = recommendationService;
   }
 
@@ -227,17 +221,10 @@ public class DiagnosisService {
    */
   private List<Map<String, Object>> loadKnowledgeForDiagnosis(
       String regionId, String industryId, String membershipLevel) {
-    DataScope scope = new DataScope(regionId, industryId, membershipLevel, false);
-
     List<KnowledgeItem> knowledgeItems = knowledgeStore.listScoped(regionId, industryId);
-    List<IntelligenceItem> intelligenceItems = intelligenceStore.listApprovedScoped(scope);
-
-    List<Map<String, Object>> combined = new ArrayList<>();
+    List<Map<String, Object>> combined = new ArrayList<>(knowledgeItems.size());
     for (KnowledgeItem item : knowledgeItems) {
       combined.add(knowledgeToMap(item));
-    }
-    for (IntelligenceItem item : intelligenceItems) {
-      combined.add(intelligenceToMap(item));
     }
     return combined;
   }
@@ -260,7 +247,7 @@ public class DiagnosisService {
     return map;
   }
 
-  private Map<String, Object> intelligenceToMap(IntelligenceItem item) {
+  /* private Map<String, Object> intelligenceToMap(IntelligenceItem item) {
     // 以 intel- 前缀区分运营情报，来源和权重来自审核入库结果。
     Map<String, Object> map = new LinkedHashMap<>();
     map.put("id", "intel-" + item.id());
@@ -278,6 +265,7 @@ public class DiagnosisService {
     return map;
   }
 
+  */
   private List<Long> extractQuestionIds(List<Map<String, Object>> candidates) {
     if (candidates == null) {
       return List.of();

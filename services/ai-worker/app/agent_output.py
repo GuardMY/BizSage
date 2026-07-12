@@ -3,15 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 DISCLAIMER_LEARNING = (
-    "免责声明：本学习内容基于行业公开知识和已入库情报生成，仅供商业知识学习参考，不构成投资、法律或财务建议。"
+    "免责声明：本学习内容基于行业公开知识生成，仅供商业知识学习参考，不构成投资、法律或财务建议。"
 )
 
 DISCLAIMER_DIAGNOSIS = (
     "免责声明：本诊断仅用于经营分析参考，不构成投资、法律或财务建议。"
 )
 
-TIMELINESS_LEARNING = "基于BizSage静态基线知识和已入库情报生成，知识更新可能存在延迟。"
-TIMELINESS_DIAGNOSIS = "基于V1静态基线知识和已入库情报生成。"
+TIMELINESS_LEARNING = "基于BizSage静态基线知识生成，知识更新可能存在延迟。"
+TIMELINESS_DIAGNOSIS = "基于V1静态基线知识生成。"
 
 SELF_CHECK_FAILED = "SELF_CHECK_FAILED"
 

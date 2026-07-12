@@ -48,7 +48,7 @@ KNOWLEDGE = [
 ]
 
 
-def test_free_member_retrieval_excludes_paid_evidence():
+def test_retrieval_uses_scope_without_membership_filtering():
     results = search_knowledge(
         "cashflow benchmark",
         KNOWLEDGE,
@@ -57,7 +57,7 @@ def test_free_member_retrieval_excludes_paid_evidence():
         membership_level="FREE",
     )
 
-    assert [result.id for result in results] == ["free-cn"]
+    assert [result.id for result in results][:2] == ["paid-cn", "free-cn"]
 
 
 def test_seed_paid_retrieval_includes_paid_same_region_evidence():

@@ -4,12 +4,11 @@ import type {
   Diagnosis,
   DiagnosisReport,
   LoginProfile,
-  PaidIntelligence,
   RecommendationItem,
   Source
 } from "../../lib/api-client";
 
-export type WorkspaceSection = "diagnosis" | "learning" | "intelligence" | "users" | "archive";
+export type WorkspaceSection = "diagnosis" | "learning" | "users" | "archive";
 
 export type WorkspaceMessages = {
   brandSubtitle: string;
@@ -27,7 +26,6 @@ export type WorkspaceMessages = {
   languageSaved: string;
   navDiagnosis: string;
   navLearning: string;
-  navIntelligence: string;
   navUsers: string;
   navArchive: string;
   identity: string;
@@ -53,9 +51,6 @@ export type WorkspaceMessages = {
   workerError: string;
   needsReview: string;
   insufficientEvidence: string;
-  paidTitle: string;
-  paidEmptyTitle: string;
-  paidEmptyDetail: string;
   recommendationTitle: string;
   recommendationEmpty: string;
   recommendationRefresh: string;
@@ -91,10 +86,9 @@ export type WorkspaceMessages = {
   archiveReadonly: string;
   selectedConversation: string;
   noArchivedMessages: string;
-  intelligenceSummary: string;
   usersSummary: string;
   conversationContext: string;
   noConversationContext: string;
 };
 
-export type { Conversation, ConversationMessage, Diagnosis, DiagnosisReport, LoginProfile, PaidIntelligence, RecommendationItem, Source };
+export type { Conversation, ConversationMessage, Diagnosis, DiagnosisReport, LoginProfile, RecommendationItem, Source };

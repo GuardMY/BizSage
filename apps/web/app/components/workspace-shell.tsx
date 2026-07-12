@@ -1,4 +1,4 @@
-import { Archive, BookOpen, Bot, Database, Languages, LogOut, UserRound } from "lucide-react";
+import { Archive, BookOpen, Bot, Languages, LogOut, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 import type { LoginProfile, WorkspaceMessages, WorkspaceSection } from "./workspace-types";
 
@@ -51,12 +51,6 @@ export function WorkspaceShell({
             onClick={() => setActiveSection("learning")}
             type="button"
           ><BookOpen size={18} />{t.navLearning}</button>
-          <button
-            className={`navItem ${activeSection === "intelligence" ? "active" : ""}`}
-            title={t.navIntelligence}
-            onClick={() => setActiveSection("intelligence")}
-            type="button"
-          ><Database size={18} />{t.navIntelligence}</button>
           <button
             className={`navItem ${activeSection === "users" ? "active" : ""}`}
             title={t.navUsers}

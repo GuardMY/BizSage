@@ -7,7 +7,6 @@ import type {
   ConversationMessage,
   Diagnosis,
   DiagnosisReport,
-  PaidIntelligence,
   RecommendationItem,
   Source,
   WorkspaceMessages
@@ -25,7 +24,6 @@ type DiagnosisWorkspaceProps = {
   onRefreshRecommendations: () => void;
   onUseRecommendation: (item: RecommendationItem) => void;
   onSubmitDiagnosis: () => void;
-  paidRows: PaidIntelligence[];
   recommendationRows: RecommendationItem[];
   report: DiagnosisReport | null;
   reportBusy: boolean;
@@ -46,7 +44,6 @@ export function DiagnosisWorkspace({
   onRefreshRecommendations,
   onUseRecommendation,
   onSubmitDiagnosis,
-  paidRows,
   recommendationRows,
   report,
   reportBusy,

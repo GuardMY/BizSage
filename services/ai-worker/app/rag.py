@@ -231,12 +231,10 @@ def _matches_business_filters(
     industry_id: str | None,
     membership_level: str,
 ) -> bool:
-    """业务过滤：地域、行业必须匹配，付费情报只对付费/内部用户开放。"""
+    """业务过滤：地域和行业必须匹配。"""
     if region_id and item.region_id != region_id:
         return False
     if industry_id and item.industry_id != industry_id:
-        return False
-    if item.entitlement == "PAID" and membership_level not in {"SEED_PAID", "INTERNAL"}:
         return False
     return True
 

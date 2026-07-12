@@ -1,9 +1,6 @@
 package com.bizsage.api.messages;
 
 import com.bizsage.api.conversations.Conversation;
-import com.bizsage.api.governance.DataScope;
-import com.bizsage.api.intelligence.IntelligenceItem;
-import com.bizsage.api.intelligence.IntelligenceStore;
 import com.bizsage.api.knowledge.KnowledgeItem;
 import com.bizsage.api.knowledge.KnowledgeStore;
 import com.bizsage.api.memory.UserMemoryProfile;
@@ -44,7 +41,6 @@ public class LearningService {
   private final ConversationSummaryStore summaryStore;
   private final UserMemoryStore userMemoryStore;
   private final KnowledgeStore knowledgeStore;
-  private final IntelligenceStore intelligenceStore;
   private final RecommendationService recommendationService;
 
   public LearningService(
@@ -54,7 +50,6 @@ public class LearningService {
       ConversationSummaryStore summaryStore,
       UserMemoryStore userMemoryStore,
       KnowledgeStore knowledgeStore,
-      IntelligenceStore intelligenceStore,
       RecommendationService recommendationService) {
     this.aiWorkerClient = aiWorkerClient;
     this.objectMapper = objectMapper;
@@ -62,7 +57,6 @@ public class LearningService {
     this.summaryStore = summaryStore;
     this.userMemoryStore = userMemoryStore;
     this.knowledgeStore = knowledgeStore;
-    this.intelligenceStore = intelligenceStore;
     this.recommendationService = recommendationService;
   }
 
@@ -298,16 +292,10 @@ public class LearningService {
   private List<Map<String, Object>> loadKnowledge(
       String regionId, String industryId, String membershipLevel) {
     // DataScope 用于筛选已审核情报，静态知识由 KnowledgeStore 按地域/行业过滤。
-    DataScope scope = new DataScope(regionId, industryId, membershipLevel, false);
     List<KnowledgeItem> knowledgeItems = knowledgeStore.listScoped(regionId, industryId);
-    List<IntelligenceItem> intelligenceItems = intelligenceStore.listApprovedScoped(scope);
-
-    List<Map<String, Object>> combined = new ArrayList<>();
+    List<Map<String, Object>> combined = new ArrayList<>(knowledgeItems.size());
     for (KnowledgeItem item : knowledgeItems) {
       combined.add(knowledgeToMap(item));
-    }
-    for (IntelligenceItem item : intelligenceItems) {
-      combined.add(intelligenceToMap(item));
     }
     return combined;
   }
@@ -375,7 +363,7 @@ public class LearningService {
     return ids;
   }
 
-  private Map<String, Object> intelligenceToMap(IntelligenceItem item) {
+  /* private Map<String, Object> intelligenceToMap(IntelligenceItem item) {
     // 运营情报使用 intel- 前缀，权重和置信度来自审核结果。
     Map<String, Object> map = new LinkedHashMap<>();
     map.put("id", "intel-" + item.id());
@@ -395,6 +383,7 @@ public class LearningService {
 
   // 响应映射。
 
+  */
   private List<Map<String, Object>> toSourceMaps(DiagnoseResponse response) {
     // 复用 DiagnoseResponse 的来源结构，前端可统一展示学习和诊断引用。
     if (response.sources() == null) return List.of();

@@ -87,16 +87,6 @@ export type LoginProfile = {
 
 export type AppLocale = "zh-CN" | "en";
 
-export type PaidIntelligence = {
-  id: number;
-  title: string;
-  status: string;
-  sourceId: string;
-  regionId: string;
-  industryId: string;
-  entitlement: "PAID";
-};
-
 export type DiagnosisReport = {
   format: "PDF";
   question: string;
@@ -414,14 +404,6 @@ export async function streamDiagnosisEvents(
 
 export async function streamDiagnosis(conversationId: number, question: string) {
   return streamDiagnosisEvents(conversationId, question);
-}
-
-export async function fetchPaidIntelligence() {
-  const response = await fetch(`${API_BASE}/paid-intelligence`, {
-    headers: authHeaders()
-  });
-  const envelope = await readProtectedEnvelope<PaidIntelligence[]>(response, "Fetch paid intelligence failed");
-  return envelope.data;
 }
 
 export async function fetchDiagnosisReport(question: string) {

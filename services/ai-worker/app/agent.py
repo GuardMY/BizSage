@@ -12,7 +12,7 @@ from app.rag import KnowledgeItem, search_knowledge
 from app.reasoning_checks.retry import run_with_retry, run_with_retry_stream
 
 DISCLAIMER = "免责声明：本诊断仅用于经营分析参考，不构成投资、法律或财务建议。"
-TIMELINESS = "基于V1静态基线知识和已入库情报生成。"
+TIMELINESS = "基于V1静态基线知识生成。"
 
 LLM_NOT_CONFIGURED = "LLM_NOT_CONFIGURED"
 LLM_CALL_FAILED = "LLM_CALL_FAILED"

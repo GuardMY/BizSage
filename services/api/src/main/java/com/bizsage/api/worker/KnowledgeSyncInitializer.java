@@ -1,8 +1,5 @@
 package com.bizsage.api.worker;
 
-import com.bizsage.api.governance.DataScope;
-import com.bizsage.api.intelligence.IntelligenceItem;
-import com.bizsage.api.intelligence.IntelligenceStore;
 import com.bizsage.api.knowledge.KnowledgeItem;
 import com.bizsage.api.knowledge.KnowledgeStore;
 import java.util.ArrayList;
@@ -30,15 +27,12 @@ public class KnowledgeSyncInitializer {
 
   private final AiWorkerClient aiWorkerClient;
   private final KnowledgeStore knowledgeStore;
-  private final IntelligenceStore intelligenceStore;
 
   public KnowledgeSyncInitializer(
       AiWorkerClient aiWorkerClient,
-      KnowledgeStore knowledgeStore,
-      IntelligenceStore intelligenceStore) {
+      KnowledgeStore knowledgeStore) {
     this.aiWorkerClient = aiWorkerClient;
     this.knowledgeStore = knowledgeStore;
-    this.intelligenceStore = intelligenceStore;
   }
 
   @EventListener(ApplicationReadyEvent.class)
@@ -69,7 +63,7 @@ public class KnowledgeSyncInitializer {
    *
    * <p>运营审批通过后调用，使新情报无需等待重启或批处理即可进入可检索范围。
    */
-  public void syncSingle(IntelligenceItem item) {
+  /* public void syncSingle(IntelligenceItem item) {
     if (!"APPROVED".equals(item.status())) {
       log.debug("Skipping syncSingle for non-approved intelligence #{} (status={})",
           item.id(), item.status());
@@ -87,6 +81,7 @@ public class KnowledgeSyncInitializer {
     }
   }
 
+  */
   private List<Map<String, Object>> loadAllKnowledge() {
     List<Map<String, Object>> combined = new ArrayList<>();
 
@@ -97,12 +92,6 @@ public class KnowledgeSyncInitializer {
     }
 
     // 已审批情报也使用无限制 scope，Worker 侧检索时再按用户权限过滤。
-    List<IntelligenceItem> intelligenceItems =
-        intelligenceStore.listApprovedScoped(DataScope.unrestricted());
-    for (IntelligenceItem item : intelligenceItems) {
-      combined.add(intelligenceToMap(item));
-    }
-
     return combined;
   }
 
@@ -123,7 +112,7 @@ public class KnowledgeSyncInitializer {
     return map;
   }
 
-  private Map<String, Object> intelligenceToMap(IntelligenceItem item) {
+  /* private Map<String, Object> intelligenceToMap(IntelligenceItem item) {
     Map<String, Object> map = new LinkedHashMap<>();
     map.put("id", "intel-" + item.id());
     map.put("title", item.title());
@@ -139,4 +128,5 @@ public class KnowledgeSyncInitializer {
     map.put("entitlement", item.entitlement() != null ? item.entitlement() : "FREE");
     return map;
   }
+  */
 }

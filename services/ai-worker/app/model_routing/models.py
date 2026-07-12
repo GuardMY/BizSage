@@ -10,7 +10,7 @@ class ModelTier(str, Enum):
     """Four routing tiers ordered by task complexity."""
 
     LIGHT = "LIGHT"                # classification, extraction, keyword matching
-    BALANCED = "BALANCED"          # standard Q&A, intelligence analysis
+    BALANCED = "BALANCED"          # standard Q&A and analysis
     ADVANCED = "ADVANCED"          # multi-step diagnosis, risk assessment
     TASK_SPECIFIC = "TASK_SPECIFIC"  # industry classification, NER, specialized sub-tasks
 

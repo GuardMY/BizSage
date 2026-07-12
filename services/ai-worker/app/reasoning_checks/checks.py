@@ -2,7 +2,7 @@
 
 Checks (in execution order):
 1. check_fact      — verify output aligns with retrieved evidence
-2. check_timeliness — verify output uses latest available intelligence
+2. check_timeliness — verify output uses the latest available knowledge
 3. check_region    — verify output respects user's regional context
 4. check_logic     — verify internal reasoning consistency
 5. check_compliance — enforce legal/regulatory boundaries
@@ -90,7 +90,7 @@ def check_timeliness(
     short_term_days: int = 90,
     long_term_days: int = 365,
 ) -> CheckResult:
-    """Verify output uses latest available intelligence.
+    """Verify output uses the latest available knowledge.
 
     Flags stale evidence sources based on timestamp metadata.
     """
@@ -336,7 +336,7 @@ def run_all_checks(
 
     Args:
         answer: the LLM-generated answer text.
-        evidence: list of knowledge/intelligence items used as context.
+        evidence: list of knowledge items used as context.
         region_id: user's region for cross-region validation.
         output_format: the system prompt used (for structural completeness check).
         config: optional dict of check-specific configuration overrides.

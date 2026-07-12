@@ -10,11 +10,11 @@ test("API client source normalizer preserves source details", async () => {
   assert.match(source, /confidence/);
 });
 
-test("API client exposes paid intelligence and diagnosis report helpers", async () => {
+test("API client exposes diagnosis report helpers without intelligence APIs", async () => {
   const source = readFileSync(new URL("../lib/api-client.ts", import.meta.url), "utf8");
   assert.match(source, /membershipLevel/);
-  assert.match(source, /PaidIntelligence/);
   assert.match(source, /DiagnosisReport/);
+  assert.doesNotMatch(source, /paid-intelligence/);
 });
 
 test("API client includes real diagnosis stream helpers", async () => {
@@ -63,7 +63,7 @@ test("Web page gates workspace behind a standalone login screen", async () => {
   assert.match(source, /if \(!profile\)/);
   assert.match(source, /loginScreen/);
   assert.match(source, /handleLogout/);
-  assert.match(source, /setPaidRows\(\[\]\)/);
+  assert.doesNotMatch(source, /setPaidRows/);
   assert.match(source, /setSelectedSource\(null\)/);
 });
 
@@ -164,7 +164,7 @@ test("Web page uses incremental diagnosis stream state before final refresh", as
 test("Workspace shell navigation buttons update visible workspace sections", async () => {
   const source = readFileSync(new URL("../app/components/workspace-shell.tsx", import.meta.url), "utf8");
   assert.match(source, /activeSection/);
-  assert.match(source, /setActiveSection\("intelligence"\)/);
+  assert.doesNotMatch(source, /setActiveSection\("intelligence"\)/);
   assert.match(source, /setActiveSection\("users"\)/);
   assert.match(source, /setActiveSection\("archive"\)/);
   assert.match(source, /className=\{`navItem \$\{activeSection ===/);

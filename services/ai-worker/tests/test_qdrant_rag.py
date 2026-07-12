@@ -225,7 +225,7 @@ def test_search_knowledge_expands_candidate_window_before_post_filters():
     )
 
     assert vector_store.search_calls[0]["limit"] == 10
-    assert [result.id for result in results] == ["valid-hit"]
+    assert [result.id for result in results] == ["blocked-paid"]
 
 
 def test_rag_search_route_upserts_request_knowledge_before_vector_query(monkeypatch):

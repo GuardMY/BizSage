@@ -1,9 +1,5 @@
 package com.bizsage.api.reports;
 
-import com.bizsage.api.governance.DataScope;
-import com.bizsage.api.intelligence.IntelligenceItem;
-import com.bizsage.api.intelligence.IntelligenceStore;
-import com.bizsage.api.intelligence.PaidIntelligenceStore;
 import com.bizsage.api.knowledge.KnowledgeItem;
 import com.bizsage.api.knowledge.KnowledgeStore;
 import com.bizsage.api.users.UserAccount;
@@ -25,27 +21,20 @@ public class DiagnosisReportService {
   private static final Logger log = LoggerFactory.getLogger(DiagnosisReportService.class);
 
   private final AiWorkerClient aiWorkerClient;
-  private final PaidIntelligenceStore paidIntelligenceStore;
   private final KnowledgeStore knowledgeStore;
-  private final IntelligenceStore intelligenceStore;
 
   public DiagnosisReportService(
       AiWorkerClient aiWorkerClient,
-      PaidIntelligenceStore paidIntelligenceStore,
-      KnowledgeStore knowledgeStore,
-      IntelligenceStore intelligenceStore) {
+      KnowledgeStore knowledgeStore) {
     this.aiWorkerClient = aiWorkerClient;
-    this.paidIntelligenceStore = paidIntelligenceStore;
     this.knowledgeStore = knowledgeStore;
-    this.intelligenceStore = intelligenceStore;
   }
 
   /**
    * Build a diagnosis report by delegating to the AI worker.
    *
    * <p>The worker's {@code answer} field is mapped to the report's
-   * {@code summary} field.  Paid intelligence sources are appended
-   * after the worker's knowledge sources.
+   * {@code summary} field.
    *
    * @throws AiWorkerException if the worker is unavailable or LLM is not configured
    */
@@ -91,18 +80,6 @@ public class DiagnosisReportService {
       }
     }
 
-    // 5. Append paid intelligence sources
-    paidIntelligenceStore.listFor(user).stream()
-        .filter(item -> item.status().equals("APPROVED"))
-        .map(item -> new ReportSource(
-            "paid-" + item.id(),
-            item.title(),
-            item.url(),
-            item.sourceId(),
-            item.confidence(),
-            item.entitlement()))
-        .forEach(sources::add);
-
     // 6. Worker's "answer" → report's "summary" (stable mapping)
     return new DiagnosisReport(
         "PDF",
@@ -132,17 +109,10 @@ public class DiagnosisReportService {
 
   private List<Map<String, Object>> loadKnowledgeForReport(
       String regionId, String industryId, String membershipLevel) {
-    DataScope scope = new DataScope(regionId, industryId, membershipLevel, false);
-
     List<KnowledgeItem> knowledgeItems = knowledgeStore.listScoped(regionId, industryId);
-    List<IntelligenceItem> intelligenceItems = intelligenceStore.listApprovedScoped(scope);
-
-    List<Map<String, Object>> combined = new ArrayList<>();
+    List<Map<String, Object>> combined = new ArrayList<>(knowledgeItems.size());
     for (KnowledgeItem item : knowledgeItems) {
       combined.add(knowledgeToMap(item));
-    }
-    for (IntelligenceItem item : intelligenceItems) {
-      combined.add(intelligenceToMap(item));
     }
     return combined;
   }
@@ -162,7 +132,7 @@ public class DiagnosisReportService {
     return map;
   }
 
-  private Map<String, Object> intelligenceToMap(IntelligenceItem item) {
+  /* private Map<String, Object> intelligenceToMap(IntelligenceItem item) {
     Map<String, Object> map = new LinkedHashMap<>();
     map.put("id", "intel-" + item.id());
     map.put("title", item.title());
@@ -176,4 +146,5 @@ public class DiagnosisReportService {
     map.put("entitlement", "FREE");
     return map;
   }
+  */
 }

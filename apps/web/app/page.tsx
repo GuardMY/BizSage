@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, LogIn } from "lucide-react";
+import { LogIn } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ArchiveWorkspace } from "./components/archive-workspace";
 import { ConversationSidebar } from "./components/conversation-sidebar";
@@ -23,7 +23,6 @@ import {
   fetchMe,
   fetchConversationRecommendations,
   fetchMessages,
-  fetchPaidIntelligence,
   login,
   logout,
   streamLearningEvents,
@@ -36,7 +35,6 @@ import {
   type Diagnosis,
   type DiagnosisReport,
   type LoginProfile,
-  type PaidIntelligence,
   type RecommendationItem,
   type Source
 } from "../lib/api-client";
@@ -132,7 +130,6 @@ const messages: Record<Locale, WorkspaceMessages> = {
     languageToggle: "English",
     languageSaved: "语言偏好已保存。",
     navDiagnosis: "诊断",
-    navIntelligence: "情报",
     navUsers: "用户",
     navArchive: "归档",
     identity: "身份",
@@ -155,9 +152,6 @@ const messages: Record<Locale, WorkspaceMessages> = {
     workerError: "诊断服务发生错误。",
     needsReview: "需复核",
     insufficientEvidence: "证据不足",
-    paidTitle: "付费情报",
-    paidEmptyTitle: "无可见付费情报",
-    paidEmptyDetail: "免费用户或当前账号无匹配权益时不会显示付费数据。",
     recommendationTitle: "推荐问题",
     recommendationEmpty: "暂无推荐",
     recommendationRefresh: "刷新",
@@ -183,7 +177,6 @@ const messages: Record<Locale, WorkspaceMessages> = {
     archiveReadonly: "归档区仅展示历史消息，不支持继续提问或生成新报告。",
     selectedConversation: "当前上下文",
     noArchivedMessages: "归档会话会在这里按只读方式展示。",
-    intelligenceSummary: "围绕当前会话上下文查看可见情报。",
     usersSummary: "当前登录身份与会话上下文。",
     conversationContext: "当前工作内容围绕所选会话展开。",
     noConversationContext: "当前模块没有可用会话。"
@@ -206,7 +199,6 @@ const messages: Record<Locale, WorkspaceMessages> = {
     languageSaved: "Language preference saved.",
     navDiagnosis: "Diagnosis",
     navLearning: "Learning",
-    navIntelligence: "Intelligence",
     navUsers: "Users",
     navArchive: "Archive",
     identity: "Identity",
@@ -232,9 +224,6 @@ const messages: Record<Locale, WorkspaceMessages> = {
     workerError: "Diagnosis service encountered an error.",
     needsReview: "Needs Review",
     insufficientEvidence: "Insufficient Evidence",
-    paidTitle: "Paid Intelligence",
-    paidEmptyTitle: "No visible paid intelligence",
-    paidEmptyDetail: "Free users or accounts without matching entitlement do not see paid data.",
     recommendationTitle: "Recommended questions",
     recommendationEmpty: "No recommendations yet",
     recommendationRefresh: "Refresh",
@@ -266,7 +255,6 @@ const messages: Record<Locale, WorkspaceMessages> = {
     archiveReadonly: "The archive view is read-only. Continue diagnosis and report generation from an active conversation.",
     selectedConversation: "Current context",
     noArchivedMessages: "Archived conversations appear here in read-only mode.",
-    intelligenceSummary: "Review visible intelligence in the context of the selected conversation.",
     usersSummary: "Current sign-in identity and conversation context.",
     conversationContext: "The active workspace follows the selected conversation.",
     noConversationContext: "No conversation is available for this module."
@@ -289,7 +277,6 @@ export default function Home() {
   const [streamingLearning, setStreamingLearning] = useState<Diagnosis | null>(null);
   const [report, setReport] = useState<DiagnosisReport | null>(null);
   const [reportBusy, setReportBusy] = useState(false);
-  const [paidRows, setPaidRows] = useState<PaidIntelligence[]>([]);
   const [recommendationRows, setRecommendationRows] = useState<RecommendationItem[]>([]);
   const [selectedSource, setSelectedSource] = useState<Source | null>(null);
   const [busy, setBusy] = useState(false);
@@ -316,7 +303,6 @@ export default function Home() {
 
   useEffect(() => {
     if (!profile) {
-      setPaidRows([]);
       setConversations([]);
       setMessageHistory([]);
       setSelectedConversationId(null);
@@ -327,12 +313,9 @@ export default function Home() {
     }
 
     let cancelled = false;
-    Promise.allSettled([
-      fetchPaidIntelligence(),
-      fetchConversations(),
-    ]).then(([nextPaidRows, nextConversations]) => {
+    Promise.allSettled([fetchConversations()]).then(([nextConversations]) => {
       if (cancelled) return;
-      const failures = [nextPaidRows, nextConversations].filter(
+      const failures = [nextConversations].filter(
         (result): result is PromiseRejectedResult => result.status === "rejected"
       );
       if (failures.some((result) => result.reason instanceof AuthExpiredError)) {
@@ -340,7 +323,6 @@ export default function Home() {
         return;
       }
 
-      setPaidRows(nextPaidRows.status === "fulfilled" ? nextPaidRows.value : []);
       // V2: Paginated response — extract items array
       setConversations(nextConversations.status === "fulfilled" ? nextConversations.value.items : []);
     });
@@ -447,7 +429,6 @@ export default function Home() {
     setStreamingLearning(null);
     setReport(null);
     setSelectedConversationId(null);
-    setPaidRows([]);
     setRecommendationRows([]);
     setSelectedSource(null);
     setReportBusy(false);
@@ -465,7 +446,6 @@ export default function Home() {
     setStreamingLearning(null);
     setReport(null);
     setSelectedConversationId(null);
-    setPaidRows([]);
     setRecommendationRows([]);
     setSelectedSource(null);
     setReportBusy(false);
@@ -828,7 +808,7 @@ export default function Home() {
         t={t}
       >
         {activeSection === "diagnosis" && (
-          <DiagnosisWorkspace
+      <DiagnosisWorkspace
             busy={busy}
             diagnosis={diagnosis}
             message={message}
@@ -840,7 +820,6 @@ export default function Home() {
             onRefreshRecommendations={handleRefreshRecommendations}
             onUseRecommendation={handleUseRecommendation}
             onSubmitDiagnosis={submitDiagnosis}
-            paidRows={paidRows}
             recommendationRows={recommendationRows}
             report={report}
             reportBusy={reportBusy}
@@ -865,29 +844,6 @@ export default function Home() {
             streamingDiagnosis={streamingLearning}
             t={t}
           />
-        )}
-
-        {activeSection === "intelligence" && (
-          <div className="workspacePanelGrid simpleGrid">
-            <section className="workspaceCard">
-              <div className="sectionHead">
-                <div className="sectionCopy">
-                  <h2>{t.navIntelligence}</h2>
-                  <p>{selectedConversation ? t.intelligenceSummary : t.noConversationContext}</p>
-                </div>
-              </div>
-              <div className="table">
-                {paidRows.length === 0 && <SimpleEmptyCard title={t.paidEmptyTitle} detail={t.paidEmptyDetail} />}
-                {paidRows.map((row) => (
-                  <div className="row" key={row.id}>
-                    <strong>{row.title}</strong>
-                    <span>{row.status}</span>
-                    <small>{row.entitlement} / {row.regionId} / {row.industryId}</small>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
         )}
 
         {activeSection === "users" && (
@@ -939,14 +895,4 @@ export default function Home() {
 
 function normalizeLocale(value: string | undefined): Locale {
   return value === "en" ? "en" : "zh-CN";
-}
-
-function SimpleEmptyCard({ detail, title }: { detail: string; title: string }) {
-  return (
-    <div className="emptyRow">
-      <FileText size={28} />
-      <strong>{title}</strong>
-      <small>{detail}</small>
-    </div>
-  );
 }

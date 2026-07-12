@@ -43,17 +43,8 @@ public class GrayReleaseProperties {
   }
 
   public static class Features {
-    private FeatureConfig paidIntelligence = new FeatureConfig(true, 10, List.of("SEED_PAID", "INTERNAL"));
     private FeatureConfig pdfExport = new FeatureConfig(true, 10, List.of("SEED_PAID", "INTERNAL"));
     private FeatureConfig advancedRag = new FeatureConfig(false, 0, List.of());
-
-    public FeatureConfig getPaidIntelligence() {
-      return paidIntelligence;
-    }
-
-    public void setPaidIntelligence(FeatureConfig paidIntelligence) {
-      this.paidIntelligence = paidIntelligence;
-    }
 
     public FeatureConfig getPdfExport() {
       return pdfExport;

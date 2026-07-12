@@ -52,12 +52,6 @@ bizsage:
     support-window: ${GRAY_RELEASE_SUPPORT_WINDOW:09:00-21:00 Asia/Shanghai}
     # V2: Per-feature gray-release flags
     features:
-      paid-intelligence:
-        enabled: true
-        traffic-percent: 10
-        allowed-memberships:
-          - SEED_PAID
-          - INTERNAL
       pdf-export:
         enabled: true
         traffic-percent: 10

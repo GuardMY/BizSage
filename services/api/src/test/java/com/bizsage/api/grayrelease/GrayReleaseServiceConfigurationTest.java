@@ -20,10 +20,6 @@ class GrayReleaseServiceConfigurationTest {
   void standardMembershipListsBindWithoutSpelParsing() {
     contextRunner
         .withPropertyValues(
-            "bizsage.gray-release.features.paid-intelligence.enabled=true",
-            "bizsage.gray-release.features.paid-intelligence.traffic-percent=10",
-            "bizsage.gray-release.features.paid-intelligence.allowed-memberships[0]=SEED_PAID",
-            "bizsage.gray-release.features.paid-intelligence.allowed-memberships[1]=INTERNAL",
             "bizsage.gray-release.features.pdf-export.enabled=true",
             "bizsage.gray-release.features.pdf-export.traffic-percent=10",
             "bizsage.gray-release.features.pdf-export.allowed-memberships[0]=SEED_PAID",
@@ -34,17 +30,10 @@ class GrayReleaseServiceConfigurationTest {
           assertThat(context).hasSingleBean(GrayReleaseService.class);
           GrayReleaseService service = context.getBean(GrayReleaseService.class);
 
-          UserAccount paidUser = new UserAccount(
-              1L, "seed_paid", "password", Role.USER, null, null,
-              "cn-default", "general", "SEED_PAID", "cashflow,inventory");
           UserAccount freeUser = new UserAccount(
               2L, "user", "password", Role.USER, null, null,
               "cn-default", "general", "FREE", "cashflow");
 
-          assertThat(service.isFeatureEnabled(GrayReleaseService.FEATURE_PAID_INTELLIGENCE, paidUser))
-              .isTrue();
-          assertThat(service.getTrafficPercentage(GrayReleaseService.FEATURE_PAID_INTELLIGENCE))
-              .isEqualTo(10);
           assertThat(service.isFeatureEnabled(GrayReleaseService.FEATURE_ADVANCED_RAG, freeUser))
               .isFalse();
         });

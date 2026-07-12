@@ -26,7 +26,6 @@ public class GrayReleaseService {
   private static final Logger log = LoggerFactory.getLogger(GrayReleaseService.class);
 
   /** Feature keys for the three V2 guarded features. */
-  public static final String FEATURE_PAID_INTELLIGENCE = "paid-intelligence";
   public static final String FEATURE_PDF_EXPORT = "pdf-export";
   public static final String FEATURE_ADVANCED_RAG = "advanced-rag";
 
@@ -36,22 +35,18 @@ public class GrayReleaseService {
 
   public GrayReleaseService(GrayReleaseProperties properties) {
     GrayReleaseProperties.Features features = properties.getFeatures();
-    GrayReleaseProperties.FeatureConfig paidIntelligence = features.getPaidIntelligence();
     GrayReleaseProperties.FeatureConfig pdfExport = features.getPdfExport();
     GrayReleaseProperties.FeatureConfig advancedRag = features.getAdvancedRag();
 
     this.featureEnabled = Map.of(
-        FEATURE_PAID_INTELLIGENCE, paidIntelligence.isEnabled(),
         FEATURE_PDF_EXPORT, pdfExport.isEnabled(),
         FEATURE_ADVANCED_RAG, advancedRag.isEnabled());
 
     this.featureTrafficPercent = Map.of(
-        FEATURE_PAID_INTELLIGENCE, paidIntelligence.getTrafficPercent(),
         FEATURE_PDF_EXPORT, pdfExport.getTrafficPercent(),
         FEATURE_ADVANCED_RAG, advancedRag.getTrafficPercent());
 
     this.featureAllowedMemberships = Map.of(
-        FEATURE_PAID_INTELLIGENCE, paidIntelligence.getAllowedMemberships(),
         FEATURE_PDF_EXPORT, pdfExport.getAllowedMemberships(),
         FEATURE_ADVANCED_RAG, advancedRag.getAllowedMemberships());
   }

@@ -111,48 +111,6 @@ CREATE TABLE IF NOT EXISTS user_memory_embeddings (
   INDEX idx_user_memory_embeddings_user (user_id, status)
 );
 
-CREATE TABLE IF NOT EXISTS intelligence (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  title VARCHAR(255) NOT NULL,
-  content TEXT NOT NULL,
-  url VARCHAR(1024) NULL,
-  status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
-  confidence DECIMAL(8,4) NOT NULL DEFAULT 0.6000,
-  link_id VARCHAR(64) NOT NULL,
-  region_id VARCHAR(64) NOT NULL,
-  industry_id VARCHAR(64) NOT NULL,
-  source_id VARCHAR(64) NOT NULL,
-  weight DECIMAL(8,4) NOT NULL DEFAULT 0.6000,
-  content_hash VARCHAR(64) NOT NULL,
-  sim_hash BIGINT NULL,
-  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_intelligence_status (status),
-  INDEX idx_intelligence_scope (industry_id, region_id),
-  UNIQUE KEY uk_intelligence_hash (content_hash)
-);
-
-CREATE TABLE IF NOT EXISTS paid_intelligence (
-  id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  title VARCHAR(255) NOT NULL,
-  content TEXT NOT NULL,
-  url VARCHAR(1024) NULL,
-  status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
-  confidence DECIMAL(8,4) NOT NULL DEFAULT 0.7500,
-  entitlement VARCHAR(32) NOT NULL DEFAULT 'PAID',
-  link_id VARCHAR(64) NOT NULL,
-  region_id VARCHAR(64) NOT NULL,
-  industry_id VARCHAR(64) NOT NULL,
-  source_id VARCHAR(64) NOT NULL,
-  weight DECIMAL(8,4) NOT NULL DEFAULT 0.9000,
-  content_hash VARCHAR(64) NULL,
-  sim_hash BIGINT NULL,
-  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_paid_intelligence_status (status),
-  INDEX idx_paid_intelligence_scope (industry_id, region_id, entitlement)
-);
-
 CREATE TABLE IF NOT EXISTS knowledge_items (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   title VARCHAR(255) NOT NULL,

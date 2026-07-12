@@ -1,6 +1,6 @@
 import type { Conversation } from "./api-client";
 
-export type WorkspaceSection = "diagnosis" | "learning" | "intelligence" | "users" | "archive";
+export type WorkspaceSection = "diagnosis" | "learning" | "users" | "archive";
 
 export type ConversationSidebarDescriptor = {
   titleKey: "diagnosisConversationList" | "archiveConversationList";

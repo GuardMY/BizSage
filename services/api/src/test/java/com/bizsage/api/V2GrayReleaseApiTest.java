@@ -108,41 +108,6 @@ class V2GrayReleaseApiTest {
       .andExpect(jsonPath("$.data.preferredLocale").value("zh-CN"));
   }
 
-  @Test
-  void paidIntelligenceIsHiddenFromFreeUsersAndVisibleToSeedPaidUsers() throws Exception {
-    String paidToken = login("seed_paid");
-    String freeToken = login("user");
-
-    mvc.perform(get("/api/paid-intelligence").header("Authorization", "Bearer " + freeToken))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data").isEmpty());
-
-    mvc.perform(get("/api/paid-intelligence").header("Authorization", "Bearer " + paidToken))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data[?(@.title == 'Seed paid rent benchmark')]").isNotEmpty());
-  }
-
-  @Test
-  void diagnosisReportExcludesPaidEvidenceForFreeUsersAndIncludesItForPaidUsers() throws Exception {
-    String paidToken = login("seed_paid");
-    String freeToken = login("user");
-
-    mvc.perform(get("/api/reports/diagnosis")
-        .header("Authorization", "Bearer " + freeToken)
-        .param("question", "cashflow"))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.format").value("PDF"))
-      .andExpect(jsonPath("$.data.sources[?(@.entitlement == 'PAID')]").isEmpty())
-      .andExpect(jsonPath("$.data.selfCheckStatus").value("PASSED"))
-      .andExpect(jsonPath("$.data.disclaimer").isNotEmpty());
-
-    mvc.perform(get("/api/reports/diagnosis")
-        .header("Authorization", "Bearer " + paidToken)
-        .param("question", "cashflow"))
-      .andExpect(status().isOk())
-      .andExpect(jsonPath("$.data.sources[?(@.entitlement == 'PAID')]").isNotEmpty());
-  }
-
   private String login(String username) throws Exception {
     String response = mvc.perform(post("/api/auth/login")
         .contentType(MediaType.APPLICATION_JSON)
