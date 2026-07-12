@@ -201,7 +201,8 @@ test("Conversation sidebar uses explicit icon buttons for archive and delete act
 test("Workspace shell renders compact two-line identity metadata", async () => {
   const shell = readFileSync(new URL("../app/components/workspace-shell.tsx", import.meta.url), "utf8");
   assert.match(shell, /<strong>\{profile\.username\}<\/strong>/);
-  assert.match(shell, /<small>\{profile\.role\} \/ \{profile\.membershipLevel\} \/ \{profile\.regionId\} \/ \{profile\.industryId\}<\/small>/);
+  assert.match(shell, /roleLabel\(profile\.role\).*membershipLabel\(profile\.membershipLevel\).*regionLabel\(profile\.regionId\)/);
+  assert.match(shell, /<select[\s\S]*className="industrySelect"[\s\S]*onIndustryChange/);
   assert.doesNotMatch(shell, /<small>\{profile\.role\} \/ \{profile\.membershipLevel\}<\/small>\s*<small>\{profile\.regionId\} \/ \{profile\.industryId\}<\/small>/);
 });
 

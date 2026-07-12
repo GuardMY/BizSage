@@ -1,11 +1,16 @@
 import { Archive, BookOpen, Bot, Languages, LogOut, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
+import type { UserIndustry } from "../../lib/api-client";
 import type { LoginProfile, WorkspaceMessages, WorkspaceSection } from "./workspace-types";
+import { industryLabel, membershipLabel, regionLabel, roleLabel } from "../../lib/scope-labels";
 
 type WorkspaceShellProps = {
   activeSection: WorkspaceSection;
+  availableIndustries: UserIndustry[];
   children: ReactNode;
+  currentIndustryId: string;
   onLogout: () => void;
+  onIndustryChange: (industryId: string) => void;
   onToggleLocale: () => void;
   profile: LoginProfile;
   setActiveSection: (section: WorkspaceSection) => void;
@@ -16,8 +21,11 @@ type WorkspaceShellProps = {
 
 export function WorkspaceShell({
   activeSection,
+  availableIndustries,
   children,
+  currentIndustryId,
   onLogout,
+  onIndustryChange,
   onToggleLocale,
   profile,
   setActiveSection,
@@ -78,9 +86,24 @@ export function WorkspaceShell({
             <section className="topbarIdentity" aria-label={t.identity}>
               <div className="topbarIdentityCopy">
                 <strong>{profile.username}</strong>
-                <small>{profile.role} / {profile.membershipLevel} / {profile.regionId} / {profile.industryId}</small>
+                <small>{roleLabel(profile.role)} / {membershipLabel(profile.membershipLevel)} / {regionLabel(profile.regionId)}</small>
               </div>
               <div className="topbarIdentityActions">
+                {availableIndustries.length > 0 && (
+                  <select
+                    aria-label="当前行业"
+                    className="industrySelect"
+                    value={availableIndustries.some((industry) => industry.industryId === currentIndustryId) ? currentIndustryId : ""}
+                    onChange={(event) => onIndustryChange(event.target.value)}
+                  >
+                    <option value="" disabled>选择行业</option>
+                    {availableIndustries.map((industry) => (
+                      <option key={industry.industryId} value={industry.industryId}>
+                        {industryLabel(industry.industryId, industry.industryName)}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <button className="languageButton" onClick={onToggleLocale} type="button">
                   <Languages size={16} />
                   {t.languageToggle}

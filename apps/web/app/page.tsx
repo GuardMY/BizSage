@@ -9,6 +9,7 @@ import { LearningWorkspace } from "./components/learning-workspace";
 import { IndustryWelcome } from "./components/industry-welcome";
 import { WorkspaceShell } from "./components/workspace-shell";
 import type { WorkspaceMessages, WorkspaceSection } from "./components/workspace-types";
+import { industryLabel, membershipLabel, regionLabel, roleLabel } from "../lib/scope-labels";
 import {
   conversationModeForSection,
   nextSelectionAfterArchive,
@@ -337,10 +338,16 @@ export default function Home() {
       }
 
       // V2: Paginated response — extract items array
-      setConversations(nextConversations.status === "fulfilled" ? nextConversations.value.items : []);
+      const loadedConversations = nextConversations.status === "fulfilled" ? nextConversations.value.items : [];
+      setConversations(loadedConversations);
       if (nextIndustries.status === "fulfilled") {
         setIndustries(nextIndustries.value);
-        setSelectedIndustryId(nextIndustries.value[0]?.industryId ?? profile.industryId ?? "");
+        const usedIndustryIds = new Set(loadedConversations.map((conversation) => conversation.industryId));
+        setSelectedIndustryId(
+          usedIndustryIds.has(profile.industryId)
+            ? profile.industryId
+            : loadedConversations[0]?.industryId ?? nextIndustries.value[0]?.industryId ?? profile.industryId ?? ""
+        );
       }
     });
 
@@ -349,14 +356,26 @@ export default function Home() {
     };
   }, [profile, t.sessionExpired]);
 
+  const currentIndustryConversations = useMemo(
+    () => selectedIndustryId
+      ? conversations.filter((conversation) => conversation.industryId === selectedIndustryId)
+      : conversations,
+    [conversations, selectedIndustryId]
+  );
+
+  const availableIndustries = useMemo(() => {
+    const usedIndustryIds = new Set(conversations.map((conversation) => conversation.industryId));
+    return industries.filter((industry) => usedIndustryIds.has(industry.industryId));
+  }, [conversations, industries]);
+
   const workspaceSelection = useMemo(
     () =>
       resolveWorkspaceSelection({
         section: activeSection,
         selectedConversationId,
-        conversations
+        conversations: currentIndustryConversations
       }),
-    [activeSection, selectedConversationId, conversations]
+    [activeSection, currentIndustryConversations, selectedConversationId]
   );
 
   useEffect(() => {
@@ -494,6 +513,13 @@ export default function Home() {
     resetConversationOutputs();
   }
 
+  function handleIndustryChange(industryId: string) {
+    if (industryId === selectedIndustryId) return;
+    setSelectedIndustryId(industryId);
+    setSelectedConversationId(null);
+    resetConversationOutputs();
+  }
+
   function handleSectionChange(section: WorkspaceSection) {
     const currentMode = conversationModeForSection(activeSection);
     if (currentMode) {
@@ -505,7 +531,7 @@ export default function Home() {
       const nextSelection = resolveWorkspaceSelection({
         section,
         selectedConversationId: lastConversationByMode.current[nextMode],
-        conversations
+        conversations: currentIndustryConversations
       });
       setSelectedConversationId(nextSelection.selectedConversationId);
       lastConversationByMode.current[nextMode] = nextSelection.selectedConversationId;
@@ -528,6 +554,7 @@ export default function Home() {
       const created = await createConversation(t.newConversationTitle, industryId || profile.industryId);
       const mode = conversationModeForSection(activeSection);
       const modeCreated = mode ? { ...created, agentMode: mode === "learning" ? "LEARNING" : "DIAGNOSIS" } : created;
+      setSelectedIndustryId(created.industryId);
       setConversations((previous) => [modeCreated, ...previous]);
       if (mode) lastConversationByMode.current[mode] = created.id;
       setSelectedConversationId(created.id);
@@ -553,7 +580,7 @@ export default function Home() {
       setSelectedConversationId(
         nextSelectionAfterArchive({
           selectedConversationId: selectedConversation.id,
-          conversations: updatedConversations,
+          conversations: updatedConversations.filter((conversation) => conversation.industryId === selectedIndustryId),
           mode: conversationModeForSection(activeSection) ?? undefined
         })
       );
@@ -580,7 +607,7 @@ export default function Home() {
       setSelectedConversationId(
         nextSelectionAfterArchive({
           selectedConversationId: conversationId,
-          conversations: updatedConversations,
+          conversations: updatedConversations.filter((conversation) => conversation.industryId === selectedIndustryId),
           mode: conversationModeForSection(activeSection) ?? undefined
         })
       );
@@ -607,7 +634,7 @@ export default function Home() {
       setSelectedConversationId(resolveWorkspaceSelection({
         section: activeSection,
         selectedConversationId: conversationId,
-        conversations: updatedConversations
+        conversations: updatedConversations.filter((conversation) => conversation.industryId === selectedIndustryId)
       }).selectedConversationId);
       if (selectedConversation?.id === conversationId) {
         resetConversationOutputs();
@@ -636,9 +663,10 @@ export default function Home() {
     setReport(null);
 
     try {
-      const created = selectedConversationId ? null : await createConversation(t.newConversationTitle);
+      const created = selectedConversationId ? null : await createConversation(t.newConversationTitle, selectedIndustryId || profile.industryId);
       const conversationId = selectedConversationId ?? created!.id;
       if (created) {
+        setSelectedIndustryId(created.industryId);
         setSelectedConversationId(conversationId);
         setConversations((previous) => [created, ...previous]);
       }
@@ -723,9 +751,10 @@ export default function Home() {
     setReport(null);
 
     try {
-      const created = selectedConversationId ? null : await createConversation(t.newConversationTitle);
+      const created = selectedConversationId ? null : await createConversation(t.newConversationTitle, selectedIndustryId || profile.industryId);
       const conversationId = selectedConversationId ?? created!.id;
       if (created) {
+        setSelectedIndustryId(created.industryId);
         setSelectedConversationId(conversationId);
         setConversations((previous) => [created, ...previous]);
       }
@@ -867,8 +896,11 @@ export default function Home() {
     <>
       <WorkspaceShell
         activeSection={activeSection}
+        availableIndustries={availableIndustries}
         onLogout={handleLogout}
         onToggleLocale={toggleLocale}
+        onIndustryChange={handleIndustryChange}
+        currentIndustryId={selectedIndustryId}
         profile={profile}
         setActiveSection={handleSectionChange}
         sidebar={
@@ -954,8 +986,8 @@ export default function Home() {
               <div className="table">
                 <div className="row">
                   <strong>{profile.username}</strong>
-                  <span>{profile.role}</span>
-                  <small>{profile.membershipLevel} / {profile.regionId} / {profile.industryId}</small>
+                  <span>{roleLabel(profile.role)}</span>
+                  <small>{membershipLabel(profile.membershipLevel)} / {regionLabel(profile.regionId)} / {industryLabel(profile.industryId)}</small>
                 </div>
                 <div className="row industryManager">
                   <strong>{locale === "zh-CN" ? "我的行业" : "My industries"}</strong>

@@ -1,5 +1,6 @@
 import { Archive, FilePlus2, MessageSquareMore, Trash2 } from "lucide-react";
 import { describeConversationSidebar, partitionArchivedConversations } from "../../lib/conversation-workspace";
+import { regionLabel } from "../../lib/scope-labels";
 import type { Conversation, WorkspaceMessages, WorkspaceSection } from "./workspace-types";
 
 type ConversationSidebarProps = {
@@ -75,7 +76,7 @@ export function ConversationSidebar({
             >
               <span className="conversationItemBody">
                 <strong>{conversation.title}</strong>
-                <small>{conversation.regionId} / {conversation.industryId}</small>
+                <small>{regionLabel(conversation.regionId)}</small>
               </span>
             </button>
             <span className="conversationItemActions">

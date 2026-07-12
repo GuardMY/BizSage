@@ -452,6 +452,17 @@ small {
   flex-wrap: wrap;
 }
 
+.industrySelect {
+  min-width: 128px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--ink);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 12px;
+}
+
 .workspaceScroll {
   min-height: 0;
   overflow-y: auto;

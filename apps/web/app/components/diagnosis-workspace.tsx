@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Archive, Eye, FileText, Flag, Focus, LayoutList, LockKeyhole, RefreshCcw, Search, Send } from "lucide-react";
 import { useEffect, useRef } from "react";
 import Markdown from "../../lib/markdown";
+import { industryLabel } from "../../lib/scope-labels";
 import type {
   Conversation,
   ConversationMessage,
@@ -241,7 +242,7 @@ function RailSection({
         ) : items.map((row) => (
           <div className="row" key={row.id}>
             <strong>{row.questionText}</strong>
-            {row.industryId && <span>{row.industryId}</span>}
+            {row.industryId && <span>{industryLabel(row.industryId)}</span>}
             <span>{row.category}</span>
             <small>{row.sourceType} / {row.score.toFixed(2)} / {row.usageCount}</small>
             <button className="ghost" onClick={() => onUseRecommendation(row)} type="button">
