@@ -231,6 +231,23 @@ public class AiWorkerClient {
     }
   }
 
+  @SuppressWarnings("unchecked")
+  public List<Map<String, Object>> searchIndustries(String query, List<Map<String, Object>> industries) {
+    Map<String, Object> body = new LinkedHashMap<>();
+    body.put("query", query);
+    body.put("industries", industries);
+    Map<String, Object> response = restClient.post()
+        .uri("/industry/search")
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(body)
+        .retrieve()
+        .body(Map.class);
+    if (response != null && response.get("results") instanceof List<?> results) {
+      return (List<Map<String, Object>>) results;
+    }
+    return List.of();
+  }
+
   // 学习 Agent。
 
   /**

@@ -25,6 +25,7 @@ import {
   fetchMe,
   fetchUserIndustries,
   addUserIndustry,
+  searchIndustries,
   fetchConversationRecommendations,
   fetchMessages,
   login,
@@ -893,6 +894,7 @@ export default function Home() {
             onSelect={setSelectedIndustryId}
             onCustomNameChange={setCustomIndustryName}
             onAddCustom={addCustomIndustry}
+            onSearch={searchIndustries}
             onStart={() => handleNewConversation()}
             busy={busy}
             title={locale === "zh-CN" ? "开始经营诊断" : "Start your business diagnosis"}

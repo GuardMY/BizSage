@@ -303,6 +303,16 @@ export async function addUserIndustry(name: string, industryId?: string) {
   return envelope.data;
 }
 
+export async function searchIndustries(query: string) {
+  const response = await fetch(`${API_BASE}/user/industries/search`, {
+    method: "POST", headers: authHeaders(), credentials: "include",
+    body: JSON.stringify({ query })
+  });
+  const envelope = await readProtectedEnvelope<Array<{ industryId: string; industryName: string; score: number }>>(
+    response, "Search industries failed");
+  return envelope.data;
+}
+
 export async function fetchConversationRecommendations(conversationId: number) {
   const response = await fetch(`${API_BASE}/conversations/${conversationId}/recommendations`, {
     headers: authHeaders(),

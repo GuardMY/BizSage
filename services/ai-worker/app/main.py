@@ -61,6 +61,11 @@ class SearchRequest(BaseModel):
     membership_level: str = "FREE"
 
 
+class IndustrySearchRequest(BaseModel):
+    query: str
+    industries: list[dict] = Field(default_factory=list)
+
+
 class CompressConfigRequest(BaseModel):
     total_token_budget: int = 2400
     min_chars_per_item: int = 80
@@ -163,6 +168,45 @@ def search(request: SearchRequest) -> dict:
         }
     finally:
         cleanup_request_collection(vector_store, request_knowledge)
+
+
+@app.post("/industry/search")
+def search_industries(request: IndustrySearchRequest) -> dict:
+    """Use the persistent Qdrant industry collection for semantic industry lookup."""
+    if not request.query.strip() or not request.industries:
+        return {"results": []}
+
+    industry_items = [
+        KnowledgeItem(
+            id=f"industry-{item.get('id')}",
+            title=str(item.get("name") or item.get("id") or ""),
+            content=str(item.get("content") or item.get("name") or ""),
+            source_url="",
+            source_id="industry-catalog",
+            weight=1.0,
+            confidence=1.0,
+            industry_id=str(item.get("id") or ""),
+            region_id="cn-default",
+        )
+        for item in request.industries
+        if item.get("id") and item.get("name")
+    ]
+    vector_store = build_vector_store("bizsage_industries")
+    vector_store.upsert_knowledge(industry_items)
+    results = search_knowledge(
+        request.query,
+        industry_items,
+        limit=20,
+        vector_store=vector_store,
+        restrict_to_knowledge_ids=True,
+    )
+    return {
+        "results": [
+            {"industry_id": item.id.removeprefix("industry-"),
+             "industry_name": item.title, "score": item.score}
+            for item in results
+        ]
+    }
 
 
 @app.post("/knowledge/sync")

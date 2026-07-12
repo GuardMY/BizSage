@@ -954,6 +954,19 @@ dd {
   gap: 9px;
   justify-content: center;
 }
+.industrySearch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 430px;
+  margin: 0 auto 16px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+}
+.industrySearch input { flex: 1; min-width: 0; border: 0; padding: 0; outline: 0; }
 .industryChoice {
   border: 1px solid var(--line);
   background: #fff;
