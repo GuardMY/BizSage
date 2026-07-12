@@ -38,6 +38,20 @@ test("ignores deleted conversations in workspace partitions", async () => {
   assert.deepEqual(result.archived.map((item) => item.id), [5]);
 });
 
+test("separates archived diagnosis and learning conversations", async () => {
+  const { partitionArchivedConversations } = await import(workspaceModule);
+  const conversations = [
+    { id: 9, title: "Archived learning", status: "ARCHIVED", agentMode: "LEARNING", regionId: "cn", industryId: "retail" },
+    { id: 7, title: "Archived diagnosis", status: "ARCHIVED", agentMode: "DIAGNOSIS", regionId: "cn", industryId: "retail" },
+    { id: 5, title: "Legacy diagnosis", status: "ARCHIVED", regionId: "cn", industryId: "retail" }
+  ];
+
+  const result = partitionArchivedConversations(conversations);
+
+  assert.deepEqual(result.diagnosis.map((item) => item.id), [7, 5]);
+  assert.deepEqual(result.learning.map((item) => item.id), [9]);
+});
+
 test("resolves visible conversations and keeps active selection inside non-archive sections", async () => {
   const { resolveWorkspaceSelection } = await import(workspaceModule);
   const conversations = [

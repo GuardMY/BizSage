@@ -1,5 +1,5 @@
 import { Archive, FilePlus2, MessageSquareMore, Trash2 } from "lucide-react";
-import { describeConversationSidebar } from "../../lib/conversation-workspace";
+import { describeConversationSidebar, partitionArchivedConversations } from "../../lib/conversation-workspace";
 import type { Conversation, WorkspaceMessages, WorkspaceSection } from "./workspace-types";
 
 type ConversationSidebarProps = {
@@ -27,6 +27,13 @@ export function ConversationSidebar({
   const title = t[sidebar.titleKey];
   const showArchiveAction = sidebar.actionKey === "archiveConversation";
   const showDeleteAction = sidebar.actionKey === "deleteConversation";
+  const archivedGroups = partitionArchivedConversations(conversations);
+  const conversationGroups = activeSection === "archive"
+    ? [
+        { label: t.diagnosisConversation, items: archivedGroups.diagnosis },
+        { label: t.learningConversation, items: archivedGroups.learning }
+      ]
+    : [{ label: null, items: conversations }];
 
   return (
     <section className="conversationSidebar" aria-label={title}>
@@ -53,7 +60,10 @@ export function ConversationSidebar({
           </div>
         )}
 
-        {conversations.map((conversation) => (
+        {conversationGroups.map((group) => group.items.length > 0 && (
+          <div key={group.label ?? "conversations"} className="conversationGroup">
+            {group.label && <h3 className="conversationGroupTitle">{group.label}</h3>}
+            {group.items.map((conversation) => (
           <div
             key={conversation.id}
             className={`conversationItem ${conversation.id === selectedConversationId ? "active" : ""}`}
@@ -96,6 +106,8 @@ export function ConversationSidebar({
                 </button>
               )}
             </span>
+          </div>
+            ))}
           </div>
         ))}
       </div>

@@ -195,6 +195,7 @@ test("Conversation sidebar uses explicit icon buttons for archive and delete act
   assert.match(source, /<button[\s\S]*?type="button"[\s\S]*?aria-label=\{t\.archiveConversation\}/);
   assert.match(source, /<button[\s\S]*?type="button"[\s\S]*?aria-label=\{t\.deleteConversation\}/);
   assert.doesNotMatch(source, /className="conversationSidebarEyebrow"/);
+  assert.match(source, /partitionArchivedConversations/);
 });
 
 test("Workspace shell renders compact two-line identity metadata", async () => {

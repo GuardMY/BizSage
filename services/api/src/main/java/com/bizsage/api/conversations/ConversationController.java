@@ -39,7 +39,7 @@ public class ConversationController {
   }
 
   @PostMapping
-  @CacheEvict(value = "apiResponses", key = "#principal.name")
+  @CacheEvict(value = "apiResponses", allEntries = true)
   ApiResponse<Conversation> create(
       @Valid @RequestBody CreateConversationRequest body,
       Principal principal,
@@ -83,14 +83,14 @@ public class ConversationController {
   }
 
   @PostMapping("/{id}/archive")
-  @CacheEvict(value = "apiResponses", key = "#principal.name")
+  @CacheEvict(value = "apiResponses", allEntries = true)
   ApiResponse<Conversation> archive(@PathVariable long id, Principal principal, HttpServletRequest request) {
     cacheMetrics.recordMiss("apiResponses");
     return ApiResponse.ok(conversationStore.archive(principal.getName(), id), requestId(request));
   }
 
   @PostMapping("/{id}/delete")
-  @CacheEvict(value = "apiResponses", key = "#principal.name")
+  @CacheEvict(value = "apiResponses", allEntries = true)
   ApiResponse<Conversation> delete(@PathVariable long id, Principal principal, HttpServletRequest request) {
     cacheMetrics.recordMiss("apiResponses");
     return ApiResponse.ok(conversationStore.softDelete(principal.getName(), id), requestId(request));

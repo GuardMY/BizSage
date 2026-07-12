@@ -246,7 +246,8 @@ export async function fetchConversations(page = 1, size = 50) {
 export async function archiveConversation(conversationId: number) {
   const response = await fetch(`${API_BASE}/conversations/${conversationId}/archive`, {
     method: "POST",
-    headers: authHeaders()
+    headers: authHeaders(),
+    credentials: "include"
   });
   const envelope = await readProtectedEnvelope<Conversation>(response, "Archive conversation failed");
   return envelope.data;
@@ -255,7 +256,8 @@ export async function archiveConversation(conversationId: number) {
 export async function deleteConversation(conversationId: number) {
   const response = await fetch(`${API_BASE}/conversations/${conversationId}/delete`, {
     method: "POST",
-    headers: authHeaders()
+    headers: authHeaders(),
+    credentials: "include"
   });
   const envelope = await readProtectedEnvelope<Conversation>(response, "Delete conversation failed");
   return envelope.data;

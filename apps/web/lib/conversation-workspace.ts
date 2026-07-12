@@ -23,6 +23,7 @@ export type ConversationModeSection = "diagnosis" | "learning";
 export type ArchiveSelectionInput = {
   selectedConversationId: number | null;
   conversations: Conversation[];
+  mode?: ConversationModeSection;
 };
 
 export function sortConversationsNewestFirst(conversations: Conversation[]): Conversation[] {
@@ -75,6 +76,14 @@ export function resolveWorkspaceSelection(input: WorkspaceSelectionInput): Works
   };
 }
 
+export function partitionArchivedConversations(conversations: Conversation[]) {
+  const { archived } = partitionConversations(conversations);
+  return {
+    diagnosis: archived.filter((conversation) => conversation.agentMode !== "LEARNING"),
+    learning: archived.filter((conversation) => conversation.agentMode === "LEARNING")
+  };
+}
+
 export function conversationModeForSection(section: WorkspaceSection): ConversationModeSection | null {
   if (section === "diagnosis") return "diagnosis";
   if (section === "learning") return "learning";
@@ -83,13 +92,18 @@ export function conversationModeForSection(section: WorkspaceSection): Conversat
 
 export function nextSelectionAfterArchive(input: ArchiveSelectionInput): number | null {
   const { active } = partitionConversations(input.conversations);
+  const visibleActive = input.mode === undefined
+    ? active
+    : active.filter((conversation) => input.mode === "learning"
+      ? conversation.agentMode === "LEARNING"
+      : conversation.agentMode !== "LEARNING");
   if (input.selectedConversationId == null) {
-    return active[0]?.id ?? null;
+    return visibleActive[0]?.id ?? null;
   }
 
-  if (active.some((conversation) => conversation.id === input.selectedConversationId)) {
+  if (visibleActive.some((conversation) => conversation.id === input.selectedConversationId)) {
     return input.selectedConversationId;
   }
 
-  return active[0]?.id ?? null;
+  return visibleActive[0]?.id ?? null;
 }

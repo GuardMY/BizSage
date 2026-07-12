@@ -541,7 +541,8 @@ export default function Home() {
       setSelectedConversationId(
         nextSelectionAfterArchive({
           selectedConversationId: selectedConversation.id,
-          conversations: updatedConversations
+          conversations: updatedConversations,
+          mode: conversationModeForSection(activeSection) ?? undefined
         })
       );
       resetConversationOutputs();
@@ -567,7 +568,8 @@ export default function Home() {
       setSelectedConversationId(
         nextSelectionAfterArchive({
           selectedConversationId: conversationId,
-          conversations: updatedConversations
+          conversations: updatedConversations,
+          mode: conversationModeForSection(activeSection) ?? undefined
         })
       );
       if (selectedConversation?.id === conversationId) {
@@ -588,7 +590,13 @@ export default function Home() {
 
     try {
       await deleteConversation(conversationId);
-      setConversations((previous) => previous.filter((conversation) => conversation.id !== conversationId));
+      const updatedConversations = conversations.filter((conversation) => conversation.id !== conversationId);
+      setConversations(updatedConversations);
+      setSelectedConversationId(resolveWorkspaceSelection({
+        section: activeSection,
+        selectedConversationId: conversationId,
+        conversations: updatedConversations
+      }).selectedConversationId);
       if (selectedConversation?.id === conversationId) {
         resetConversationOutputs();
       }
