@@ -223,12 +223,12 @@ export async function logout() {
   });
 }
 
-export async function createConversation(title: string) {
+export async function createConversation(title: string, industryId?: string) {
   const response = await fetch(`${API_BASE}/conversations`, {
     method: "POST",
     headers: authHeaders(),
     credentials: "include",
-    body: JSON.stringify({ title })
+    body: JSON.stringify({ title, industryId })
   });
   const envelope = await readProtectedEnvelope<Conversation>(response, "Create conversation failed");
   return envelope.data;
@@ -276,7 +276,32 @@ export type RecommendationResponse = {
   workflowStage: string;
   refreshAvailable: boolean;
   items: RecommendationItem[];
+  industryGroups?: Record<string, RecommendationItem[]>;
 };
+
+export type UserIndustry = {
+  id: number;
+  userId: number;
+  industryId: string;
+  industryName: string;
+  sourceType: string;
+  status: string;
+};
+
+export async function fetchUserIndustries() {
+  const response = await fetch(`${API_BASE}/user/industries`, { headers: authHeaders(), credentials: "include" });
+  const envelope = await readProtectedEnvelope<UserIndustry[]>(response, "Fetch industries failed");
+  return envelope.data;
+}
+
+export async function addUserIndustry(name: string, industryId?: string) {
+  const response = await fetch(`${API_BASE}/user/industries`, {
+    method: "POST", headers: authHeaders(), credentials: "include",
+    body: JSON.stringify({ name, industryId })
+  });
+  const envelope = await readProtectedEnvelope<UserIndustry>(response, "Add industry failed");
+  return envelope.data;
+}
 
 export async function fetchConversationRecommendations(conversationId: number) {
   const response = await fetch(`${API_BASE}/conversations/${conversationId}/recommendations`, {
@@ -510,6 +535,7 @@ export type RecommendationItem = {
   ratingCount: number;
   sourceType: string;
   sourceRef: string;
+  industryId?: string;
 };
 
 /**

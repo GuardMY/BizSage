@@ -6,6 +6,7 @@ import { ArchiveWorkspace } from "./components/archive-workspace";
 import { ConversationSidebar } from "./components/conversation-sidebar";
 import { DiagnosisWorkspace } from "./components/diagnosis-workspace";
 import { LearningWorkspace } from "./components/learning-workspace";
+import { IndustryWelcome } from "./components/industry-welcome";
 import { WorkspaceShell } from "./components/workspace-shell";
 import type { WorkspaceMessages, WorkspaceSection } from "./components/workspace-types";
 import {
@@ -22,6 +23,8 @@ import {
   downloadDiagnosisPdf,
   fetchDiagnosisReport,
   fetchMe,
+  fetchUserIndustries,
+  addUserIndustry,
   fetchConversationRecommendations,
   fetchMessages,
   login,
@@ -36,6 +39,7 @@ import {
   type Diagnosis,
   type DiagnosisReport,
   type LoginProfile,
+  type UserIndustry,
   type RecommendationItem,
   type Source
 } from "../lib/api-client";
@@ -286,6 +290,9 @@ export default function Home() {
   const [selectedSource, setSelectedSource] = useState<Source | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(messages["zh-CN"].loginNotice);
+  const [industries, setIndustries] = useState<UserIndustry[]>([]);
+  const [selectedIndustryId, setSelectedIndustryId] = useState("");
+  const [customIndustryName, setCustomIndustryName] = useState("");
 
   const t = messages[locale];
 
@@ -318,7 +325,7 @@ export default function Home() {
     }
 
     let cancelled = false;
-    Promise.allSettled([fetchConversations()]).then(([nextConversations]) => {
+    Promise.allSettled([fetchConversations(), fetchUserIndustries()]).then(([nextConversations, nextIndustries]) => {
       if (cancelled) return;
       const failures = [nextConversations].filter(
         (result): result is PromiseRejectedResult => result.status === "rejected"
@@ -330,6 +337,10 @@ export default function Home() {
 
       // V2: Paginated response — extract items array
       setConversations(nextConversations.status === "fulfilled" ? nextConversations.value.items : []);
+      if (nextIndustries.status === "fulfilled") {
+        setIndustries(nextIndustries.value);
+        setSelectedIndustryId(nextIndustries.value[0]?.industryId ?? profile.industryId ?? "");
+      }
     });
 
     return () => {
@@ -510,10 +521,10 @@ export default function Home() {
     lastConversationByMode.current[mode === "LEARNING" ? "learning" : "diagnosis"] = id;
   }
 
-  async function handleNewConversation() {
+  async function handleNewConversation(industryId = selectedIndustryId) {
     if (!profile) return;
     try {
-      const created = await createConversation(t.newConversationTitle);
+      const created = await createConversation(t.newConversationTitle, industryId || profile.industryId);
       const mode = conversationModeForSection(activeSection);
       const modeCreated = mode ? { ...created, agentMode: mode === "learning" ? "LEARNING" : "DIAGNOSIS" } : created;
       setConversations((previous) => [modeCreated, ...previous]);
@@ -758,7 +769,7 @@ export default function Home() {
     if (!selectedConversation) return;
     try {
       const nextRecommendations = await fetchConversationRecommendations(selectedConversation.id);
-      setRecommendationRows(nextRecommendations.items);
+      setRecommendationRows(Object.values(nextRecommendations.industryGroups ?? { current: nextRecommendations.items }).flat());
     } catch (error) {
       if (error instanceof AuthExpiredError) {
         handleSessionExpired();
@@ -770,6 +781,18 @@ export default function Home() {
 
   function handleUseRecommendation(item: RecommendationItem) {
     setMessage(item.questionText);
+  }
+
+  async function addCustomIndustry() {
+    if (!customIndustryName.trim()) return;
+    try {
+      const added = await addUserIndustry(customIndustryName.trim());
+      setIndustries((current) => [...current.filter((item) => item.industryId !== added.industryId), added]);
+      setSelectedIndustryId(added.industryId);
+      setCustomIndustryName("");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : t.workerError);
+    }
   }
 
   async function generateReport() {
@@ -862,7 +885,23 @@ export default function Home() {
         status={notice}
         t={t}
       >
-        {activeSection === "diagnosis" && (
+        {activeSection === "diagnosis" && !selectedConversation && (
+          <IndustryWelcome
+            industries={industries}
+            selectedIndustryId={selectedIndustryId}
+            customName={customIndustryName}
+            onSelect={setSelectedIndustryId}
+            onCustomNameChange={setCustomIndustryName}
+            onAddCustom={addCustomIndustry}
+            onStart={() => handleNewConversation()}
+            busy={busy}
+            title={locale === "zh-CN" ? "开始经营诊断" : "Start your business diagnosis"}
+            detail={locale === "zh-CN" ? "选择一个行业，BizSage 会围绕该行业建立诊断会话。" : "Choose an industry and BizSage will create a focused diagnosis conversation."}
+            startLabel={locale === "zh-CN" ? "开始对话" : "Start conversation"}
+            customLabel={locale === "zh-CN" ? "新增自定义行业" : "Add custom industry"}
+          />
+        )}
+        {activeSection === "diagnosis" && selectedConversation && (
       <DiagnosisWorkspace
             busy={busy}
             diagnosis={diagnosis}
@@ -915,6 +954,21 @@ export default function Home() {
                   <strong>{profile.username}</strong>
                   <span>{profile.role}</span>
                   <small>{profile.membershipLevel} / {profile.regionId} / {profile.industryId}</small>
+                </div>
+                <div className="row industryManager">
+                  <strong>{locale === "zh-CN" ? "我的行业" : "My industries"}</strong>
+                  <div className="industryChoices">
+                    {industries.map((industry) => <button key={industry.industryId}
+                      className={`industryChoice ${industry.industryId === selectedIndustryId ? "active" : ""}`}
+                      onClick={() => setSelectedIndustryId(industry.industryId)} type="button">
+                      {industry.industryName}</button>)}
+                  </div>
+                  <small>{locale === "zh-CN" ? "新建会话时会使用当前选中的行业。" : "New conversations use the selected industry."}</small>
+                </div>
+                <div className="row customIndustryRow">
+                  <input value={customIndustryName} onChange={(event) => setCustomIndustryName(event.target.value)}
+                    placeholder={locale === "zh-CN" ? "新增自定义行业" : "Add custom industry"} />
+                  <button className="ghost" onClick={addCustomIndustry} disabled={!customIndustryName.trim()} type="button">+</button>
                 </div>
               </div>
             </section>

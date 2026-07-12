@@ -6,6 +6,7 @@ import com.bizsage.api.common.PagedResponse;
 import com.bizsage.api.common.RequestIds;
 import com.bizsage.api.governance.DataIsolationService;
 import com.bizsage.api.governance.DataScope;
+import com.bizsage.api.industries.UserIndustryStore;
 import com.bizsage.api.users.UserStore;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -29,13 +30,16 @@ public class ConversationController {
   private final UserStore userStore;
   private final CacheMetrics cacheMetrics;
   private final DataIsolationService isolationService;
+  private final UserIndustryStore industryStore;
 
   public ConversationController(ConversationStore conversationStore, UserStore userStore,
-                                CacheMetrics cacheMetrics, DataIsolationService isolationService) {
+                                CacheMetrics cacheMetrics, DataIsolationService isolationService,
+                                UserIndustryStore industryStore) {
     this.conversationStore = conversationStore;
     this.userStore = userStore;
     this.cacheMetrics = cacheMetrics;
     this.isolationService = isolationService;
+    this.industryStore = industryStore;
   }
 
   @PostMapping
@@ -50,8 +54,13 @@ public class ConversationController {
       return ApiResponse.error("FORBIDDEN", "account is frozen", requestId(request));
     }
     var user = userStore.findByUsername(principal.getName()).orElseThrow();
+    String industryId = body.industryId() == null || body.industryId().isBlank()
+        ? user.industryId() : body.industryId();
+    if (!industryStore.belongsTo(user.id(), industryId)) {
+      return ApiResponse.error("INVALID_INDUSTRY", "industry is not configured for this user", requestId(request));
+    }
     Conversation created = conversationStore.create(user.username(), body.title(),
-        user.regionId(), user.industryId());
+        user.regionId(), industryId);
     return ApiResponse.ok(created, requestId(request));
   }
 
@@ -100,6 +109,6 @@ public class ConversationController {
     return request.getAttribute(RequestIds.ATTRIBUTE).toString();
   }
 
-  record CreateConversationRequest(@NotBlank String title) {
+  record CreateConversationRequest(@NotBlank String title, String industryId) {
   }
 }

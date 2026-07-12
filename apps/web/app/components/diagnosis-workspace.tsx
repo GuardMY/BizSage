@@ -241,6 +241,7 @@ function RailSection({
         ) : items.map((row) => (
           <div className="row" key={row.id}>
             <strong>{row.questionText}</strong>
+            {row.industryId && <span>{row.industryId}</span>}
             <span>{row.category}</span>
             <small>{row.sourceType} / {row.score.toFixed(2)} / {row.usageCount}</small>
             <button className="ghost" onClick={() => onUseRecommendation(row)} type="button">

@@ -30,8 +30,10 @@ public class RecommendationController {
       Principal principal,
       HttpServletRequest request) {
     var conversation = conversationStore.getForOwner(principal.getName(), conversationId);
-    return ApiResponse.ok(
-        recommendationService.build(conversation, conversation.agentMode(), conversation.workflowStage(), List.of()),
+    var response = conversation.industryId() == null || conversation.industryId().isBlank()
+        ? recommendationService.buildIndustryOverview(conversation, conversation.agentMode(), conversation.workflowStage(), List.of())
+        : recommendationService.build(conversation, conversation.agentMode(), conversation.workflowStage(), List.of());
+    return ApiResponse.ok(response,
         request.getAttribute(RequestIds.ATTRIBUTE).toString());
   }
 

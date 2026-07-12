@@ -17,13 +17,15 @@ public final class RecommendationDtos {
       double ratingAvg,
       long ratingCount,
       String sourceType,
-      String sourceRef) {
+      String sourceRef,
+      String industryId) {
   }
 
   public record RecommendationResponse(
       String agentMode,
       String workflowStage,
       boolean refreshAvailable,
-      List<RecommendationItem> items) {
+      List<RecommendationItem> items,
+      java.util.Map<String, List<RecommendationItem>> industryGroups) {
   }
 }

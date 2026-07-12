@@ -3,6 +3,8 @@ package com.bizsage.api.recommendations;
 import com.bizsage.api.conversations.Conversation;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 
@@ -17,6 +19,17 @@ public class RecommendationService {
   public RecommendationDtos.RecommendationResponse build(Conversation conversation, String agentMode,
       String workflowStage, List<String> blacklist) {
     List<QuestionPoolItem> items = questionPoolStore.list(conversation.industryId(), conversation.regionId(), agentMode);
+    return buildResponse(agentMode, workflowStage, blacklist, items);
+  }
+
+  public RecommendationDtos.RecommendationResponse buildIndustryOverview(Conversation conversation,
+      String agentMode, String workflowStage, List<String> blacklist) {
+    List<QuestionPoolItem> items = questionPoolStore.list(null, conversation.regionId(), agentMode);
+    return buildResponse(agentMode, workflowStage, blacklist, items);
+  }
+
+  private RecommendationDtos.RecommendationResponse buildResponse(String agentMode, String workflowStage,
+      List<String> blacklist, List<QuestionPoolItem> items) {
     List<String> blacklistSafe = blacklist == null ? List.of() : blacklist;
     List<RecommendationDtos.RecommendationItem> result = new ArrayList<>();
     for (QuestionPoolItem item : items) {
@@ -35,13 +48,18 @@ public class RecommendationService {
           item.ratingAvg(),
           item.ratingCount(),
           item.sourceType(),
-          item.sourceRef()));
+          item.sourceRef(),
+          item.industryId()));
+    }
+    Map<String, List<RecommendationDtos.RecommendationItem>> grouped = new LinkedHashMap<>();
+    for (RecommendationDtos.RecommendationItem item : result) {
+      grouped.computeIfAbsent(item.industryId(), key -> new ArrayList<>()).add(item);
     }
     return new RecommendationDtos.RecommendationResponse(
         agentMode,
         workflowStage,
         true,
-        result.stream().limit(8).collect(Collectors.toList()));
+        result.stream().limit(8).collect(Collectors.toList()), grouped);
   }
 
   public void recordUsage(List<Long> ids) {

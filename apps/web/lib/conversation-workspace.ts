@@ -68,7 +68,7 @@ export function resolveWorkspaceSelection(input: WorkspaceSelectionInput): Works
     (conversation) => conversation.id === input.selectedConversationId
   )
     ? input.selectedConversationId
-    : (visibleConversations[0]?.id ?? null);
+    : null;
 
   return {
     visibleConversations,
