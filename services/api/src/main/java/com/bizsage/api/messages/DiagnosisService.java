@@ -1,10 +1,12 @@
 package com.bizsage.api.messages;
 
 import com.bizsage.api.conversations.Conversation;
+import com.bizsage.api.conversations.ConversationStore;
 import com.bizsage.api.knowledge.KnowledgeItem;
 import com.bizsage.api.knowledge.KnowledgeStore;
 import com.bizsage.api.memory.UserMemoryProfile;
 import com.bizsage.api.memory.UserMemoryStore;
+import com.bizsage.api.memory.ConversationDiagnosisMemoryStore;
 import com.bizsage.api.recommendations.RecommendationService;
 import com.bizsage.api.users.UserAccount;
 import com.bizsage.api.worker.AiWorkerClient;
@@ -22,6 +24,7 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 
 @Service
 public class DiagnosisService {
@@ -35,6 +38,9 @@ public class DiagnosisService {
   private final UserMemoryStore userMemoryStore;
   private final KnowledgeStore knowledgeStore;
   private final RecommendationService recommendationService;
+  private final ConversationStore conversationStore;
+  private final ConversationDiagnosisMemoryStore diagnosisMemoryStore;
+  private final double completenessThreshold;
 
   public DiagnosisService(
       AiWorkerClient aiWorkerClient,
@@ -42,15 +48,21 @@ public class DiagnosisService {
       ConversationMessageStore messageStore,
       ConversationSummaryStore summaryStore,
       UserMemoryStore userMemoryStore,
+      ConversationStore conversationStore,
       KnowledgeStore knowledgeStore,
-      RecommendationService recommendationService) {
+      RecommendationService recommendationService,
+      ConversationDiagnosisMemoryStore diagnosisMemoryStore,
+      @Value("${bizsage.diagnosis.completeness-threshold:80}") double completenessThreshold) {
     this.aiWorkerClient = aiWorkerClient;
     this.objectMapper = objectMapper;
     this.messageStore = messageStore;
     this.summaryStore = summaryStore;
     this.userMemoryStore = userMemoryStore;
+    this.conversationStore = conversationStore;
     this.knowledgeStore = knowledgeStore;
     this.recommendationService = recommendationService;
+    this.diagnosisMemoryStore = diagnosisMemoryStore;
+    this.completenessThreshold = completenessThreshold;
   }
 
 /**
@@ -106,6 +118,7 @@ public class DiagnosisService {
         .recentMessages(toRecentMessageMaps(recentMessages))
         .conversationSummary(summary != null ? summary.summaryText() : null)
         .longTermMemories(toMemoryMaps(memories))
+        .diagnosisMemories(diagnosisMemoryStore.asMaps(conversation.id()))
         .regionId(conversation.regionId())
         .industryId(conversation.industryId())
         .membershipLevel(user.membershipLevel())
@@ -144,6 +157,14 @@ public class DiagnosisService {
     payload.put("disclaimer", response.disclaimer());
     payload.put("workflowStage", response.workflowStage());
     payload.put("profileMissingFields", response.profileMissingFields() != null ? response.profileMissingFields() : List.of());
+    double completeness = response.diagnosisCompleteness() != null ? response.diagnosisCompleteness() : 0D;
+    payload.put("diagnosisCompleteness", completeness);
+    payload.put("diagnosisCompletenessThreshold", completenessThreshold);
+    payload.put("reportReady", completeness >= completenessThreshold);
+    payload.put("userProfileMemories", response.userProfileMemories() != null ? response.userProfileMemories() : List.of());
+    payload.put("diagnosisMemories", response.diagnosisMemories() != null ? response.diagnosisMemories() : List.of());
+    payload.put("diagnosisMissingFields", response.diagnosisMissingFields() != null ? response.diagnosisMissingFields() : List.of());
+    payload.put("additionalInformationQuestions", response.additionalInformationQuestions() != null ? response.additionalInformationQuestions() : List.of());
     payload.put("completionSignal", response.completionSignal());
     payload.put("recommendedQuestions", response.recommendedQuestions() != null ? response.recommendedQuestions() : List.of());
     payload.put("recommendedQuestionIds", response.recommendedQuestions() != null
@@ -174,6 +195,12 @@ public class DiagnosisService {
       }
     }
 
+    diagnosisMemoryStore.saveAll(
+        conversation.id(),
+        assistantMessageId,
+        response.diagnosisMemories());
+    updateConversationState(conversation, response, completeness);
+
     recommendationService.recordUsage(extractQuestionIds(response.recommendedQuestions()));
 
     // 9. 标记记忆使用并维护会话摘要，防止活跃消息无限增长。
@@ -181,6 +208,19 @@ public class DiagnosisService {
     summarizeIfNeeded(conversation.id());
 
     return payloadJson;
+  }
+
+  private void updateConversationState(Conversation conversation, DiagnoseResponse response, double completeness) {
+    try {
+      String questions = serialize(response.additionalInformationQuestions() != null
+          ? response.additionalInformationQuestions() : List.of());
+      conversationStore.updateWorkflow(
+          conversation.id(), conversation.ownerUsername(), "DIAGNOSIS", "IN_PROGRESS",
+          completeness, serialize(response.diagnosisMissingFields() != null
+              ? response.diagnosisMissingFields() : List.of()), questions, null, null);
+    } catch (Exception ex) {
+      log.warn("Failed to update diagnosis state for conversation {}: {}", conversation.id(), ex.getMessage());
+    }
   }
 
   // 上下文映射。

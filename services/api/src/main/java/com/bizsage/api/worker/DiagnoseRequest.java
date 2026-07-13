@@ -12,6 +12,7 @@ public record DiagnoseRequest(
     List<Map<String, Object>> recentMessages,
     String conversationSummary,
     List<Map<String, Object>> longTermMemories,
+    List<Map<String, Object>> diagnosisMemories,
     String regionId,
     String industryId,
     String membershipLevel,
@@ -20,7 +21,11 @@ public record DiagnoseRequest(
     String workflowStage,
     List<String> profileMissingFields,
     List<String> recommendedQuestionIds,
-    Boolean diagnosisClosable) {
+    Boolean diagnosisClosable,
+    Double diagnosisCompleteness,
+    List<String> diagnosisMissingFields,
+    List<String> profileMissingFieldsForReport,
+    List<Map<String, Object>> additionalInformationQuestions) {
 
   public static Builder builder() {
     return new Builder();
@@ -32,6 +37,7 @@ public record DiagnoseRequest(
     private List<Map<String, Object>> recentMessages = List.of();
     private String conversationSummary;
     private List<Map<String, Object>> longTermMemories = List.of();
+    private List<Map<String, Object>> diagnosisMemories = List.of();
     private String regionId;
     private String industryId;
     private String membershipLevel = "FREE";
@@ -41,6 +47,10 @@ public record DiagnoseRequest(
     private List<String> profileMissingFields = List.of();
     private List<String> recommendedQuestionIds = List.of();
     private Boolean diagnosisClosable = Boolean.FALSE;
+    private Double diagnosisCompleteness;
+    private List<String> diagnosisMissingFields = List.of();
+    private List<String> profileMissingFieldsForReport = List.of();
+    private List<Map<String, Object>> additionalInformationQuestions = List.of();
 
     public Builder question(String question) {
       this.question = question;
@@ -64,6 +74,11 @@ public record DiagnoseRequest(
 
     public Builder longTermMemories(List<Map<String, Object>> longTermMemories) {
       this.longTermMemories = longTermMemories;
+      return this;
+    }
+
+    public Builder diagnosisMemories(List<Map<String, Object>> diagnosisMemories) {
+      this.diagnosisMemories = diagnosisMemories;
       return this;
     }
 
@@ -112,11 +127,18 @@ public record DiagnoseRequest(
       return this;
     }
 
+    public Builder diagnosisCompleteness(Double value) { this.diagnosisCompleteness = value; return this; }
+    public Builder diagnosisMissingFields(List<String> value) { this.diagnosisMissingFields = value; return this; }
+    public Builder profileMissingFieldsForReport(List<String> value) { this.profileMissingFieldsForReport = value; return this; }
+    public Builder additionalInformationQuestions(List<Map<String, Object>> value) { this.additionalInformationQuestions = value; return this; }
+
     public DiagnoseRequest build() {
       return new DiagnoseRequest(
           question, knowledge, recentMessages, conversationSummary,
-          longTermMemories, regionId, industryId, membershipLevel, conflictLabels,
-          agentMode, workflowStage, profileMissingFields, recommendedQuestionIds, diagnosisClosable);
+          longTermMemories, diagnosisMemories, regionId, industryId, membershipLevel, conflictLabels,
+          agentMode, workflowStage, profileMissingFields, recommendedQuestionIds, diagnosisClosable,
+          diagnosisCompleteness, diagnosisMissingFields, profileMissingFieldsForReport,
+          additionalInformationQuestions);
     }
   }
 }

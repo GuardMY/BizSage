@@ -937,6 +937,43 @@ dd {
   flex: 1;
 }
 
+.diagnosisProgress {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.progressLabel {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.progressTrack {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e7ece9;
+}
+
+.progressValue {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--mint-dark);
+  transition: width 240ms ease;
+}
+
+.reportButton.reportIncomplete {
+  background: #c8d2cd;
+  color: #41514a;
+}
+
+.reportButton.reportReady {
+  background: var(--mint-dark);
+}
+
 .welcomeWorkspace {
   min-height: 560px;
   display: grid;

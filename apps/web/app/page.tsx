@@ -29,6 +29,7 @@ import {
   searchIndustries,
   fetchConversationRecommendations,
   fetchMessages,
+  persistFollowUpQuestion,
   login,
   logout,
   streamLearningEvents,
@@ -43,6 +44,7 @@ import {
   type LoginProfile,
   type UserIndustry,
   type RecommendationItem,
+  type AdditionalInformationQuestion,
   type Source
 } from "../lib/api-client";
 
@@ -703,14 +705,11 @@ export default function Home() {
       });
       setStreamingDiagnosis(nextDiagnosis);
       setDiagnosis(nextDiagnosis);
-      setRecommendationRows(nextDiagnosis.recommendedQuestions ?? nextDiagnosis.recommendationCandidates ?? []);
 
       try {
         const updatedMessages = await fetchMessages(conversationId);
         setMessageHistory(updatedMessages);
         setStreamingDiagnosis(null);
-        const nextRecommendations = await fetchConversationRecommendations(conversationId);
-        setRecommendationRows(nextRecommendations.items);
       } catch (error) {
         if (error instanceof AuthExpiredError) {
           handleSessionExpired();
@@ -826,6 +825,21 @@ export default function Home() {
     setMessage(item.questionText);
   }
 
+  async function handleUseAdditionalQuestion(item: AdditionalInformationQuestion) {
+    if (!selectedConversation) return;
+    try {
+      await persistFollowUpQuestion(selectedConversation.id, item.questionText);
+      const updatedMessages = await fetchMessages(selectedConversation.id);
+      setMessageHistory(updatedMessages);
+    } catch (error) {
+      if (error instanceof AuthExpiredError) {
+        handleSessionExpired();
+        return;
+      }
+      setNotice(error instanceof Error ? error.message : t.workerError);
+    }
+  }
+
   async function addCustomIndustry() {
     if (!customIndustryName.trim()) return;
     try {
@@ -840,13 +854,18 @@ export default function Home() {
 
   async function generateReport() {
     if (!profile) return;
+    const completeness = diagnosis?.diagnosisCompleteness ?? selectedConversation?.profileCompleteness ?? 0;
+    const threshold = diagnosis?.diagnosisCompletenessThreshold ?? 80;
+    if (completeness < threshold && !window.confirm("当前诊断信息尚不充分，生成的报告可能不完整。是否继续生成？")) {
+      return;
+    }
     setReportBusy(true);
     try {
       // Load report metadata for the sidebar display
-      const nextReport = await fetchDiagnosisReport(message);
+      const nextReport = await fetchDiagnosisReport(message, selectedConversation?.id);
       setReport(nextReport);
       // Trigger PDF binary download
-      await downloadDiagnosisPdf(message);
+      await downloadDiagnosisPdf(message, selectedConversation?.id);
     } catch (error) {
       if (error instanceof AuthExpiredError) {
         handleSessionExpired();
@@ -960,7 +979,7 @@ export default function Home() {
             onMessageChange={setMessage}
             onOpenSource={setSelectedSource}
             onRefreshRecommendations={handleRefreshRecommendations}
-            onUseRecommendation={handleUseRecommendation}
+            onUseAdditionalQuestion={handleUseAdditionalQuestion}
             onSubmitDiagnosis={submitDiagnosis}
             recommendationRows={recommendationRows}
             report={report}

@@ -2,6 +2,14 @@ package com.bizsage.api.reports;
 
 import com.bizsage.api.knowledge.KnowledgeItem;
 import com.bizsage.api.knowledge.KnowledgeStore;
+import com.bizsage.api.conversations.Conversation;
+import com.bizsage.api.conversations.ConversationStore;
+import com.bizsage.api.messages.ConversationMessage;
+import com.bizsage.api.messages.ConversationMessageStore;
+import com.bizsage.api.messages.ConversationSummary;
+import com.bizsage.api.messages.ConversationSummaryStore;
+import com.bizsage.api.memory.ConversationDiagnosisMemoryStore;
+import com.bizsage.api.memory.UserMemoryStore;
 import com.bizsage.api.users.UserAccount;
 import com.bizsage.api.worker.AiWorkerClient;
 import com.bizsage.api.worker.AiWorkerException;
@@ -22,12 +30,83 @@ public class DiagnosisReportService {
 
   private final AiWorkerClient aiWorkerClient;
   private final KnowledgeStore knowledgeStore;
+  private final ConversationMessageStore messageStore;
+  private final ConversationSummaryStore summaryStore;
+  private final UserMemoryStore userMemoryStore;
+  private final ConversationDiagnosisMemoryStore diagnosisMemoryStore;
+  private final ConversationStore conversationStore;
 
   public DiagnosisReportService(
       AiWorkerClient aiWorkerClient,
-      KnowledgeStore knowledgeStore) {
+      KnowledgeStore knowledgeStore,
+      ConversationMessageStore messageStore,
+      ConversationSummaryStore summaryStore,
+      UserMemoryStore userMemoryStore,
+      ConversationDiagnosisMemoryStore diagnosisMemoryStore,
+      ConversationStore conversationStore) {
     this.aiWorkerClient = aiWorkerClient;
     this.knowledgeStore = knowledgeStore;
+    this.messageStore = messageStore;
+    this.summaryStore = summaryStore;
+    this.userMemoryStore = userMemoryStore;
+    this.diagnosisMemoryStore = diagnosisMemoryStore;
+    this.conversationStore = conversationStore;
+  }
+
+  public DiagnosisReport buildForConversation(long conversationId, UserAccount user) {
+    List<ConversationMessage> messages = messageStore.recentActiveMessages(conversationId, 20);
+    Conversation conversation = conversationStore.getForOwner(user.username(), conversationId);
+    String question = messages.stream().filter(message -> "USER".equals(message.sender()))
+        .reduce((first, second) -> second).map(ConversationMessage::content).orElse("经营诊断");
+    ConversationSummary summary = summaryStore.latestActive(conversationId).orElse(null);
+    List<Map<String, Object>> recent = messages.stream().map(message -> {
+      Map<String, Object> map = new LinkedHashMap<>();
+      map.put("role", "USER".equals(message.sender()) ? "user" : "assistant");
+      map.put("content", message.content());
+      return map;
+    }).toList();
+    List<Map<String, Object>> profileMemories = userMemoryStore.activeMemoriesForUser(user.id()).stream().map(memory -> {
+      Map<String, Object> map = new LinkedHashMap<>();
+      map.put("category", memory.category());
+      map.put("key", memory.key());
+      map.put("value", memory.value());
+      map.put("confidence", memory.confidence());
+      return map;
+    }).toList();
+    DiagnoseRequest request = DiagnoseRequest.builder()
+        .question(question)
+        .knowledge(loadKnowledgeForReport(user.regionId(), user.industryId(), user.membershipLevel()))
+        .recentMessages(recent)
+        .conversationSummary(summary != null ? summary.summaryText() : null)
+        .longTermMemories(profileMemories)
+        .diagnosisMemories(diagnosisMemoryStore.asMaps(conversationId))
+        .diagnosisCompleteness(conversation.profileCompleteness())
+        .diagnosisMissingFields(readStringList(conversation.primaryIssueTags()))
+        .profileMissingFieldsForReport(List.of())
+        .additionalInformationQuestions(readObjectList(conversation.recommendedQuestionIds()))
+        .regionId(user.regionId()).industryId(user.industryId())
+        .membershipLevel(user.membershipLevel()).build();
+    return buildFromRequest(question, request);
+  }
+
+  private List<String> readStringList(String json) {
+    if (json == null || json.isBlank()) return List.of();
+    try {
+      return new com.fasterxml.jackson.databind.ObjectMapper().readValue(json,
+          new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+    } catch (Exception ignored) {
+      return List.of();
+    }
+  }
+
+  private List<Map<String, Object>> readObjectList(String json) {
+    if (json == null || json.isBlank()) return List.of();
+    try {
+      return new com.fasterxml.jackson.databind.ObjectMapper().readValue(json,
+          new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {});
+    } catch (Exception ignored) {
+      return List.of();
+    }
   }
 
   /**
@@ -53,6 +132,10 @@ public class DiagnosisReportService {
         .build();
 
     // 3. Call the worker — strict failure, no local fallback
+    return buildFromRequest(question, request, user);
+  }
+
+  private DiagnosisReport buildFromRequest(String question, DiagnoseRequest request, UserAccount user) {
     DiagnoseResponse response;
     try {
       response = aiWorkerClient.diagnose(request);

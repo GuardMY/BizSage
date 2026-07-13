@@ -14,7 +14,7 @@ from collections.abc import Iterator
 
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from qdrant_client import QdrantClient
 
 from app.agent import diagnose, diagnose_stream
@@ -74,11 +74,20 @@ class CompressConfigRequest(BaseModel):
 
 
 class DiagnoseRequest(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=lambda value: value.split("_")[0] + "".join(part.title() for part in value.split("_")[1:]),
+        populate_by_name=True,
+    )
     question: str
     knowledge: list[dict] = Field(default_factory=list)
     recent_messages: list[dict] = Field(default_factory=list)
     conversation_summary: str | None = None
     long_term_memories: list[dict] = Field(default_factory=list)
+    diagnosis_memories: list[dict] = Field(default_factory=list)
+    diagnosis_completeness: float | None = None
+    diagnosis_missing_fields: list[str] = Field(default_factory=list)
+    profile_missing_fields_for_report: list[str] = Field(default_factory=list)
+    additional_information_questions: list[dict] = Field(default_factory=list)
     region_id: str | None = None
     industry_id: str | None = None
     membership_level: str = "FREE"
@@ -291,6 +300,11 @@ def diagnose_endpoint(request: DiagnoseRequest) -> dict:
             recent_messages=request.recent_messages,
             conversation_summary=request.conversation_summary,
             long_term_memories=request.long_term_memories,
+            diagnosis_memories=request.diagnosis_memories,
+            diagnosis_completeness=request.diagnosis_completeness,
+            diagnosis_missing_fields=request.diagnosis_missing_fields,
+            profile_missing_fields_for_report=request.profile_missing_fields_for_report,
+            additional_information_questions=request.additional_information_questions,
             region_id=request.region_id,
             industry_id=request.industry_id,
             membership_level=request.membership_level,
@@ -334,6 +348,11 @@ def diagnose_stream_endpoint(request: DiagnoseRequest) -> StreamingResponse:
                 recent_messages=request.recent_messages,
                 conversation_summary=request.conversation_summary,
                 long_term_memories=request.long_term_memories,
+                diagnosis_memories=request.diagnosis_memories,
+                diagnosis_completeness=request.diagnosis_completeness,
+                diagnosis_missing_fields=request.diagnosis_missing_fields,
+                profile_missing_fields_for_report=request.profile_missing_fields_for_report,
+                additional_information_questions=request.additional_information_questions,
                 region_id=request.region_id,
                 industry_id=request.industry_id,
                 membership_level=request.membership_level,

@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -46,10 +47,13 @@ public class DiagnosisReportController {
   @GetMapping("/diagnosis")
   ApiResponse<DiagnosisReport> diagnosis(
       @RequestParam(defaultValue = "operating diagnosis") String question,
+      @RequestParam(required = false) Long conversationId,
       Principal principal,
       HttpServletRequest request) {
     return ApiResponse.ok(
-        reportService.build(question, currentUser(principal)),
+        conversationId != null
+            ? reportService.buildForConversation(conversationId, currentUser(principal))
+            : reportService.build(question, currentUser(principal)),
         requestId(request));
   }
 
@@ -57,13 +61,16 @@ public class DiagnosisReportController {
   @GetMapping("/diagnosis/pdf")
   ResponseEntity<byte[]> diagnosisPdf(
       @RequestParam(defaultValue = "operating diagnosis") String question,
+      @RequestParam(required = false) Long conversationId,
       Principal principal,
       HttpServletRequest request) {
     UserAccount user = currentUser(principal);
     if (!grayRelease.isFeatureEnabled(GrayReleaseService.FEATURE_PDF_EXPORT, user)) {
       throw new AiWorkerException("PDF export is not available for your account tier");
     }
-    byte[] pdfBytes = reportService.buildPdf(question, user, pdfGenerator);
+    byte[] pdfBytes = conversationId != null
+        ? pdfGenerator.generate(reportService.buildForConversation(conversationId, user))
+        : reportService.buildPdf(question, user, pdfGenerator);
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_PDF);
     headers.setContentDisposition(ContentDisposition.attachment()

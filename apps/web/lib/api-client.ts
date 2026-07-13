@@ -36,6 +36,26 @@ export type Diagnosis = {
   recommendationCandidates?: RecommendationItem[];
   currentTopic?: string | null;
   nextBestTopics?: string[];
+  diagnosisCompleteness?: number;
+  diagnosisCompletenessThreshold?: number;
+  reportReady?: boolean;
+  diagnosisMissingFields?: string[];
+  additionalInformationQuestions?: AdditionalInformationQuestion[];
+};
+
+export type MemoryCandidate = {
+  category: string;
+  key: string;
+  value: string;
+  confidence: number;
+  structured: boolean;
+};
+
+export type AdditionalInformationQuestion = {
+  id: string | number;
+  questionText: string;
+  purpose?: string;
+  priority?: string | number;
 };
 
 export type DiagnosisError = {
@@ -322,6 +342,17 @@ export async function fetchConversationRecommendations(conversationId: number) {
   return envelope.data;
 }
 
+export async function persistFollowUpQuestion(conversationId: number, question: string) {
+  const response = await fetch(`${API_BASE}/conversations/${conversationId}/messages/follow-up`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ question })
+  });
+  const envelope = await readProtectedEnvelope<ConversationMessage>(response, "Persist follow-up question failed");
+  return envelope.data;
+}
+
 export function parseDiagnosisEvent(raw: string): Diagnosis {
   const errorPayload = findLatestErrorPayload(raw);
   if (errorPayload) {
@@ -443,8 +474,11 @@ export async function streamDiagnosis(conversationId: number, question: string) 
   return streamDiagnosisEvents(conversationId, question);
 }
 
-export async function fetchDiagnosisReport(question: string) {
-  const response = await fetch(`${API_BASE}/reports/diagnosis?question=${encodeURIComponent(question)}`, {
+export async function fetchDiagnosisReport(question: string, conversationId?: number) {
+  const query = conversationId != null
+    ? `conversationId=${conversationId}`
+    : `question=${encodeURIComponent(question)}`;
+  const response = await fetch(`${API_BASE}/reports/diagnosis?${query}`, {
     headers: authHeaders()
   });
 
@@ -464,8 +498,11 @@ export async function fetchDiagnosisReport(question: string) {
 }
 
 /** V2: Download a diagnosis report as a PDF file. Triggers a browser download. */
-export async function downloadDiagnosisPdf(question: string) {
-  const response = await fetch(`${API_BASE}/reports/diagnosis/pdf?question=${encodeURIComponent(question)}`, {
+export async function downloadDiagnosisPdf(question: string, conversationId?: number) {
+  const query = conversationId != null
+    ? `conversationId=${conversationId}`
+    : `question=${encodeURIComponent(question)}`;
+  const response = await fetch(`${API_BASE}/reports/diagnosis/pdf?${query}`, {
     headers: authHeaders()
   });
 

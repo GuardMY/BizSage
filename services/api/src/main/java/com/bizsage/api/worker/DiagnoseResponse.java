@@ -24,7 +24,27 @@ public record DiagnoseResponse(
     @JsonProperty("workflowStage") String workflowStage,
     @JsonProperty("profileMissingFields") List<String> profileMissingFields,
     @JsonProperty("completionSignal") String completionSignal,
-    @JsonProperty("recommendedQuestions") List<Map<String, Object>> recommendedQuestions) {
+    @JsonProperty("recommendedQuestions") List<Map<String, Object>> recommendedQuestions,
+    @JsonProperty("userProfileMemories") List<Map<String, Object>> userProfileMemories,
+    @JsonProperty("diagnosisMemories") List<Map<String, Object>> diagnosisMemories,
+    @JsonProperty("diagnosisCompleteness") Double diagnosisCompleteness,
+    @JsonProperty("diagnosisMissingFields") List<String> diagnosisMissingFields,
+    @JsonProperty("additionalInformationQuestions") List<Map<String, Object>> additionalInformationQuestions,
+  @JsonProperty("reportReady") Boolean reportReady) {
+
+  public DiagnoseResponse(
+      String answer, List<DiagnoseSource> sources, String confidence, String timeliness,
+      String selfCheckStatus, String disclaimer, List<Map<String, Object>> memoryCandidates,
+      String mode, String chainNodeId, List<String> suggestedActions,
+      Map<String, String> sections, List<Map<String, Object>> recommendationCandidates,
+      String currentTopic, List<String> nextBestTopics, String workflowStage,
+      List<String> profileMissingFields, String completionSignal,
+      List<Map<String, Object>> recommendedQuestions) {
+    this(answer, sources, confidence, timeliness, selfCheckStatus, disclaimer, memoryCandidates,
+        mode, chainNodeId, suggestedActions, sections, recommendationCandidates, currentTopic,
+        nextBestTopics, workflowStage, profileMissingFields, completionSignal, recommendedQuestions,
+        null, null, null, null, null, null);
+  }
 
   @JsonIgnoreProperties(ignoreUnknown = true)
   public record DiagnoseSource(

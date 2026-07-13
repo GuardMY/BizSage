@@ -8,6 +8,8 @@ import type {
   Source
 } from "../../lib/api-client";
 
+export type { AdditionalInformationQuestion } from "../../lib/api-client";
+
 export type WorkspaceSection = "diagnosis" | "learning" | "users" | "archive";
 
 export type WorkspaceMessages = {

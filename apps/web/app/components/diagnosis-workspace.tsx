@@ -8,6 +8,7 @@ import type {
   ConversationMessage,
   Diagnosis,
   DiagnosisReport,
+  AdditionalInformationQuestion,
   RecommendationItem,
   Source,
   WorkspaceMessages
@@ -23,7 +24,7 @@ type DiagnosisWorkspaceProps = {
   onMessageChange: (value: string) => void;
   onOpenSource: (source: Source) => void;
   onRefreshRecommendations: () => void;
-  onUseRecommendation: (item: RecommendationItem) => void;
+  onUseAdditionalQuestion: (item: AdditionalInformationQuestion) => void;
   onSubmitDiagnosis: () => void;
   recommendationRows: RecommendationItem[];
   report: DiagnosisReport | null;
@@ -43,7 +44,7 @@ export function DiagnosisWorkspace({
   onMessageChange,
   onOpenSource,
   onRefreshRecommendations,
-  onUseRecommendation,
+  onUseAdditionalQuestion,
   onSubmitDiagnosis,
   recommendationRows,
   report,
@@ -54,11 +55,12 @@ export function DiagnosisWorkspace({
 }: DiagnosisWorkspaceProps) {
   const hasAssistantReply = messageHistory.some((messageItem) => messageItem.sender === "ASSISTANT");
   const displayedDiagnosis = streamingDiagnosis ?? (!hasAssistantReply ? diagnosis : null);
+  const diagnosisMetadata = streamingDiagnosis ?? diagnosis;
   const messagesRef = useRef<HTMLDivElement | null>(null);
-  const recommendationItems = recommendationRows.length > 0
-    ? recommendationRows
-    : displayedDiagnosis?.recommendedQuestions ?? displayedDiagnosis?.recommendationCandidates ?? [];
-  const railGroups = buildDiagnosisRail(recommendationItems);
+  const additionalQuestions = diagnosisMetadata?.additionalInformationQuestions
+    ?? readAdditionalQuestions(selectedConversation?.recommendedQuestionIds);
+  const completeness = diagnosisMetadata?.diagnosisCompleteness ?? selectedConversation?.profileCompleteness ?? 0;
+  const threshold = diagnosisMetadata?.diagnosisCompletenessThreshold ?? 80;
 
   useEffect(() => {
     if (!messagesRef.current) return;
@@ -187,7 +189,7 @@ export function DiagnosisWorkspace({
               <div className="row">
                 <div className="reportGenerateArea">
                   <small>{t.reportEmptyDetail}</small>
-                  <button className="primary" onClick={onGenerateReport} disabled={reportBusy} type="button">
+                  <button className={`primary reportButton ${completeness >= threshold ? "reportReady" : "reportIncomplete"}`} onClick={onGenerateReport} disabled={reportBusy} type="button">
                     <FileText size={16} />
                     {reportBusy ? t.generatingReport : t.generateReport}
                   </button>
@@ -201,16 +203,26 @@ export function DiagnosisWorkspace({
 
         <section className="workspaceCard railGroup">
           <div className="sectionHead compact">
-            <h2><LockKeyhole size={16} /> {t.recommendationTitle}</h2>
-            <button className="ghost" onClick={onRefreshRecommendations} type="button">
-              <RefreshCcw size={14} />
-              {t.recommendationRefresh}
-            </button>
+            <h2><LockKeyhole size={16} /> 可继续补充的信息</h2>
+          </div>
+          <div className="diagnosisProgress">
+            <div className="progressLabel"><span>诊断信息完整度</span><strong>{Math.round(completeness)}%</strong></div>
+            <div className="progressTrack"><div className="progressValue" style={{ width: `${Math.max(0, Math.min(100, completeness))}%` }} /></div>
+            <small>报告阈值 {threshold}%</small>
           </div>
           <div className="table">
-            <RailSection title={t.diagnosisBusinessIssue} icon={<Flag size={16} />} items={railGroups.businessIssue} onUseRecommendation={onUseRecommendation} t={t} />
-            <RailSection title={t.diagnosisMissingProfile} icon={<Focus size={16} />} items={railGroups.missingProfile} onUseRecommendation={onUseRecommendation} t={t} />
-            <RailSection title={t.diagnosisHighImpactDetail} icon={<LayoutList size={16} />} items={railGroups.highImpactDetail} onUseRecommendation={onUseRecommendation} t={t} />
+            {completeness >= threshold && additionalQuestions.length > 0 ? additionalQuestions.map((item) => (
+              <div className="row" key={String(item.id)}>
+                <strong>{item.questionText}</strong>
+                {item.purpose && <small>{item.purpose}</small>}
+                <button className="ghost" onClick={() => onUseAdditionalQuestion(item)} type="button">
+                  <Search size={14} />
+                  让 Agent 提问
+                </button>
+              </div>
+            )) : (
+              <EmptyCard title={completeness >= threshold ? "暂无补充问题" : "信息尚未达到展示条件"} detail="达到完整度阈值后，Agent 会提供可继续补充的信息。" />
+            )}
           </div>
         </section>
       </aside>
@@ -352,6 +364,22 @@ function readSources(rawSources: string | null) {
   try {
     const parsed = JSON.parse(rawSources) as Source[];
     return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function readAdditionalQuestions(rawQuestions: string | null | undefined) {
+  if (!rawQuestions) return [];
+  try {
+    const parsed = JSON.parse(rawQuestions) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is NonNullable<Diagnosis["additionalInformationQuestions"]>[number] => {
+      if (!item || typeof item !== "object") return false;
+      const question = item as Record<string, unknown>;
+      return (typeof question.id === "string" || typeof question.id === "number")
+        && typeof question.questionText === "string";
+    });
   } catch {
     return [];
   }

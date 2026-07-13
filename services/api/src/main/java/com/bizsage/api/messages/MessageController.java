@@ -148,6 +148,21 @@ public class MessageController {
         request.getAttribute(RequestIds.ATTRIBUTE).toString());
   }
 
+  @PostMapping("/follow-up")
+  ApiResponse<ConversationMessage> addFollowUp(
+      @PathVariable long conversationId,
+      @Valid @RequestBody FollowUpRequest request,
+      Principal principal,
+      HttpServletRequest httpRequest) {
+    var conversation = conversationStore.getForOwner(principal.getName(), conversationId);
+    long id = messageStore.append(
+        conversationId, "ASSISTANT", "FOLLOW_UP_QUESTION", request.question(),
+        null, null, null, null, conversation.regionId(), conversation.industryId());
+    return ApiResponse.ok(messageStore.activeMessages(conversationId).stream()
+        .filter(message -> message.id() == id).findFirst().orElseThrow(),
+        httpRequest.getAttribute(RequestIds.ATTRIBUTE).toString());
+  }
+
   private String toErrorPayload(AiWorkerException ex) {
     String message = ex.getMessage() != null ? ex.getMessage() : "AI worker unavailable";
     // 将 Worker 异常文本映射为前端可识别的机器错误码。
@@ -194,6 +209,9 @@ public class MessageController {
   }
 
   record MessageRequest(@NotBlank String question) {
+  }
+
+  record FollowUpRequest(@NotBlank String question) {
   }
 
   record LearnMessageRequest(
