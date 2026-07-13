@@ -123,10 +123,14 @@ public class DiagnosisService {
         .industryId(conversation.industryId())
         .membershipLevel(user.membershipLevel())
         .agentMode("DIAGNOSIS")
-        .workflowStage("INTRO")
-        .profileMissingFields(List.of())
-        .recommendedQuestionIds(List.of())
-        .diagnosisClosable(false)
+        .workflowStage(conversation.workflowStage() != null ? conversation.workflowStage() : "INTRO")
+        .profileMissingFields(missingProfileFields(memories))
+        .recommendedQuestionIds(questionIds(conversation.recommendedQuestionIds()))
+        .diagnosisClosable(conversation.profileCompleteness() >= completenessThreshold)
+        .diagnosisCompleteness(conversation.profileCompleteness())
+        .diagnosisMissingFields(readStringList(conversation.primaryIssueTags()))
+        .profileMissingFieldsForReport(missingProfileFields(memories))
+        .additionalInformationQuestions(readObjectList(conversation.recommendedQuestionIds()))
         .build();
 
     // 5. 调用 AI Worker；严格失败，不做本地答案兜底。
@@ -195,6 +199,9 @@ public class DiagnosisService {
       }
     }
 
+    userMemoryStore.replaceMissingProfileFields(
+        user.id(), response.profileMissingFields(), conversation.id(), userMessageId);
+
     diagnosisMemoryStore.saveAll(
         conversation.id(),
         assistantMessageId,
@@ -223,6 +230,43 @@ public class DiagnosisService {
     }
   }
 
+  private List<String> missingProfileFields(List<UserMemoryProfile> memories) {
+    return memories.stream()
+        .filter(memory -> "PROFILE_MISSING_FIELD".equals(memory.category()))
+        .map(UserMemoryProfile::key)
+        .filter(value -> value != null && !value.isBlank())
+        .distinct()
+        .toList();
+  }
+
+  private List<String> questionIds(String rawQuestions) {
+    return readObjectList(rawQuestions).stream()
+        .map(item -> item.get("id"))
+        .filter(id -> id != null)
+        .map(String::valueOf)
+        .toList();
+  }
+
+  private List<String> readStringList(String raw) {
+    if (raw == null || raw.isBlank()) return List.of();
+    try {
+      return objectMapper.readValue(raw,
+          new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+    } catch (Exception ignored) {
+      return List.of();
+    }
+  }
+
+  private List<Map<String, Object>> readObjectList(String raw) {
+    if (raw == null || raw.isBlank()) return List.of();
+    try {
+      return objectMapper.readValue(raw,
+          new com.fasterxml.jackson.core.type.TypeReference<List<Map<String, Object>>>() {});
+    } catch (Exception ignored) {
+      return List.of();
+    }
+  }
+
   // 上下文映射。
 
   private List<Map<String, Object>> toRecentMessageMaps(List<ConversationMessage> messages) {
@@ -240,6 +284,7 @@ public class DiagnosisService {
   private List<Map<String, Object>> toMemoryMaps(List<UserMemoryProfile> memories) {
     // 只发送生成提示词所需的记忆字段，避免泄露数据库内部状态。
     return memories.stream()
+        .filter(mem -> !"PROFILE_MISSING_FIELD".equals(mem.category()))
         .map(mem -> {
           Map<String, Object> map = new LinkedHashMap<>();
           map.put("category", mem.category());

@@ -831,6 +831,8 @@ export default function Home() {
       await persistFollowUpQuestion(selectedConversation.id, item.questionText);
       const updatedMessages = await fetchMessages(selectedConversation.id);
       setMessageHistory(updatedMessages);
+      setMessage("");
+      setNotice(t.diagnosisCreated);
     } catch (error) {
       if (error instanceof AuthExpiredError) {
         handleSessionExpired();

@@ -65,14 +65,22 @@ public class DiagnosisReportService {
       map.put("content", message.content());
       return map;
     }).toList();
-    List<Map<String, Object>> profileMemories = userMemoryStore.activeMemoriesForUser(user.id()).stream().map(memory -> {
+    List<Map<String, Object>> profileMemories = userMemoryStore.activeMemoriesForUser(user.id()).stream()
+        .filter(memory -> !"PROFILE_MISSING_FIELD".equals(memory.category()))
+        .map(memory -> {
       Map<String, Object> map = new LinkedHashMap<>();
       map.put("category", memory.category());
       map.put("key", memory.key());
       map.put("value", memory.value());
       map.put("confidence", memory.confidence());
-      return map;
+        return map;
     }).toList();
+    List<String> profileMissingFields = userMemoryStore.activeMemoriesForUser(user.id()).stream()
+        .filter(memory -> "PROFILE_MISSING_FIELD".equals(memory.category()))
+        .map(memory -> memory.key())
+        .filter(value -> value != null && !value.isBlank())
+        .distinct()
+        .toList();
     DiagnoseRequest request = DiagnoseRequest.builder()
         .question(question)
         .knowledge(loadKnowledgeForReport(user.regionId(), user.industryId(), user.membershipLevel()))
@@ -82,11 +90,11 @@ public class DiagnosisReportService {
         .diagnosisMemories(diagnosisMemoryStore.asMaps(conversationId))
         .diagnosisCompleteness(conversation.profileCompleteness())
         .diagnosisMissingFields(readStringList(conversation.primaryIssueTags()))
-        .profileMissingFieldsForReport(List.of())
+        .profileMissingFieldsForReport(profileMissingFields)
         .additionalInformationQuestions(readObjectList(conversation.recommendedQuestionIds()))
         .regionId(user.regionId()).industryId(user.industryId())
         .membershipLevel(user.membershipLevel()).build();
-    return buildFromRequest(question, request);
+    return buildFromRequest(question, request, user);
   }
 
   private List<String> readStringList(String json) {

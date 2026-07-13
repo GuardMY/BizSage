@@ -93,6 +93,35 @@ public class UserMemoryStore {
     }
   }
 
+  /** Replaces the user's durable list of profile fields that are still unknown. */
+  @Transactional
+  public void replaceMissingProfileFields(
+      long userId, List<String> fields, long sourceConversationId, long sourceMessageId) {
+    userMemoryMapper.update(null, new LambdaUpdateWrapper<UserMemoryProfile>()
+        .eq(UserMemoryProfile::getUserId, userId)
+        .eq(UserMemoryProfile::getCategory, "PROFILE_MISSING_FIELD")
+        .eq(UserMemoryProfile::getStatus, "ACTIVE")
+        .set(UserMemoryProfile::getStatus, "INACTIVE"));
+
+    if (fields == null) {
+      return;
+    }
+    fields.stream()
+        .filter(field -> field != null && !field.isBlank())
+        .map(String::trim)
+        .distinct()
+        .forEach(field -> saveOrRefresh(
+            userId,
+            "PROFILE_MISSING_FIELD",
+            field,
+            "NOT_COLLECTED",
+            "STATUS",
+            1.0D,
+            sourceConversationId,
+            sourceMessageId,
+            true));
+  }
+
   private UserMemoryProfile get(long id) {
     UserMemoryProfile profile = userMemoryMapper.selectById(id);
     if (profile == null) {
@@ -121,6 +150,7 @@ public class UserMemoryStore {
       case "PAIN_POINT" -> Instant.now().plus(90, ChronoUnit.DAYS);
       case "INDUSTRY_CONTEXT" -> Instant.now().plus(365, ChronoUnit.DAYS);
       case "LEARNING_PROGRESS" -> Instant.now().plus(180, ChronoUnit.DAYS);
+      case "PROFILE_MISSING_FIELD" -> Instant.now().plus(180, ChronoUnit.DAYS);
       default -> null;
     };
   }

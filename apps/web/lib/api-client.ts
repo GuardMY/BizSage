@@ -41,6 +41,8 @@ export type Diagnosis = {
   reportReady?: boolean;
   diagnosisMissingFields?: string[];
   additionalInformationQuestions?: AdditionalInformationQuestion[];
+  userProfileMemories?: MemoryCandidate[];
+  diagnosisMemories?: MemoryCandidate[];
 };
 
 export type MemoryCandidate = {

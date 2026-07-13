@@ -107,7 +107,7 @@ def diagnose(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": f"请先自我介绍，并说明会先建立经营画像再分层诊断。\n\n问题：{question}\n\n参考证据：\n{context}"},
     ]
-    initial_messages.append({"role": "system", "content": "Return only valid JSON with fields answer, diagnosisCompleteness, userProfileMemories, diagnosisMemories, diagnosisMissingFields, profileMissingFields, additionalInformationQuestions, reportReady. Memory items must contain category, key, value, confidence, structured. Return at least 10 additionalInformationQuestions, each with id, questionText, purpose, priority. answer is Markdown for the user. For diagnosis-related input, use the current user input and prior context to extract facts. If the available information is sufficient for a report, answer must include the exact sentence \u3010持有的信息已足够生成诊断报告\u3011. Otherwise, answer must ask the next highest-value question needed to complete the diagnosis. For non-diagnosis input, answer normally and leave memory fields empty when appropriate. Current persisted diagnosis state: completeness=" + str(diagnosis_completeness) + ", diagnosisMissingFields=" + str(diagnosis_missing_fields or []) + ", profileMissingFields=" + str(profile_missing_fields_for_report or []) + ", additionalInformationQuestions=" + str(additional_information_questions or [] )})
+    initial_messages.append({"role": "system", "content": "Return only valid JSON with fields answer, diagnosisCompleteness, userProfileMemories, diagnosisMemories, diagnosisMissingFields, profileMissingFields, additionalInformationQuestions, reportReady. Memory items must contain category, key, value, confidence, structured. Return at least 10 unique additionalInformationQuestions, each with id, questionText, purpose, priority. Do not repeat a question already present in recent context or the persisted question list. answer is Markdown for the user. For diagnosis-related input, use the current user input and prior context to extract facts. If the available information is sufficient for a report, answer must include the exact sentence \u3010持有的信息已足够生成诊断报告\u3011. Otherwise, answer must ask the next highest-value question needed to complete the diagnosis. For non-diagnosis input, answer normally and leave memory fields empty when appropriate. Current persisted diagnosis state: completeness=" + str(diagnosis_completeness) + ", diagnosisMissingFields=" + str(diagnosis_missing_fields or []) + ", profileMissingFields=" + str(profile_missing_fields_for_report or []) + ", additionalInformationQuestions=" + str(additional_information_questions or [] )})
 
     try:
         answer = ""
@@ -267,6 +267,28 @@ def _parse_structured_response(raw: str) -> dict:
         raise ValueError("additionalInformationQuestions must be an array")
     if len(questions) < 10:
         raise ValueError("additionalInformationQuestions must contain at least 10 items")
+    question_ids = set()
+    question_texts = set()
+    for item in questions:
+        if not isinstance(item, dict):
+            raise ValueError("additionalInformationQuestions items must be objects")
+        if not isinstance(item.get("id"), (str, int)) or not isinstance(item.get("questionText"), str):
+            raise ValueError("each additional question must contain id and questionText")
+        if not item["questionText"].strip():
+            raise ValueError("additional question text must not be blank")
+        if not isinstance(item.get("purpose"), str) or not item["purpose"].strip():
+            raise ValueError("each additional question must contain purpose")
+        if not isinstance(item.get("priority"), (str, int, float)):
+            raise ValueError("each additional question must contain priority")
+        question_id = str(item["id"])
+        question_text = item["questionText"].strip()
+        if question_id in question_ids or question_text in question_texts:
+            raise ValueError("additionalInformationQuestions must be unique")
+        question_ids.add(question_id)
+        question_texts.add(question_text)
+    report_ready = candidate.get("reportReady", False)
+    if not isinstance(report_ready, bool):
+        raise ValueError("reportReady must be a boolean")
     return {
         "answer": candidate["answer"],
         "diagnosisCompleteness": completeness,
@@ -275,7 +297,7 @@ def _parse_structured_response(raw: str) -> dict:
         "diagnosisMissingFields": _string_list(candidate.get("diagnosisMissingFields")),
         "profileMissingFields": _string_list(candidate.get("profileMissingFields")),
         "additionalInformationQuestions": questions,
-        "reportReady": bool(candidate.get("reportReady", False)),
+        "reportReady": report_ready,
     }
 
 
